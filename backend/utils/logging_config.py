@@ -70,9 +70,11 @@ def setup_logging():
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.DEBUG if settings.DEBUG else logging.INFO)
     
-    # Create logs directory
-    import os
-    os.makedirs("logs", exist_ok=True)
+    # Skip file loggers on Vercel/production read-only filesystem
+    if not settings.is_production:
+        # Create logs directory
+        import os
+        os.makedirs("logs", exist_ok=True)
     
     # Console handler
     console_handler = logging.StreamHandler(sys.stdout)
@@ -90,8 +92,8 @@ def setup_logging():
     
     root_logger.addHandler(console_handler)
     
-    # File handler - Application logs
-    if not settings.DEBUG:
+    # File handler - Application logs (development only)
+    if not settings.DEBUG and not settings.is_production:
         file_handler = logging.handlers.RotatingFileHandler(
             "logs/app.log",
             maxBytes=10 * 1024 * 1024,  # 10MB
