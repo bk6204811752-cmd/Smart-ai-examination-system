@@ -1,11 +1,14 @@
 """
-MongoDB Database Connection with In-Memory Fallback
-Uses Motor for MongoDB Atlas. Falls back to in-memory store if Atlas is unavailable.
+MongoDB Database Connection with Proper Error Handling
+Uses Motor for MongoDB Atlas. Fails hard in production if connection fails.
 """
 
 import copy
+import logging
 from bson import ObjectId
 from config import settings
+
+logger = logging.getLogger(__name__)
 
 client = None
 db = None
@@ -240,12 +243,31 @@ async def connect_db():
     try:
         client, db = await _try_motor()
         await create_indexes()
-        print("[OK] Connected to MongoDB Atlas: " + settings.DATABASE_NAME)
+        logger.info(f"✅ Connected to MongoDB Atlas: {settings.DATABASE_NAME}")
+        print(f"[OK] Connected to MongoDB Atlas: {settings.DATABASE_NAME}")
     except Exception as e:
-        print(f"[WARN] MongoDB Atlas unavailable ({type(e).__name__}): {e}")
-        print("[INFO] Falling back to in-memory database (data resets on restart)")
-        db = InMemoryDB()
-        _using_memory = True
+        error_msg = f"🔴 MongoDB connection failed: {type(e).__name__}: {str(e)}"
+        logger.error(error_msg)
+        
+        # FAIL HARD in production
+        if settings.is_production:
+            raise RuntimeError(
+                f"Database connection failed in production. "
+                f"Check MONGODB_URI environment variable. Error: {str(e)}"
+            ) from e
+        
+        # In development, allow in-memory DB only if explicitly enabled
+        if settings.ALLOW_IN_MEMORY_DB:
+            logger.warning(f"Falling back to in-memory database (data resets on restart)")
+            print(f"[WARN] {error_msg}")
+            print(f"[INFO] Using in-memory database (development only)")
+            db = InMemoryDB()
+            _using_memory = True
+        else:
+            raise RuntimeError(
+                f"Database connection failed and in-memory DB not enabled. "
+                f"Set ALLOW_IN_MEMORY_DB=true or fix the database connection."
+            ) from e
 
 
 async def disconnect_db():
@@ -256,16 +278,18 @@ async def disconnect_db():
 
 
 async def create_indexes():
-    """Create database indexes (only for real MongoDB)"""
-    await db.users.create_index("email", unique=True)
-    await db.users.create_index("role")
-    await db.users.create_index("status")
-    await db.exams.create_index("status")
-    await db.exams.create_index("created_by")
-    await db.submissions.create_index("student_id")
-    await db.submissions.create_index("exam_id")
-    await db.notifications.create_index("user_id")
-    await db.proctoring_flags.create_index("exam_id")
+    """Create comprehensive database indexes for performance"""
+    if _using_memory:
+        logger.warning("Using in-memory database - indexes are no-op")
+        return
+    
+    try:
+        from utils.database_indexes import create_all_indexes
+        await create_all_indexes(db)
+    except Exception as e:
+        logger.error(f"Failed to create indexes: {e}")
+        if settings.is_production:
+            raise
 
 
 def get_db():

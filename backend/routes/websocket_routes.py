@@ -1,20 +1,48 @@
 """
 WebSocket Routes for Real-Time Exam Monitoring
-GET  /ws/{exam_id}/{user_id}/{role}  — Connect (role = student | teacher)
-GET  /ws/{exam_id}/{user_id}?role=   — Backward-compat connect
+GET  /ws/{exam_id}?token=JWT  — Connect (requires JWT token)
 GET  /api/ws/stats                   — Connection stats
 POST /api/ws/intervene               — Teacher intervention
+
+Security: All WebSocket connections require valid JWT token
 """
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, WebSocketException
 from pydantic import BaseModel
 from typing import Optional
 import json
 from datetime import datetime
+from jose import JWTError, jwt
 
+from config import settings
+from database import get_db
 from utils.websocket_manager import manager
+from utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(tags=["websocket"])
+
+
+async def verify_ws_token(token: str) -> dict:
+    """Verify JWT token for WebSocket connections"""
+    try:
+        if not token:
+            raise ValueError("No token provided")
+        
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id = payload.get("sub")
+        if not user_id:
+            raise ValueError("No user in token")
+        
+        role = payload.get("role", "student")
+        return {"user_id": user_id, "role": role}
+    except JWTError as e:
+        logger.warning(f"WebSocket JWT verification failed: {e}")
+        raise WebSocketException(code=1008, reason="Invalid or expired token")
+    except Exception as e:
+        logger.warning(f"WebSocket token error: {e}")
+        raise WebSocketException(code=1008, reason="Authentication failed")
 
 
 async def _run_session(websocket: WebSocket, exam_id: str, user_id: str, role: str):
@@ -192,20 +220,56 @@ async def _run_session(websocket: WebSocket, exam_id: str, user_id: str, role: s
             })
 
 
+@router.websocket("/ws/{exam_id}")
+async def websocket_endpoint(websocket: WebSocket, exam_id: str, token: str = Query(...)):
+    """
+    Secure WebSocket endpoint - requires JWT token
+    Usage: ws://localhost:8000/ws/{exam_id}?token={jwt_token}
+    """
+    # Verify token before accepting connection
+    try:
+        auth_data = await verify_ws_token(token)
+        user_id = auth_data["user_id"]
+        role = auth_data["role"]
+    except WebSocketException as e:
+        await websocket.close(code=1008, reason=str(e.reason))
+        return
+    
+    logger.info(f"WebSocket connection from {user_id} (role: {role}) to exam {exam_id}")
+    await _run_session(websocket, exam_id, user_id, role)
+
+
+# Legacy endpoints - deprecated but kept for backward compatibility
 @router.websocket("/ws/{exam_id}/{user_id}/{role}")
-async def websocket_with_role(websocket: WebSocket, exam_id: str, user_id: str, role: str):
-    """WebSocket endpoint — role as path parameter (preferred by frontend)."""
+async def websocket_with_role_deprecated(websocket: WebSocket, exam_id: str, user_id: str, role: str):
+    """
+    DEPRECATED: Use /ws/{exam_id}?token={jwt_token} instead
+    Legacy endpoint without JWT verification - do not use in production
+    """
+    logger.warning(f"Deprecated WebSocket endpoint used by {user_id}. Use JWT token instead.")
+    
+    # In production, reject this
+    if settings.is_production:
+        await websocket.close(code=1008, reason="This endpoint is deprecated. Use JWT authentication.")
+        return
+    
     await _run_session(websocket, exam_id, user_id, role)
 
 
 @router.websocket("/ws/{exam_id}/{user_id}")
-async def websocket_query_role(
+async def websocket_query_role_deprecated(
     websocket: WebSocket,
     exam_id: str,
     user_id: str,
     role: str = Query(default="student"),
 ):
-    """WebSocket endpoint — role as query parameter (backward-compat)."""
+    """DEPRECATED: Use /ws/{exam_id}?token={jwt_token} instead"""
+    logger.warning(f"Deprecated WebSocket endpoint used. Use JWT token instead.")
+    
+    if settings.is_production:
+        await websocket.close(code=1008, reason="This endpoint is deprecated. Use JWT authentication.")
+        return
+    
     await _run_session(websocket, exam_id, user_id, role)
 
 

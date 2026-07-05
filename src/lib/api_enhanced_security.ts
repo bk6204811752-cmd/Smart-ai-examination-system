@@ -1,0 +1,281 @@
+"""
+Frontend API Interceptor - Enhanced with Security & Performance Fixes
+Enhanced offline queue management with size limits and TTL
+"""
+
+// Fix for offline queue infinite growth
+const MAX_QUEUE_SIZE = 100
+const REQUEST_TTL = 5 * 60 * 1000  // 5 minutes
+
+interface QueuedRequest {
+  config: InternalAxiosRequestConfig
+  resolve: (value: any) => void
+  reject: (error: any) => void
+  timestamp: number
+}
+
+let requestQueue: QueuedRequest[] = []
+let isOnline = navigator.onLine
+
+window.addEventListener('online', () => {
+  console.log('[✓] Connection restored')
+  isOnline = true
+  processQueue()
+})
+
+window.addEventListener('offline', () => {
+  console.warn('[✗] Connection lost - requests queued')
+  isOnline = false
+})
+
+const processQueue = async () => {
+  const now = Date.now()
+  
+  // Remove expired requests (older than 5 minutes)
+  while (requestQueue.length > 0) {
+    const oldestRequest = requestQueue[0]
+    if (now - oldestRequest.timestamp > REQUEST_TTL) {
+      const expired = requestQueue.shift()!
+      expired.reject(new Error('Request expired while offline (5+ minutes)'))
+      console.warn(`[⏱] Expired request removed: ${expired.config.url}`)
+    } else {
+      break
+    }
+  }
+  
+  // Process remaining queued requests
+  while (requestQueue.length > 0 && isOnline) {
+    const { config, resolve, reject } = requestQueue.shift()!
+    try {
+      const response = await axios.request(config)
+      resolve(response)
+      console.log(`[✓] Queued request completed: ${config.method} ${config.url}`)
+    } catch (error) {
+      reject(error)
+      console.error(`[✗] Queued request failed: ${config.url}`)
+    }
+  }
+}
+
+// Request interceptor - queue offline requests
+api.interceptors.request.use((config) => {
+  if (!isOnline) {
+    // Check queue size limit
+    if (requestQueue.length >= MAX_QUEUE_SIZE) {
+      return Promise.reject(
+        new Error(`Offline queue full (${MAX_QUEUE_SIZE} requests pending). Try again later.`)
+      )
+    }
+    
+    // Queue the request
+    return new Promise((resolve, reject) => {
+      requestQueue.push({
+        config,
+        resolve,
+        reject,
+        timestamp: Date.now()
+      })
+      console.log(`[⏳] Request queued (${requestQueue.length}/${MAX_QUEUE_SIZE}): ${config.url}`)
+    })
+  }
+  return config
+})
+
+// ────────────────────────────────────────────────────────────────────────────────
+// WebSocket Connection - Updated for JWT Authentication
+// ────────────────────────────────────────────────────────────────────────────────
+
+class ExamWebSocketManager {
+  private ws: WebSocket | null = null
+  private reconnectAttempts = 0
+  private maxReconnectAttempts = 5
+  private reconnectDelay = 3000 // 3 seconds
+  private messageHandlers: Map<string, Function[]> = new Map()
+  private jwtToken: string = ''
+  
+  constructor(jwtToken: string) {
+    this.jwtToken = jwtToken
+  }
+  
+  /**
+   * Connect to exam WebSocket with JWT authentication
+   * @param examId - The exam ID to connect to
+   */
+  async connect(examId: string): Promise<void> {
+    try {
+      // Get JWT token from localStorage
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        throw new Error('No authentication token found. Please login again.')
+      }
+      
+      // Build secure WebSocket URL with JWT token query parameter
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      const wsUrl = `${protocol}//${window.location.host}/ws/${examId}?token=${encodeURIComponent(token)}`
+      
+      console.log(`[WS] Connecting to exam ${examId}...`)
+      
+      this.ws = new WebSocket(wsUrl)
+      
+      this.ws.addEventListener('open', () => {
+        console.log('[✓] WebSocket connected securely')
+        this.reconnectAttempts = 0
+        this.emit('connected', { examId })
+      })
+      
+      this.ws.addEventListener('message', (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          const { type } = data
+          
+          // Call all handlers registered for this message type
+          const handlers = this.messageHandlers.get(type) || []
+          handlers.forEach(handler => {
+            try {
+              handler(data)
+            } catch (error) {
+              console.error(`[✗] Handler error for ${type}:`, error)
+            }
+          })
+        } catch (error) {
+          console.error('[✗] Failed to parse WebSocket message:', error)
+        }
+      })
+      
+      this.ws.addEventListener('error', (event) => {
+        console.error('[✗] WebSocket error:', event)
+        this.emit('error', { message: 'WebSocket connection error' })
+      })
+      
+      this.ws.addEventListener('close', () => {
+        console.warn('[✗] WebSocket disconnected')
+        this.attemptReconnect(examId)
+      })
+      
+      return new Promise((resolve, reject) => {
+        if (!this.ws) {
+          reject(new Error('WebSocket creation failed'))
+          return
+        }
+        
+        const checkConnection = () => {
+          if (this.ws!.readyState === WebSocket.OPEN) {
+            resolve()
+          } else if (this.ws!.readyState === WebSocket.CLOSED) {
+            reject(new Error('WebSocket connection failed'))
+          } else {
+            setTimeout(checkConnection, 100)
+          }
+        }
+        
+        checkConnection()
+      })
+    } catch (error) {
+      console.error('[✗] WebSocket connection failed:', error)
+      throw error
+    }
+  }
+  
+  private attemptReconnect(examId: string): void {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error('[✗] Max reconnect attempts reached')
+      this.emit('reconnect_failed', {})
+      return
+    }
+    
+    this.reconnectAttempts++
+    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1)
+    console.log(`[⏳] Reconnecting in ${delay}ms... (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
+    
+    setTimeout(() => {
+      this.connect(examId).catch(error => {
+        console.error('[✗] Reconnection failed:', error)
+      })
+    }, delay)
+  }
+  
+  /**
+   * Send message to server
+   */
+  send(message: any): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn('[⚠️] WebSocket not connected, message not sent')
+      return
+    }
+    
+    try {
+      this.ws.send(JSON.stringify(message))
+    } catch (error) {
+      console.error('[✗] Failed to send WebSocket message:', error)
+    }
+  }
+  
+  /**
+   * Register handler for specific message type
+   */
+  on(type: string, handler: Function): void {
+    if (!this.messageHandlers.has(type)) {
+      this.messageHandlers.set(type, [])
+    }
+    this.messageHandlers.get(type)!.push(handler)
+  }
+  
+  /**
+   * Emit event to all listeners
+   */
+  private emit(event: string, data: any): void {
+    const handlers = this.messageHandlers.get(event) || []
+    handlers.forEach(handler => handler(data))
+  }
+  
+  /**
+   * Disconnect WebSocket
+   */
+  disconnect(): void {
+    if (this.ws) {
+      this.ws.close()
+      this.ws = null
+    }
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Usage Example
+// ────────────────────────────────────────────────────────────────────────────────
+
+/*
+// In your exam component:
+const ws = new ExamWebSocketManager(jwtToken)
+
+// Connect to exam with JWT authentication
+await ws.connect(examId)
+
+// Listen for messages
+ws.on('video_frame', (data) => {
+  console.log('Received video frame from student:', data.student_id)
+  // Process frame...
+})
+
+ws.on('ai_violation', (data) => {
+  console.log('Violation detected:', data.violation.type)
+  // Handle violation...
+})
+
+ws.on('intervention', (data) => {
+  console.log('Teacher intervention:', data.action)
+  // Handle intervention...
+})
+
+// Send heartbeat every 30 seconds
+setInterval(() => {
+  ws.send({
+    type: 'heartbeat',
+    timestamp: new Date().toISOString()
+  })
+}, 30000)
+
+// Cleanup on component unmount
+onBeforeUnmount(() => {
+  ws.disconnect()
+})
+*/

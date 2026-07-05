@@ -16,11 +16,23 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
+import logging
 
 from config import settings
 from database import connect_db, disconnect_db, get_db
+from middleware.security import (
+    add_security_headers, rate_limit_middleware, 
+    request_size_limit_middleware, safe_exception_handler
+)
+from utils.logging_config import setup_logging, get_logger
+from utils.file_validation import ensure_upload_dir_exists
+
+# Setup logging
+setup_logging()
+logger = get_logger(__name__)
 
 # Import routers
 from routes.auth import router as auth_router
@@ -43,9 +55,17 @@ from utils.seeder import seed_database
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION} in {settings.ENVIRONMENT} mode")
+    
+    # Validate configuration in production
+    if settings.is_production:
+        settings.validate_runtime()
+        logger.info("✅ Production configuration validated")
+    
     print(f"\n[*] Starting {settings.APP_NAME} v{settings.APP_VERSION}")
     print(f"[*] Connecting to MongoDB...")
     await connect_db()
+    ensure_upload_dir_exists()
 
     # Seed demo data
     db = get_db()
@@ -54,16 +74,21 @@ async def lifespan(app: FastAPI):
     print(f"\n[OK] Backend ready at http://localhost:8000")
     print(f"[OK] API docs:   http://localhost:8000/docs")
     print(f"[OK] Alt docs:   http://localhost:8000/redoc")
-    print(f"\n[*] Demo accounts:")
-    print(f"   student  -> student@pcmt.edu.in  / student123")
-    print(f"   teacher  -> teacher@pcmt.edu.in  / teacher123")
-    print(f"   admin    -> admin@pcmt.edu.in    / admin123\n")
+    
+    # Only show demo accounts in development
+    if settings.DEBUG:
+        print(f"\n[*] Demo accounts (Development Only):")
+        print(f"   student  -> student@pcmt.edu.in  / student123")
+        print(f"   teacher  -> teacher@pcmt.edu.in  / teacher123")
+        print(f"   admin    -> admin@pcmt.edu.in    / admin123\n")
+    else:
+        logger.info("Production environment - demo credentials hidden")
 
     yield
 
     # Shutdown
     await disconnect_db()
-    print("👋 Backend shutdown complete")
+    logger.info("Backend shutdown complete")
 
 
 # ── FastAPI App ──────────────────────────────────────────────────────────────
@@ -78,15 +103,35 @@ app = FastAPI(
 )
 
 
-# ── CORS Middleware ───────────────────────────────────────────────────────────
+# ── Strict CORS & Security Middleware ─────────────────────────────────────
+
+# Allowed origins
+allowed_origins = settings.get_cors_origins()
+if settings.is_production:
+    # Strict in production
+    allowed_origins = [o for o in allowed_origins if not o.startswith("http://")]
+    logger.info(f"Production CORS origins: {allowed_origins}")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.get_cors_origins(),
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Not "*"
+    allow_headers=["Content-Type", "Authorization"],  # Not "*"
+    max_age=3600,  # Cache preflight 1 hour
 )
+
+# Trusted host middleware - reject unknown hosts
+if settings.is_production:
+    app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=["pcmt-ai-exam-system.vercel.app", "localhost", "127.0.0.1"],
+    )
+
+# Add custom security middleware
+app.middleware("http")(add_security_headers)
+app.middleware("http")(rate_limit_middleware)
+app.middleware("http")(request_size_limit_middleware)
 
 
 # ── Override get_db dependency for routes ────────────────────────────────────
@@ -100,14 +145,12 @@ def get_db_override():
 app.dependency_overrides[_get_db] = get_db_override
 
 
-# ── Global Exception Handler ─────────────────────────────────────────────────
+# ── Exception Handlers ──────────────────────────────────────────────────────
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    return JSONResponse(
-        status_code=500,
-        content={"detail": str(exc), "type": type(exc).__name__}
-    )
+    """Catch-all exception handler - doesn't leak stack traces"""
+    return await safe_exception_handler(request, exc)
 
 
 # ── Health Check ─────────────────────────────────────────────────────────────
