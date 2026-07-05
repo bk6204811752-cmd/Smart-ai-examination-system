@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offline - AI Exam System</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .container {
+      background: white;
+      border-radius: 24px;
+      padding: 48px;
+      max-width: 500px;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+    
+    .icon {
+      width: 120px;
+      height: 120px;
+      margin: 0 auto 24px;
+      background: #f3f4f6;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 60px;
+    }
+    
+    h1 {
+      color: #1f2937;
+      font-size: 32px;
+      margin-bottom: 16px;
+      font-weight: 700;
+    }
+    
+    p {
+      color: #6b7280;
+      font-size: 18px;
+      line-height: 1.6;
+      margin-bottom: 32px;
+    }
+    
+    .status {
+      display: inline-block;
+      padding: 12px 24px;
+      background: #fef3c7;
+      color: #92400e;
+      border-radius: 12px;
+      font-weight: 600;
+      margin-bottom: 24px;
+    }
+    
+    .status.online {
+      background: #d1fae5;
+      color: #065f46;
+    }
+    
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 16px 32px;
+      font-size: 16px;
+      font-weight: 600;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+    }
+    
+    .features {
+      margin-top: 32px;
+      text-align: left;
+      background: #f9fafb;
+      padding: 24px;
+      border-radius: 12px;
+    }
+    
+    .features h3 {
+      color: #1f2937;
+      font-size: 18px;
+      margin-bottom: 16px;
+    }
+    
+    .features ul {
+      list-style: none;
+      color: #6b7280;
+    }
+    
+    .features li {
+      padding: 8px 0;
+      padding-left: 24px;
+      position: relative;
+    }
+    
+    .features li:before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: #10b981;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">📡</div>
+    
+    <div id="status" class="status">You are offline</div>
+    
+    <h1>No Internet Connection</h1>
+    
+    <p>
+      Don't worry! Your exam progress is automatically saved. 
+      You can continue working offline, and your answers will be submitted when connection is restored.
+    </p>
+    
+    <button onclick="window.location.reload()">Try Again</button>
+    
+    <div class="features">
+      <h3>Offline Features Available:</h3>
+      <ul>
+        <li>Continue answering questions</li>
+        <li>Auto-save your progress every 10 seconds</li>
+        <li>Access cached study materials</li>
+        <li>View previous exam results</li>
+        <li>Automatic sync when back online</li>
+      </ul>
+    </div>
+  </div>
+  
+  <script>
+    // Monitor online status
+    function updateStatus() {
+      const statusEl = document.getElementById('status')
+      if (navigator.onLine) {
+        statusEl.textContent = 'Back online! Syncing...'
+        statusEl.classList.add('online')
+        
+        setTimeout(() => {
+          window.location.reload()
+        }, 1000)
+      } else {
+        statusEl.textContent = 'You are offline'
+        statusEl.classList.remove('online')
+      }
+    }
+    
+    window.addEventListener('online', updateStatus)
+    window.addEventListener('offline', updateStatus)
+    
+    // Check immediately
+    updateStatus()
+  </script>
+</body>
+</html>

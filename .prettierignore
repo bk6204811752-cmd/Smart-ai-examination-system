@@ -1,0 +1,14 @@
+node_modules
+dist
+build
+.vite
+coverage
+*.log
+.env
+.env.*
+backend/__pycache__
+backend/.pytest_cache
+backend/logs
+backend/uploads
+htmlcov
+*.pyc
