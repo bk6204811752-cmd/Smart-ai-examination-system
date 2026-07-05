@@ -1,7 +1,7 @@
-"""
-Frontend API Interceptor - Enhanced with Security & Performance Fixes
-Enhanced offline queue management with size limits and TTL
-"""
+/**
+ * Frontend API Interceptor - Enhanced with Security & Performance Fixes
+ * Enhanced offline queue management with size limits and TTL
+ */
 
 // Fix for offline queue infinite growth
 const MAX_QUEUE_SIZE = 100
@@ -238,44 +238,3 @@ class ExamWebSocketManager {
     }
   }
 }
-
-// ────────────────────────────────────────────────────────────────────────────────
-// Usage Example
-// ────────────────────────────────────────────────────────────────────────────────
-
-/*
-// In your exam component:
-const ws = new ExamWebSocketManager(jwtToken)
-
-// Connect to exam with JWT authentication
-await ws.connect(examId)
-
-// Listen for messages
-ws.on('video_frame', (data) => {
-  console.log('Received video frame from student:', data.student_id)
-  // Process frame...
-})
-
-ws.on('ai_violation', (data) => {
-  console.log('Violation detected:', data.violation.type)
-  // Handle violation...
-})
-
-ws.on('intervention', (data) => {
-  console.log('Teacher intervention:', data.action)
-  // Handle intervention...
-})
-
-// Send heartbeat every 30 seconds
-setInterval(() => {
-  ws.send({
-    type: 'heartbeat',
-    timestamp: new Date().toISOString()
-  })
-}, 30000)
-
-// Cleanup on component unmount
-onBeforeUnmount(() => {
-  ws.disconnect()
-})
-*/
