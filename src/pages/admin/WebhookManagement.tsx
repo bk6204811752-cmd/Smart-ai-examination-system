@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuthStore } from '../../store/authStore'
+import { useAuthStore } from '../../store/globalStore'
 import { webhooksAPI } from '../../lib/api'
 import { 
   Webhook, Plus, Edit, Trash2, TestTube, CheckCircle, XCircle, 

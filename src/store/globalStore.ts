@@ -145,6 +145,8 @@ interface AuthActions {
   login: (user: User, token: string) => void
   logout: () => void
   updateUser: (updates: Partial<User>) => void
+  setUser: (user: User) => void   // compatibility alias
+  setToken: (token: string) => void // compatibility alias
   updatePreferences: (preferences: Partial<UserPreferences>) => void
   refreshSession: () => void
 }
@@ -189,14 +191,28 @@ export const useAuthStore = create<AuthState & AuthActions>()(
 
         refreshSession: () => set({
           sessionExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000)
-        })
+        }),
+
+        // Compatibility aliases for legacy code
+        setUser: (user: User) => set((state) => ({
+          user,
+          isAuthenticated: true,
+          sessionExpiry: state.sessionExpiry || new Date(Date.now() + 24 * 60 * 60 * 1000)
+        })),
+        setToken: (token: string) => set({ token })
       })),
       {
         name: 'auth-storage',
         partialize: (state) => ({
           user: state.user,
           token: state.token,
-          isAuthenticated: state.isAuthenticated
+          isAuthenticated: state.isAuthenticated,
+          sessionExpiry: state.sessionExpiry ? state.sessionExpiry.toISOString() : null
+        }),
+        merge: (persisted: any, current) => ({
+          ...current,
+          ...persisted,
+          sessionExpiry: persisted?.sessionExpiry ? new Date(persisted.sessionExpiry) : null
         })
       }
     ),
@@ -438,8 +454,8 @@ interface SettingsState {
 }
 
 const defaultSettings: AppSettings = {
-  apiUrl: 'http://localhost:8000',
-  wsUrl: 'ws://localhost:8000',
+  apiUrl: import.meta.env.DEV ? 'http://localhost:8000' : '',
+  wsUrl: import.meta.env.DEV ? 'ws://localhost:8000' : `wss://${typeof window !== 'undefined' ? window.location.host : ''}`,
   maxFileSize: 10 * 1024 * 1024, // 10MB
   allowedFileTypes: ['jpg', 'jpeg', 'png', 'pdf', 'doc', 'docx'],
   sessionTimeout: 30,
@@ -593,25 +609,10 @@ export const importStoreData = (data: Record<string, string | null>) => {
 // SUBSCRIPTION EXAMPLES
 // ============================================================================
 
-// Auto-logout on session expiry
-useAuthStore.subscribe(
-  (state) => state.sessionExpiry,
-  (sessionExpiry) => {
-    if (!sessionExpiry) return
-
-    const timeUntilExpiry = sessionExpiry.getTime() - Date.now()
-    if (timeUntilExpiry > 0) {
-      setTimeout(() => {
-        useAuthStore.getState().logout()
-        useUIStore.getState().showToast({
-          type: 'warning',
-          message: 'Session expired. Please login again.',
-          duration: 5000
-        })
-      }, timeUntilExpiry)
-    }
-  }
-)
+// NOTE: Session expiry is fully handled by the backend JWT (24hrs) and
+// api.ts token refresh interceptor. No frontend timer needed — it caused
+// false logouts due to clock skew and localStorage Date serialization issues.
+// If you need to add a logout warning banner (e.g. "5 min left"), add it here.
 
 // Auto-remove toasts after duration (disabled due to API compatibility)
 // TODO: Implement with proper subscribe API

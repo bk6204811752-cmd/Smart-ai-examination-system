@@ -216,3 +216,68 @@ async def submit_exam(
     )
 
     return submission
+
+
+@router.get("/{exam_id}/attempts")
+async def get_exam_attempts(
+    exam_id: str,
+    db=Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get previous attempts for a specific exam by the current student"""
+    query = {"exam_id": exam_id}
+    if current_user["role"] == "student":
+        query["student_id"] = str(current_user["_id"])
+
+    cursor = db.submissions.find(query).sort("date", -1).limit(10)
+    attempts = []
+    async for s in cursor:
+        s["_id"] = str(s["_id"])
+        attempts.append(s)
+    return attempts
+
+
+@router.patch("/{exam_id}")
+async def update_exam(
+    exam_id: str,
+    updates: dict,
+    db=Depends(get_db),
+    current_user: dict = Depends(require_teacher_or_admin)
+):
+    """Update exam details"""
+    try:
+        oid = ObjectId(exam_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid exam ID")
+
+    # Remove protected fields
+    updates.pop("_id", None)
+    updates.pop("created_by", None)
+    updates.pop("created_at", None)
+
+    result = await db.exams.update_one({"_id": oid}, {"$set": updates})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Exam not found")
+
+    updated = await db.exams.find_one({"_id": oid})
+    return serialize(updated)
+
+
+@router.delete("/{exam_id}")
+async def delete_exam(
+    exam_id: str,
+    db=Depends(get_db),
+    current_user: dict = Depends(require_teacher_or_admin)
+):
+    """Delete an exam"""
+    try:
+        oid = ObjectId(exam_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid exam ID")
+
+    result = await db.exams.delete_one({"_id": oid})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Exam not found")
+
+    return {"message": "Exam deleted successfully"}
+

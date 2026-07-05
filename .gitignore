@@ -20,3 +20,4 @@ backend/uploads/*
 !backend/uploads/.gitkeep
 *.zip
 *.tar.gz
+.vercel

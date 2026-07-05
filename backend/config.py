@@ -20,14 +20,14 @@ class Settings(BaseSettings):
     # JWT
     SECRET_KEY: str = "pcmt-super-secret-key-change-in-production-min-32-characters-required"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours (was 30 min)
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # Application
     APP_NAME: str = "PCMT Smart AI Exam System"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = True
-    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
+    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000,https://pcmt-ai-exam-system.vercel.app,https://*.vercel.app"
 
     # File Upload
     MAX_FILE_SIZE: int = 10485760

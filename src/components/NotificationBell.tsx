@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Bell, X, Check, Trash2, ExternalLink } from 'lucide-react'
 import { notificationsAPI } from '../lib/api'
-import { useAuthStore } from '../store/authStore'
+import { useAuthStore } from '../store/globalStore'
 import { toast } from 'sonner'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'

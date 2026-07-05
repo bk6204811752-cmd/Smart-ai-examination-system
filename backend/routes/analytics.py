@@ -197,3 +197,121 @@ async def generate_report(
             "avg_pass_rate": "72%"
         }
     }
+
+
+@router.get("/teacher")
+async def get_teacher_analytics(
+    db=Depends(get_db),
+    current_user: dict = Depends(require_teacher_or_admin)
+):
+    """Teacher-specific analytics dashboard"""
+    teacher_id = str(current_user["_id"])
+    role = current_user["role"]
+
+    # Admins see all, teachers see their own
+    exam_query = {} if role == "admin" else {"created_by": current_user["_id"]}
+    exams = await db.exams.find(exam_query).to_list(None)
+    exam_ids = [str(e["_id"]) for e in exams]
+
+    total_submissions = await db.submissions.count_documents(
+        {"exam_id": {"$in": exam_ids}} if exam_ids else {}
+    )
+
+    # Avg score for teacher's exams
+    pipeline = [
+        {"$match": {"exam_id": {"$in": exam_ids}}},
+        {"$group": {"_id": None, "avg": {"$avg": "$percentage"}}}
+    ] if exam_ids else []
+    avg_result = await db.submissions.aggregate(pipeline).to_list(1) if pipeline else []
+    avg_score = round(avg_result[0]["avg"], 1) if avg_result else 0
+
+    # Pass rate
+    passed = await db.submissions.count_documents({"exam_id": {"$in": exam_ids}, "passed": True}) if exam_ids else 0
+    pass_rate = round(passed / total_submissions * 100, 1) if total_submissions > 0 else 0
+
+    return {
+        "total_exams": len(exams),
+        "total_submissions": total_submissions,
+        "avg_score": avg_score,
+        "pass_rate": pass_rate,
+        "active_exams": sum(1 for e in exams if e.get("status") == "active"),
+        "recent_exams": [
+            {"id": str(e["_id"]), "title": e.get("title"), "submissions": e.get("submissions_count", 0)}
+            for e in exams[:5]
+        ]
+    }
+
+
+@router.get("/trends")
+async def get_analytics_trends(
+    days: int = 30,
+    db=Depends(get_db),
+    current_user: dict = Depends(require_teacher_or_admin)
+):
+    """Time-series trend data for analytics charts"""
+    cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+    submissions = await db.submissions.find({"date": {"$gte": cutoff}}).sort("date", 1).to_list(None)
+
+    # Group by day
+    from collections import defaultdict
+    daily = defaultdict(list)
+    for s in submissions:
+        day = s.get("date", "")[:10]
+        daily[day].append(s.get("percentage", 0))
+
+    trend_data = [
+        {"date": day, "avg_score": round(sum(scores)/len(scores), 1), "count": len(scores)}
+        for day, scores in sorted(daily.items())
+    ]
+
+    return {
+        "period_days": days,
+        "data_points": trend_data,
+        "total_submissions": len(submissions)
+    }
+
+
+@router.get("/exams/{exam_id}")
+async def get_exam_analytics_enhanced(
+    exam_id: str,
+    db=Depends(get_db),
+    current_user: dict = Depends(require_teacher_or_admin)
+):
+    """Enhanced exam analytics (alias for /exam/{id})"""
+    try:
+        oid = ObjectId(exam_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid exam ID")
+
+    exam = await db.exams.find_one({"_id": oid})
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+
+    submissions = await db.submissions.find({"exam_id": exam_id}).to_list(None)
+    count = len(submissions)
+    scores = [s["percentage"] for s in submissions] if submissions else []
+    avg = round(sum(scores) / count, 1) if count else 0
+    passed = sum(1 for s in scores if s >= exam.get("passing_marks", 60))
+    pass_rate = round(passed / count * 100, 1) if count else 0
+
+    return {
+        "exam_id": exam_id,
+        "title": exam.get("title"),
+        "subject": exam.get("subject"),
+        "total_submissions": count,
+        "avg_score": avg,
+        "pass_rate": pass_rate,
+        "highest_score": max(scores) if scores else 0,
+        "lowest_score": min(scores) if scores else 0,
+        "score_distribution": {
+            "0-40": sum(1 for s in scores if s < 40),
+            "40-60": sum(1 for s in scores if 40 <= s < 60),
+            "60-80": sum(1 for s in scores if 60 <= s < 80),
+            "80-100": sum(1 for s in scores if s >= 80),
+        },
+        "recent_submissions": [
+            {"student_name": s.get("student_name"), "score": s.get("percentage"), "date": s.get("date")}
+            for s in submissions[-5:]
+        ]
+    }
+

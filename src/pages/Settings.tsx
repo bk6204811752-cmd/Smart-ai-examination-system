@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useAuthStore } from '../store/authStore'
+import { useAuthStore } from '../store/globalStore'
 import { 
   Settings as SettingsIcon, User, Bell, Shield, Palette, 
   Mail, Monitor, Calendar, Award, Save, Eye, EyeOff,

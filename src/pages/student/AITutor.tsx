@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useAuthStore } from '../../store/authStore'
+import { useAuthStore } from '../../store/globalStore'
 import { 
   Send, Bot, User, Sparkles, BookOpen, Code, 
   Calculator, Brain, MessageSquare, Trash2, RotateCcw,

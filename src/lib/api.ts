@@ -1,9 +1,10 @@
 import axios, { AxiosError, InternalAxiosRequestConfig, AxiosResponse } from 'axios'
-import { useAuthStore } from '../store/authStore'
+import { useAuthStore } from '../store/globalStore'
 import { logger } from './logger'
 import { toast } from 'sonner'
 
-const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000'
+// Use relative URL in production (same domain on Vercel), fallback to localhost in dev
+const API_URL = (import.meta as any).env?.VITE_API_URL || (import.meta as any).env?.DEV ? 'http://localhost:8000' : ''
 
 // Offline request queue
 interface QueuedRequest {
@@ -72,22 +73,24 @@ api.interceptors.request.use(
   }
 )
 
+// ── Token Refresh State ──────────────────────────────────────────────────────
+let isRefreshing = false
+let failedQueue: Array<{ resolve: (token: string) => void; reject: (err: any) => void }> = []
+
+const processFailedQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach(({ resolve, reject }) => {
+    if (error) reject(error)
+    else resolve(token!)
+  })
+  failedQueue = []
+}
+
 // Response interceptor with comprehensive error handling
 api.interceptors.response.use(
-  (response: AxiosResponse) => {
-    // Disabled: API response logging (too verbose)
-    // Uncomment only when debugging API issues
-    // if (import.meta.env.DEV && import.meta.env.VITE_DEBUG === 'true') {
-    //   logger.debug(`API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`, {
-    //     status: response.status,
-    //     data: response.data
-    //   })
-    // }
-    return response
-  },
+  (response: AxiosResponse) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean; _retryCount?: number }
-    
+
     // Network error - queue request if offline
     if (!error.response && !isOnline) {
       logger.warn('Request queued due to offline status', { url: originalRequest?.url })
@@ -97,23 +100,74 @@ api.interceptors.response.use(
         }
       })
     }
-    
-    // Handle different error scenarios
+
     if (error.response) {
       const status = error.response.status
       const errorData = error.response.data as any
-      
-      switch (status) {
-        case 401:
-          // Unauthorized - logout and redirect
-          logger.warn('Unauthorized access - logging out')
+
+      // ── 401 Unauthorized: Try token refresh first ─────────────────────────
+      if (status === 401) {
+        const currentToken = useAuthStore.getState().token
+        const isAuthEndpoint = originalRequest?.url?.includes('/api/auth/')
+
+        // Skip refresh for auth endpoints (wrong password etc) or if no token
+        if (!currentToken || isAuthEndpoint || originalRequest._retry) {
+          return Promise.reject(error)
+        }
+
+        // If already refreshing, queue this request
+        if (isRefreshing) {
+          return new Promise((resolve, reject) => {
+            failedQueue.push({
+              resolve: (token: string) => {
+                if (originalRequest.headers) originalRequest.headers.Authorization = `Bearer ${token}`
+                resolve(api(originalRequest))
+              },
+              reject
+            })
+          })
+        }
+
+        // Mark as refreshing
+        originalRequest._retry = true
+        isRefreshing = true
+
+        try {
+          // Attempt token refresh
+          const refreshRes = await axios.post(
+            `${API_URL}/api/auth/refresh`,
+            {},
+            { headers: { Authorization: `Bearer ${currentToken}` }, timeout: 10000 }
+          )
+          const newToken: string = refreshRes.data.access_token
+
+          // Update token in store (keep existing user data)
+          useAuthStore.getState().setToken(newToken)
+
+          // Update default header + retry queued requests
+          if (originalRequest.headers) originalRequest.headers.Authorization = `Bearer ${newToken}`
+          processFailedQueue(null, newToken)
+
+          logger.info('Token refreshed successfully')
+          return api(originalRequest)
+
+        } catch (refreshError) {
+          // Refresh failed → logout
+          processFailedQueue(refreshError, null)
+          logger.warn('Token refresh failed — logging out')
           useAuthStore.getState().logout()
           toast.error('Session expired. Please login again.')
-          setTimeout(() => window.location.href = '/login', 1000)
-          break
-          
+          setTimeout(() => { window.location.href = '/login' }, 1500)
+          return Promise.reject(refreshError)
+
+        } finally {
+          isRefreshing = false
+        }
+      }
+
+      // ── Other errors ──────────────────────────────────────────────────────
+      switch (status) {
         case 403:
-          // Forbidden
           logger.error('Access forbidden', { url: originalRequest?.url })
           toast.error('You do not have permission to access this resource')
           break

@@ -3,7 +3,7 @@
  * Real-time communication with automatic reconnection
  */
 
-import { useAuthStore } from '../store/authStore'
+import { useAuthStore } from '../store/globalStore'
 
 type MessageHandler = (data: any) => void
 type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'reconnecting' | 'error'

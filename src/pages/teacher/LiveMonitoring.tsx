@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { examAPI, proctoringAPI, sessionAPI } from '../../lib/api'
 import { WebSocketClient } from '../../lib/websocket'
-import { useAuthStore } from '../../store/authStore'
+import { useAuthStore } from '../../store/globalStore'
 import { toast } from 'sonner'
 import StudentDetailModal from '../../components/StudentDetailModal'
 import AudioWaveform from '../../components/AudioWaveform'

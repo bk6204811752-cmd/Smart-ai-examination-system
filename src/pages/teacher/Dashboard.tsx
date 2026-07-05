@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { useAuthStore } from '../../store/authStore'
+import { useAuthStore } from '../../store/globalStore'
 import { examAPI } from '../../lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import {

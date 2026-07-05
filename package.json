@@ -59,6 +59,7 @@
     "face-api.js": "^0.22.2",
     "framer-motion": "^11.0.8",
     "html2canvas": "^1.4.1",
+    "immer": "^11.1.11",
     "jspdf": "^3.0.4",
     "lucide-react": "^0.344.0",
     "react": "^18.3.1",

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useAuthStore } from '../store/authStore'
+import { useAuthStore } from '../store/globalStore'
 import { authAPI } from '../lib/api'
 import { toast } from 'sonner'
 import {
@@ -17,7 +17,7 @@ const FEATURES = [
 
 export default function LoginPage() {
   const navigate = useNavigate()
-  const { setUser, setToken } = useAuthStore()
+  const { login } = useAuthStore()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -43,9 +43,8 @@ export default function LoginPage() {
     try {
       const data = await authAPI.login(email, password)
       if (data.access_token) {
-        setToken(data.access_token)
-        setUser(data.user)
-        toast.success(`Welcome back, ${data.user?.name || 'User'}! 👋`)
+        login(data.user, data.access_token)
+        toast.success(`Welcome back, ${data.user?.full_name || data.user?.name || 'User'}! 👋`)
 
         const role = data.user?.role
         if (role === 'admin') navigate('/admin/dashboard')

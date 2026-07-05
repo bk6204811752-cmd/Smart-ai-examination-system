@@ -6,10 +6,12 @@ Seeds demo accounts and sample exam data on first startup
 from datetime import datetime, timedelta
 import random
 from utils.password import hash_password
+from bson import ObjectId
 
 
 DEMO_USERS = [
     {
+        "_id": ObjectId("66a000000000000000000001"),
         "email": "admin@pcmt.edu.in",
         "password": "admin123",
         "full_name": "Admin User",
@@ -19,6 +21,7 @@ DEMO_USERS = [
         "department": "Administration",
     },
     {
+        "_id": ObjectId("66a000000000000000000002"),
         "email": "teacher@pcmt.edu.in",
         "password": "teacher123",
         "full_name": "Prof. Rajesh Kumar",
@@ -28,6 +31,7 @@ DEMO_USERS = [
         "department": "Computer Science",
     },
     {
+        "_id": ObjectId("66a000000000000000000003"),
         "email": "student@pcmt.edu.in",
         "password": "student123",
         "full_name": "Priya Sharma",
@@ -199,14 +203,15 @@ async def seed_database(db):
     # Seed exams
     teacher_id = user_ids.get("teacher@pcmt.edu.in")
     exam_ids = []
-    for exam_data in SAMPLE_EXAMS:
+    for idx, exam_data in enumerate(SAMPLE_EXAMS):
         doc = {**exam_data}
+        doc["_id"] = ObjectId(f"66e00000000000000000000{idx+1}")
         doc["created_by"] = teacher_id
         doc["created_at"] = datetime.utcnow().isoformat()
         doc["submissions_count"] = 0
         doc["total_questions"] = len(doc["questions"])
         result = await db.exams.insert_one(doc)
-        exam_ids.append(result.inserted_id)
+        exam_ids.append(doc["_id"])
         print(f"   Created exam: {doc['title']}")
 
     # Seed sample results for the student
@@ -230,6 +235,7 @@ async def seed_database(db):
             past_date = datetime.utcnow() - timedelta(days=random.randint(5, 30))
 
             submission = {
+                "_id": ObjectId(f"66b00000000000000000000{i+1}"),
                 "exam_id": str(exam_oid),
                 "exam_title": exam["title"],
                 "student_id": str(student_id),

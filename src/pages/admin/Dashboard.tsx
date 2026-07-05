@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuthStore } from '../../store/authStore'
+import { useAuthStore } from '../../store/globalStore'
 import { analyticsAPI, userAPI, communicationAPI } from '../../lib/api'
 import Toast from '../../components/Toast'
 import { 

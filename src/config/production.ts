@@ -10,7 +10,7 @@ export const config = {
   
   // API Configuration
   api: {
-    baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+    baseURL: import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8000' : ''),
     timeout: 30000,
     retryAttempts: 3,
     retryDelay: 1000
@@ -18,7 +18,7 @@ export const config = {
   
   // WebSocket Configuration
   websocket: {
-    url: import.meta.env.VITE_WS_URL || 'ws://localhost:8000',
+    url: import.meta.env.VITE_WS_URL || (import.meta.env.DEV ? 'ws://localhost:8000' : `wss://${typeof window !== 'undefined' ? window.location.host : ''}`),
     reconnectAttempts: 5,
     reconnectDelay: 3000,
     heartbeatInterval: 30000

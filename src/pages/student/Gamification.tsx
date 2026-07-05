@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useAuthStore } from '../../store/authStore'
+import { useAuthStore } from '../../store/globalStore'
 import { Trophy, Award, Star, Target, Zap, TrendingUp, Medal, Crown, Flame, CheckCircle, Lock } from 'lucide-react'
 import { toast } from 'sonner'
 

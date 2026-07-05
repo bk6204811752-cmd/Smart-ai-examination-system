@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useAuthStore } from '../../store/authStore'
+import { useAuthStore } from '../../store/globalStore'
 import { 
   BookOpen, Video, FileText, Download, Search, Filter, 
   Star, BookmarkPlus, BookmarkCheck, Play, FileCode,

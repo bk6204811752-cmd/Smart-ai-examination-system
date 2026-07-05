@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuthStore } from '../../store/authStore'
+import { useAuthStore } from '../../store/globalStore'
 import { examAPI } from '../../lib/api'
 import { 
   PlusCircle, Users, BarChart, Monitor, LogOut, BookOpen,

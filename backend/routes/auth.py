@@ -147,3 +147,48 @@ async def register(request: RegisterRequest, db=Depends(get_db)):
 @router.get("/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
     return serialize_user(current_user)
+
+
+@router.patch("/me")
+async def update_me(updates: dict, db=Depends(get_db), current_user: dict = Depends(get_current_user)):
+    """Update current user profile"""
+    allowed = {"full_name", "program", "semester", "department", "cgpa", "avatar", "preferences"}
+    filtered = {k: v for k, v in updates.items() if k in allowed}
+    if filtered:
+        await db.users.update_one({"_id": current_user["_id"]}, {"$set": filtered})
+    updated = await db.users.find_one({"_id": current_user["_id"]})
+    return serialize_user(updated)
+
+
+@router.post("/refresh")
+async def refresh_token(current_user: dict = Depends(get_current_user)):
+    """Refresh JWT token — returns a new token with fresh expiry"""
+    token = create_access_token(
+        {"sub": str(current_user["_id"]), "role": current_user["role"]},
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+    return {"access_token": token, "token_type": "bearer"}
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@router.post("/change-password")
+async def change_password(
+    request: ChangePasswordRequest,
+    db=Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Change password for current user"""
+    if not verify_password(request.current_password, current_user["password"]):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if len(request.new_password) < 6:
+        raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+    await db.users.update_one(
+        {"_id": current_user["_id"]},
+        {"$set": {"password": hash_password(request.new_password)}}
+    )
+    return {"message": "Password changed successfully"}
+

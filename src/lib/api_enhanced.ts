@@ -8,9 +8,10 @@
  */
 
 import axios, { AxiosError, InternalAxiosRequestConfig, AxiosResponse, CancelTokenSource } from 'axios'
-import { useAuthStore } from '../store/authStore'
+import { useAuthStore } from '../store/globalStore'
 
-const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000'
+// Use relative URL in production (same domain on Vercel), fallback to localhost in dev
+const API_URL = (import.meta as any).env?.VITE_API_URL || (import.meta as any).env?.DEV ? 'http://localhost:8000' : ''
 
 // Create axios instance with enhanced configuration
 export const api = axios.create({
@@ -93,37 +94,11 @@ api.interceptors.response.use(
       pendingRequests.delete(requestId)
     }
 
-    // Handle 401 Unauthorized - Try to refresh token first
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true
-
-      try {
-        // Try to refresh token
-        const refreshResponse = await axios.post(`${API_URL}/api/auth/refresh`, {}, {
-          headers: {
-            Authorization: `Bearer ${useAuthStore.getState().token}`
-          }
-        })
-
-        const { access_token, user } = refreshResponse.data
-        
-        // Update token in store
-        useAuthStore.getState().login(user, access_token)
-        
-        // Retry original request with new token
-        if (originalRequest.headers) {
-          originalRequest.headers.Authorization = `Bearer ${access_token}`
-        }
-        
-        console.log('✅ Token refreshed successfully, retrying request')
-        return api(originalRequest)
-      } catch (refreshError) {
-        // Refresh failed, logout user
-        console.error('❌ Token refresh failed:', refreshError)
-        useAuthStore.getState().logout()
-        window.location.href = '/login'
-        return Promise.reject(error)
-      }
+    // Handle 401 Unauthorized — defer to api.ts interceptor (same axios instance)
+    // api_enhanced.ts uses the same `api` instance, so api.ts interceptor handles refresh
+    if (error.response?.status === 401) {
+      // Don't double-handle — api.ts interceptor manages token refresh and logout
+      return Promise.reject(error)
     }
 
     // Handle 429 Rate Limit
