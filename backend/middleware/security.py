@@ -159,12 +159,24 @@ async def add_security_headers(request: Request, call_next):
     return response
 
 
+def _add_cors_headers(request: Request, response: JSONResponse) -> JSONResponse:
+    """Manually add CORS headers to direct JSON responses (bypassing normal CORSMiddleware)"""
+    origin = request.headers.get("origin")
+    if origin:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    return response
+
+
 async def rate_limit_middleware(request: Request, call_next):
     """Middleware for rate limiting"""
     if not settings.RATE_LIMIT_ENABLED:
         return await call_next(request)
     
-    ip = request.client.host if request.client else "unknown"
+    # Use real IP (behind proxies) to prevent rate-limiting all users on shared proxy
+    ip = get_client_ip(request)
     
     # Determine rate limit based on endpoint
     path = request.url.path
@@ -188,10 +200,11 @@ async def rate_limit_middleware(request: Request, call_next):
     
     if not rate_limiter.is_allowed(key, limit):
         logger.warning(f"Rate limit exceeded for {ip} on {method} {path}")
-        return JSONResponse(
+        response = JSONResponse(
             status_code=429,
             content={"detail": "Too many requests. Please wait a moment and try again."}
         )
+        return _add_cors_headers(request, response)
     
     return await call_next(request)
 
@@ -202,10 +215,11 @@ async def request_size_limit_middleware(request: Request, call_next):
         if "content-length" in request.headers:
             content_length = int(request.headers["content-length"])
             if content_length > settings.REQUEST_BODY_SIZE_LIMIT:
-                return JSONResponse(
+                response = JSONResponse(
                     status_code=413,
                     content={"detail": f"Request body too large. Max size: {settings.REQUEST_BODY_SIZE_LIMIT} bytes"}
                 )
+                return _add_cors_headers(request, response)
     
     return await call_next(request)
 
@@ -222,10 +236,12 @@ async def safe_exception_handler(request: Request, exc: Exception):
         # In production, only generic message
         detail = "Internal server error. Please contact support."
     
-    return JSONResponse(
+    response = JSONResponse(
         status_code=500,
         content={"detail": detail, "request_id": request.headers.get("x-request-id", "unknown")}
     )
+    return _add_cors_headers(request, response)
+
 
 
 def get_client_ip(request: Request) -> str:

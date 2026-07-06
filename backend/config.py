@@ -41,10 +41,10 @@ class Settings(BaseSettings):
     
     # Security & Rate Limiting
     RATE_LIMIT_ENABLED: bool = True
-    RATE_LIMIT_LOGIN: str = "5/minute"
-    RATE_LIMIT_REGISTER: str = "10/hour"
-    RATE_LIMIT_GENERAL: str = "100/minute"
-    RATE_LIMIT_OTP: str = "10/minute"
+    RATE_LIMIT_LOGIN: str = "15/minute"
+    RATE_LIMIT_REGISTER: str = "60/hour"
+    RATE_LIMIT_GENERAL: str = "300/minute"
+    RATE_LIMIT_OTP: str = "30/minute"
     CSRF_PROTECTION_ENABLED: bool = True
     SECURE_COOKIES: bool = True
     SAME_SITE_COOKIES: str = "strict"
