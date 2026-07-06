@@ -4,6 +4,9 @@
   "private": true,
   "description": "PCMT Smart AI Exam System - Complete Learning Management Platform",
   "type": "module",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
@@ -92,5 +95,8 @@
     "terser": "^5.44.1",
     "typescript": "^5.4.2",
     "vite": "^5.2.0"
+  },
+  "overrides": {
+    "source-map-js": "1.2.1"
   }
 }
