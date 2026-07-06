@@ -51,6 +51,7 @@ def send_email(
             f"SMTP not configured — SMTP_USER={repr(smtp_user)}, "
             f"SMTP_PASSWORD={'set' if smtp_password else 'empty'}"
         )
+        # Return False instead of raising exception when email not configured
         return False
 
     # Build the message
@@ -200,7 +201,12 @@ Pailan College of Management and Technology"""
 async def send_otp_email_async(to_email: str, otp_code: str, expire_minutes: int = 10) -> bool:
     """Async wrapper — runs OTP email in executor."""
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, lambda: send_otp_email(to_email, otp_code, expire_minutes))
+    try:
+        result = await loop.run_in_executor(None, lambda: send_otp_email(to_email, otp_code, expire_minutes))
+        return result
+    except Exception as e:
+        logger.error(f"send_otp_email_async exception: {type(e).__name__}: {e}")
+        return False
 
 
 # ── 2. Registration Pending (Waiting for Admin Approval) ─────────────────────

@@ -259,11 +259,17 @@ async def register(request: Request, reg_data: RegisterRequest, db=Depends(get_d
         try:
             otp_code = generate_otp()
             await store_otp(db, reg_data.email, otp_code)
-            await send_otp_email_async(reg_data.email, otp_code, settings.OTP_EXPIRE_MINUTES)
-            logger.info(f"OTP sent to {reg_data.email}")
+            sent = await send_otp_email_async(reg_data.email, otp_code, settings.OTP_EXPIRE_MINUTES)
+            if sent:
+                logger.info(f"✅ OTP sent successfully to {reg_data.email}")
+            else:
+                logger.warning(f"⚠️ send_otp_email_async returned False for {reg_data.email}")
+                needs_otp = False
         except Exception as e:
-            logger.error(f"Failed to send OTP to {reg_data.email}: {e}")
+            logger.error(f"❌ Failed to send OTP to {reg_data.email}: {type(e).__name__}: {e}")
             needs_otp = False
+    else:
+        logger.warning("⚠️ Email service not configured (SMTP_USER/SMTP_PASSWORD empty). OTP will not be sent.")
 
     return {
         "message": "Registration successful. Please verify your email.",
