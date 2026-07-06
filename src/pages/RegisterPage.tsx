@@ -268,7 +268,9 @@ export default function RegisterPage() {
               </div>
             ))}
           </div>
-          <p className="text-white/40 text-xs">Step {step + 1} of {STEPS.length}</p>
+          <p className="text-white/40 text-xs">
+            {step === 3 ? 'Email Verification Step' : `Step ${step + 1} of ${STEPS.length}`}
+          </p>
         </div>
       </div>
 
@@ -296,7 +298,7 @@ export default function RegisterPage() {
           >
             {/* Header */}
             <div className="mb-6">
-              {step > 0 && (
+              {step > 0 && step < 3 && (
                 <button
                   onClick={() => setStep(s => s - 1)}
                   className="flex items-center gap-1.5 text-gray-400 hover:text-gray-600 text-sm font-medium mb-4 transition-colors"
@@ -307,19 +309,22 @@ export default function RegisterPage() {
               )}
               <div className="inline-flex items-center gap-2 bg-blue-50 border border-blue-100 text-blue-600 text-xs font-semibold px-3 py-1.5 rounded-full mb-3">
                 <Sparkles className="w-3 h-3" />
-                {STEPS[step]}
+                {step === 3 ? 'Verification' : STEPS[step]}
               </div>
               <h2 className="text-2xl font-black text-gray-900 mb-1">
                 {step === 0 ? 'Create Your Account' :
                  step === 1 ? 'Academic Details' :
-                 'Review & Submit'}
+                 step === 2 ? 'Review & Submit' :
+                 'Verify Your Email'}
               </h2>
               <p className="text-gray-400 text-sm">
                 {step === 0
                   ? <>Already have an account? <Link to="/login" className="text-blue-600 font-semibold hover:text-blue-700">Sign in</Link></>
                   : step === 1
                   ? 'Tell us about your academic background'
-                  : 'Review your information before submitting'}
+                  : step === 2
+                  ? 'Review your information before submitting'
+                  : 'Enter the verification code sent to your email'}
               </p>
             </div>
 

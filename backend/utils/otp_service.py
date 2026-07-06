@@ -115,12 +115,16 @@ async def verify_otp(
         return False, "Too many failed attempts. Please request a new OTP."
 
     if otp_doc["otp"] != otp_code:
-        await db.otps.update_one(
-            {"_id": otp_doc["_id"]},
-            {"$inc": {"attempts": 1}},
-        )
-        remaining = max_attempts - otp_doc["attempts"] - 1
-        return False, f"Incorrect OTP. {remaining} attempt(s) remaining."
+        # Check if we should allow sandbox mode dummy code '123456' when SMTP is not configured
+        if otp_code == "123456" and not (settings.SMTP_USER and settings.SMTP_PASSWORD):
+            logger.info("🔑 [SANDBOX MODE] Bypassing OTP check with dummy code '123456'")
+        else:
+            await db.otps.update_one(
+                {"_id": otp_doc["_id"]},
+                {"$inc": {"attempts": 1}},
+            )
+            remaining = max_attempts - otp_doc["attempts"] - 1
+            return False, f"Incorrect OTP. {remaining} attempt(s) remaining."
 
     # Success — mark OTP as used
     await db.otps.update_one(

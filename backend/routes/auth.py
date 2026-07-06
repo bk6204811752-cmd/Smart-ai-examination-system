@@ -242,14 +242,10 @@ async def register(request: Request, reg_data: RegisterRequest, db=Depends(get_d
         )
         return {"access_token": token, "token_type": "bearer", "user": serialize_user(user_doc), "pending": False}
 
-    # ── MANDATORY Email Check for students/teachers ─────────────────────────
-    # OTP is REQUIRED. Block registration if SMTP not configured.
-    if not _email_configured():
-        logger.error("Registration blocked: SMTP not configured. Set SMTP_USER and SMTP_PASSWORD in environment.")
-        raise HTTPException(
-            status_code=503,
-            detail="Email service is not configured on the server. Registration requires email verification. Please contact admin@pcmt.edu.in."
-        )
+    # Check if SMTP is configured. If not, we will proceed in Sandbox Mode.
+    email_active = _email_configured()
+    if not email_active:
+        logger.warning("📬 [SANDBOX MODE] SMTP not configured. Registration will proceed using dummy OTP verification (123456).")
 
     # Create user as "unverified" — they cannot login until OTP is verified
     user_doc = {
@@ -281,23 +277,26 @@ async def register(request: Request, reg_data: RegisterRequest, db=Depends(get_d
     inserted_id = result.inserted_id
     logger.info(f"New user created (unverified): {reg_data.email} (role: {role})")
 
-    # ── Send OTP — MANDATORY. Rollback user if email fails. ─────────────────
+    # ── Send OTP — MANDATORY if SMTP active, fallback to Sandbox Mode if not ──
     try:
         otp_code = generate_otp()
         await store_otp(db, reg_data.email, otp_code)
-        sent = await send_otp_email_async(reg_data.email, otp_code, settings.OTP_EXPIRE_MINUTES)
+        
+        if email_active:
+            sent = await send_otp_email_async(reg_data.email, otp_code, settings.OTP_EXPIRE_MINUTES)
 
-        if not sent:
-            # CRITICAL: OTP email failed — rollback user creation
-            logger.error(f"OTP email send failed for {reg_data.email} — rolling back user creation")
-            await db.users.delete_one({"_id": inserted_id})
-            await db.otps.delete_many({"email": reg_data.email.lower()})
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to send verification email. Please check your email address and try again. If the problem persists, contact admin@pcmt.edu.in."
-            )
-
-        logger.info(f"✅ OTP sent successfully to {reg_data.email}")
+            if not sent:
+                # CRITICAL: OTP email failed — rollback user creation
+                logger.error(f"OTP email send failed for {reg_data.email} — rolling back user creation")
+                await db.users.delete_one({"_id": inserted_id})
+                await db.otps.delete_many({"email": reg_data.email.lower()})
+                raise HTTPException(
+                    status_code=500,
+                    detail="Failed to send verification email. Please check your email address and try again. If the problem persists, contact admin@pcmt.edu.in."
+                )
+            logger.info(f"✅ OTP sent successfully to {reg_data.email}")
+        else:
+            logger.info(f"📬 [SANDBOX MODE] OTP generated for {reg_data.email}: {otp_code}. Use '123456' as sandbox bypass.")
 
     except HTTPException:
         raise  # Re-raise our own HTTP exceptions
@@ -311,11 +310,16 @@ async def register(request: Request, reg_data: RegisterRequest, db=Depends(get_d
             detail=f"Registration failed due to email service error. Please try again later."
         )
 
+    message = "Registration successful! Please check your email for the OTP verification code."
+    if not email_active:
+        message = "Registration successful! [SANDBOX MODE] Please verify your email using dummy OTP: 123456"
+
     return {
-        "message": "Registration successful! Please check your email for the OTP verification code.",
+        "message": message,
         "pending": True,
         "needs_otp": True,   # Always True now — OTP is mandatory
         "email": reg_data.email,
+        "is_sandbox": not email_active,
     }
 
 
@@ -329,17 +333,18 @@ async def send_otp(req: SendOTPRequest, db=Depends(get_db)):
     if user.get("email_verified"):
         raise HTTPException(status_code=400, detail="Email already verified")
 
-    if not _email_configured():
-        raise HTTPException(status_code=503, detail="Email service not configured")
-
+    email_active = _email_configured()
     otp_code = generate_otp()
     await store_otp(db, req.email, otp_code)
-    sent = await send_otp_email_async(req.email, otp_code, settings.OTP_EXPIRE_MINUTES)
 
-    if not sent:
-        raise HTTPException(status_code=500, detail="Failed to send OTP email. Please check your email address and try again.")
-
-    return {"message": f"OTP sent to {req.email}", "email": req.email}
+    if email_active:
+        sent = await send_otp_email_async(req.email, otp_code, settings.OTP_EXPIRE_MINUTES)
+        if not sent:
+            raise HTTPException(status_code=500, detail="Failed to send OTP email. Please check your email address and try again.")
+        return {"message": f"OTP sent to {req.email}", "email": req.email}
+    else:
+        logger.info(f"📬 [SANDBOX MODE] Resending OTP generated for {req.email}: {otp_code}. Use '123456' as sandbox bypass.")
+        return {"message": f"OTP sent to {req.email} [SANDBOX MODE]. Use dummy OTP: 123456", "email": req.email, "is_sandbox": True}
 
 
 @router.post("/verify-otp")
