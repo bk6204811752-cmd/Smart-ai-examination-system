@@ -6,9 +6,10 @@ import { toast } from 'sonner'
 // Backend URL:
 //   Production → VITE_API_URL env var (set in Vercel Dashboard → points to Render)
 //   Development → http://localhost:8000 (local FastAPI server)
+const RENDER_BACKEND = 'https://pcmt-ai-exam-backend.onrender.com'
 const API_URL =
   (import.meta as any).env?.VITE_API_URL ||
-  ((import.meta as any).env?.DEV ? 'http://localhost:8000' : '')
+  ((import.meta as any).env?.DEV ? 'http://localhost:8000' : RENDER_BACKEND)
 
 
 // Offline request queue
@@ -232,9 +233,13 @@ api.interceptors.response.use(
           toast.error(errorData?.message || 'An unexpected error occurred')
       }
     } else if (error.request) {
-      // Request made but no response
-      logger.error('No response from server', { url: originalRequest?.url })
-      toast.error('Unable to connect to server. Please check your internet connection.')
+      // Request made but no response (network error / server down)
+      const isDev = import.meta.env.DEV
+      if (isDev) {
+        toast.error('Cannot connect to server. Please ensure the backend is running.')
+      } else {
+        toast.error('Server is starting up — please wait 30 seconds and try again.', { duration: 6000 })
+      }
     } else {
       // Error setting up request
       logger.error('Request setup error', error)

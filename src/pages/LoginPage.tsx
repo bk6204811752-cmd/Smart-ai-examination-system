@@ -52,11 +52,15 @@ export default function LoginPage() {
         else navigate('/student/dashboard')
       }
     } catch (err: any) {
-      // Network error (backend not running)
       if (!err.response) {
-        toast.error('Cannot connect to server. Please ensure the backend is running on port 8000.')
+        // Network error — in production the Render free-tier backend may be waking up
+        const isDev = import.meta.env.DEV
+        if (isDev) {
+          toast.error('Cannot connect to server. Please ensure the backend is running on port 8000.')
+        } else {
+          toast.error('Server is starting up — please wait 30 seconds and try again. (Backend cold start)', { duration: 6000 })
+        }
       } else {
-        // Auth error from backend
         const msg = err?.response?.data?.detail || err?.message || 'Invalid credentials. Please try again.'
         toast.error(msg)
       }
