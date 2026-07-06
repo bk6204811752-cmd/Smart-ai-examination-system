@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { 
   CheckCircle, 
   XCircle, 
@@ -10,7 +10,12 @@ import {
   Calendar,
   AlertCircle,
   Filter,
-  Search
+  Search,
+  Eye,
+  X,
+  BookOpen,
+  Shield,
+  AlertTriangle
 } from 'lucide-react'
 import { api } from '../../lib/api'
 import { toast } from 'sonner'
@@ -24,7 +29,11 @@ interface PendingUser {
   semester?: number
   department?: string
   created_at: string
-  approval_status: 'pending' | 'approved' | 'rejected'
+  status: 'pending' | 'approved' | 'rejected' | 'suspended'
+  email_verified?: boolean
+  cgpa?: number
+  rejection_reason?: string
+  statistics?: { totalExamsTaken: number; averageScore: number; studyHours: number }
 }
 
 export default function UserApprovalManagement() {
@@ -34,25 +43,21 @@ export default function UserApprovalManagement() {
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending')
   const [searchQuery, setSearchQuery] = useState('')
   const [processingId, setProcessingId] = useState<string | null>(null)
+  const [viewUser, setViewUser] = useState<PendingUser | null>(null)
 
   useEffect(() => {
     fetchUsers()
-  }, [filter])
+  }, [])
 
   const fetchUsers = async () => {
     try {
       setLoading(true)
-      
-      if (filter === 'pending') {
-        const response = await api.get('/api/users/pending')
-        setPendingUsers(response.data)
-      } else if (filter === 'all') {
-        const response = await api.get('/api/users')
-        setAllUsers(response.data)
-      } else {
-        const response = await api.get(`/api/users?approval_status=${filter}`)
-        setAllUsers(response.data)
-      }
+      const [pendingRes, allRes] = await Promise.all([
+        api.get('/api/users/pending'),
+        api.get('/api/users')
+      ])
+      setPendingUsers(pendingRes.data)
+      setAllUsers(allRes.data)
     } catch (error: any) {
       toast.error('Failed to fetch users')
       console.error(error)
@@ -104,17 +109,29 @@ export default function UserApprovalManagement() {
     }
   }
 
-  const displayUsers = filter === 'pending' ? pendingUsers : allUsers
+  const displayUsers = filter === 'pending'
+    ? pendingUsers
+    : filter === 'all'
+      ? allUsers
+      : allUsers.filter(u => u.status === filter)
   const filteredUsers = displayUsers.filter(user => 
     user.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     user.email.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
+  const openDetail = async (user: PendingUser) => {
+    setViewUser(user)
+    try {
+      const { data } = await api.get(`/api/users/${user._id}`)
+      setViewUser(data)
+    } catch { /* use cached */ }
+  }
+
   const stats = {
     pending: pendingUsers.length,
     total: allUsers.length,
-    approved: allUsers.filter(u => u.approval_status === 'approved').length,
-    rejected: allUsers.filter(u => u.approval_status === 'rejected').length
+    approved: allUsers.filter(u => u.status === 'approved').length,
+    rejected: allUsers.filter(u => u.status === 'rejected').length
   }
 
   return (
@@ -289,8 +306,8 @@ export default function UserApprovalManagement() {
                     <tr key={user._id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                            <User className="w-5 h-5 text-white" />
+                          <div className="flex-shrink-0 h-10 w-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold">
+                            {user.full_name.charAt(0)}
                           </div>
                           <div className="ml-4">
                             <div className="text-sm font-medium text-gray-900">{user.full_name}</div>
@@ -330,20 +347,27 @@ export default function UserApprovalManagement() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          user.approval_status === 'approved'
+                          user.status === 'approved'
                             ? 'bg-green-100 text-green-800'
-                            : user.approval_status === 'rejected'
+                            : user.status === 'rejected'
                             ? 'bg-red-100 text-red-800'
                             : 'bg-yellow-100 text-yellow-800'
                         }`}>
-                          {user.approval_status === 'approved' && <CheckCircle className="w-3 h-3 mr-1 inline" />}
-                          {user.approval_status === 'rejected' && <XCircle className="w-3 h-3 mr-1 inline" />}
-                          {user.approval_status === 'pending' && <Clock className="w-3 h-3 mr-1 inline" />}
-                          {user.approval_status.charAt(0).toUpperCase() + user.approval_status.slice(1)}
+                          {user.status === 'approved' && <CheckCircle className="w-3 h-3 mr-1 inline" />}
+                          {user.status === 'rejected' && <XCircle className="w-3 h-3 mr-1 inline" />}
+                          {user.status === 'pending' && <Clock className="w-3 h-3 mr-1 inline" />}
+                          {(user.status || 'pending').charAt(0).toUpperCase() + (user.status || 'pending').slice(1)}
                         </span>
                       </td>
                       {filter === 'pending' && (
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <button
+                            onClick={() => openDetail(user)}
+                            className="text-blue-500 hover:text-blue-700 mr-3"
+                            title="View Details"
+                          >
+                            <Eye className="w-5 h-5 inline" />
+                          </button>
                           <button
                             onClick={() => handleApprove(user._id, user.full_name)}
                             disabled={processingId === user._id}
@@ -359,6 +383,17 @@ export default function UserApprovalManagement() {
                           >
                             <XCircle className="w-5 h-5 inline mr-1" />
                             Reject
+                          </button>
+                        </td>
+                      )}
+                      {filter !== 'pending' && (
+                        <td className="px-6 py-4 whitespace-nowrap text-right">
+                          <button
+                            onClick={() => openDetail(user)}
+                            className="text-blue-500 hover:text-blue-700"
+                            title="View Details"
+                          >
+                            <Eye className="w-5 h-5 inline" />
                           </button>
                         </td>
                       )}
@@ -386,6 +421,96 @@ export default function UserApprovalManagement() {
           </div>
         )}
       </motion.div>
+
+      {/* ── User Detail Modal ──────────────────────────────────────── */}
+      <AnimatePresence>
+        {viewUser && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setViewUser(null)}
+              className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40"
+            />
+            <motion.div
+              initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              className="fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl z-50 overflow-y-auto"
+            >
+              <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+                <h2 className="text-lg font-bold text-gray-900">User Details</h2>
+                <button onClick={() => setViewUser(null)} className="p-2 hover:bg-gray-100 rounded-xl transition">
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+              <div className="p-6 space-y-5">
+                {/* Banner */}
+                <div className="flex items-center gap-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-5 border border-blue-100">
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-2xl font-black">
+                    {viewUser.full_name.charAt(0)}
+                  </div>
+                  <div>
+                    <h3 className="font-black text-xl text-gray-900">{viewUser.full_name}</h3>
+                    <p className="text-sm text-gray-500">{viewUser.email}</p>
+                    <div className="flex gap-2 mt-2">
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                        viewUser.role === 'teacher' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                      }`}>{viewUser.role.charAt(0).toUpperCase() + viewUser.role.slice(1)}</span>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                        viewUser.status === 'approved' ? 'bg-green-100 text-green-700' :
+                        viewUser.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                      }`}>{(viewUser.status || 'pending').charAt(0).toUpperCase() + (viewUser.status || 'pending').slice(1)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Info */}
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { label: 'Program',    value: viewUser.program    || '—' },
+                    { label: 'Semester',   value: viewUser.semester ? `Semester ${viewUser.semester}` : '—' },
+                    { label: 'Department', value: viewUser.department  || '—' },
+                    { label: 'Registered', value: viewUser.created_at ? new Date(viewUser.created_at).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—' },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="bg-gray-50 rounded-xl p-3.5">
+                      <p className="text-xs text-gray-400 font-medium">{label}</p>
+                      <p className="text-sm font-semibold text-gray-800 mt-0.5">{value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {viewUser.rejection_reason && (
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex gap-3">
+                    <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold text-red-700">Rejection Reason</p>
+                      <p className="text-sm text-red-600">{viewUser.rejection_reason}</p>
+                    </div>
+                  </div>
+                )}
+
+                {viewUser.status === 'pending' && (
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      onClick={() => { handleApprove(viewUser._id, viewUser.full_name); setViewUser(null) }}
+                      disabled={processingId === viewUser._id}
+                      className="flex-1 py-3 bg-green-500 hover:bg-green-600 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60"
+                    >
+                      <CheckCircle className="w-4 h-4" /> Approve
+                    </button>
+                    <button
+                      onClick={() => { handleReject(viewUser._id, viewUser.full_name); setViewUser(null) }}
+                      disabled={processingId === viewUser._id}
+                      className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60"
+                    >
+                      <X className="w-4 h-4" /> Reject
+                    </button>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

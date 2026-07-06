@@ -11,6 +11,7 @@ PATCH  /api/users/{id}
 DELETE /api/users/{id}
 """
 
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional
 from pydantic import BaseModel
@@ -19,6 +20,10 @@ from bson import ObjectId
 from database import get_db
 from middleware.auth import get_current_user, require_admin
 from utils.password import hash_password
+from utils.email_service import send_approval_email_async, send_rejection_email_async
+from utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -80,6 +85,24 @@ async def get_pending_users(
     return users
 
 
+@router.get("/{user_id}")
+async def get_user(
+    user_id: str,
+    db=Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    if current_user["role"] not in ["admin", "teacher"] and str(current_user["_id"]) != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    try:
+        oid = ObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user ID")
+    user = await db.users.find_one({"_id": oid})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return serialize(user)
+
+
 @router.post("")
 async def create_user(
     data: CreateUserRequest,
@@ -97,9 +120,11 @@ async def create_user(
         "role": data.role,
         "status": "approved",
         "is_active": True,
+        "email_verified": True,
         "program": data.program,
         "semester": data.semester,
         "department": data.department,
+        "created_at": datetime.now(timezone.utc).isoformat(),
     }
     result = await db.users.insert_one(user_doc)
     user_doc["_id"] = result.inserted_id
@@ -119,10 +144,19 @@ async def approve_user(
 
     result = await db.users.update_one(
         {"_id": oid},
-        {"$set": {"status": "approved", "is_active": True}}
+        {"$set": {"status": "approved", "is_active": True, "email_verified": True}}
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # Send approval email (awaited but errors suppressed — never blocks the response)
+    user = await db.users.find_one({"_id": oid})
+    if user and user.get("email"):
+        try:
+            await send_approval_email_async(user["email"], user.get("full_name", "User"))
+        except Exception as e:
+            logger.error(f"Failed to send approval email to {user.get('email')}: {e}")
+
     return {"message": "User approved successfully"}
 
 
@@ -144,6 +178,15 @@ async def reject_user(
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # Send rejection email (awaited but errors suppressed — never blocks the response)
+    user = await db.users.find_one({"_id": oid})
+    if user and user.get("email"):
+        try:
+            await send_rejection_email_async(user["email"], user.get("full_name", "User"), reason)
+        except Exception as e:
+            logger.error(f"Failed to send rejection email to {user.get('email')}: {e}")
+
     return {"message": "User rejected"}
 
 

@@ -149,11 +149,18 @@ class InMemoryCollection:
                     target = target.setdefault(part, {})
                 target[parts[-1]] = target.get(parts[-1], 0) + v
 
-    async def find_one(self, query=None):
-        for doc in self._docs:
-            if self._match(doc, query or {}):
-                return copy.deepcopy(doc)
-        return None
+    async def find_one(self, query=None, projection=None, sort=None, **kwargs):
+        """
+        Find one document matching query.
+        sort: list of (field, direction) tuples e.g. [('created_at', -1)]
+        """
+        matched = [copy.deepcopy(d) for d in self._docs if self._match(d, query or {})]
+        if sort:
+            for field, direction in reversed(sort):
+                matched.sort(key=lambda d: str(d.get(field, "")), reverse=(direction == -1))
+        if not matched:
+            return None
+        return matched[0]
 
     def find(self, query=None):
         matched = [copy.deepcopy(d) for d in self._docs if self._match(d, query or {})]

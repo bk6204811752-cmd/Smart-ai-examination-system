@@ -248,8 +248,28 @@ export const authAPI = {
     const response = await api.post('/api/auth/register', data)
     return response.data
   },
+  sendOTP: async (email: string) => {
+    const response = await api.post('/api/auth/send-otp', { email })
+    return response.data
+  },
+  verifyOTP: async (email: string, otp: string) => {
+    const response = await api.post('/api/auth/verify-otp', { email, otp })
+    return response.data
+  },
   getCurrentUser: async () => {
     const response = await api.get('/api/auth/me')
+    return response.data
+  },
+  forgotPassword: async (email: string) => {
+    const response = await api.post('/api/auth/forgot-password', { email })
+    return response.data
+  },
+  resetPassword: async (email: string, otp: string, new_password: string) => {
+    const response = await api.post('/api/auth/reset-password', { email, otp, new_password })
+    return response.data
+  },
+  changePassword: async (current_password: string, new_password: string) => {
+    const response = await api.post('/api/auth/change-password', { current_password, new_password })
     return response.data
   },
 }

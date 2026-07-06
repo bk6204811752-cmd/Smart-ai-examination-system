@@ -25,7 +25,7 @@ class RateLimiter:
     def __init__(self):
         self.requests: Dict[str, list] = {}  # {ip: [timestamps]}
     
-    def is_allowed(self, ip: str, limit: str) -> bool:
+    def is_allowed(self, key: str, limit: str) -> bool:
         """Check if request is allowed. Format: '5/minute', '3/hour'"""
         try:
             count, window = limit.split("/")
@@ -43,16 +43,16 @@ class RateLimiter:
             cutoff = now - window_seconds
             
             # Clean old requests
-            if ip in self.requests:
-                self.requests[ip] = [t for t in self.requests[ip] if t > cutoff]
+            if key in self.requests:
+                self.requests[key] = [t for t in self.requests[key] if t > cutoff]
             else:
-                self.requests[ip] = []
+                self.requests[key] = []
             
             # Check limit
-            if len(self.requests[ip]) >= count:
+            if len(self.requests[key]) >= count:
                 return False
             
-            self.requests[ip].append(now)
+            self.requests[key].append(now)
             return True
         except Exception as e:
             logger.warning(f"Rate limiter error: {e}")
@@ -172,16 +172,25 @@ async def rate_limit_middleware(request: Request, call_next):
     
     if path == "/api/auth/login" and method == "POST":
         limit = settings.RATE_LIMIT_LOGIN
+        key = f"{ip}:login"
     elif path == "/api/auth/register" and method == "POST":
         limit = settings.RATE_LIMIT_REGISTER
+        key = f"{ip}:register"
+    elif path in ("/api/auth/send-otp", "/api/auth/verify-otp") and method == "POST":
+        limit = settings.RATE_LIMIT_OTP
+        key = f"{ip}:otp"
+    elif path in ("/api/auth/forgot-password", "/api/auth/reset-password") and method == "POST":
+        limit = settings.RATE_LIMIT_OTP
+        key = f"{ip}:pwd-reset"
     else:
         limit = settings.RATE_LIMIT_GENERAL
+        key = f"{ip}:general"
     
-    if not rate_limiter.is_allowed(ip, limit):
+    if not rate_limiter.is_allowed(key, limit):
         logger.warning(f"Rate limit exceeded for {ip} on {method} {path}")
         return JSONResponse(
             status_code=429,
-            content={"detail": "Too many requests. Please try again later."}
+            content={"detail": "Too many requests. Please wait a moment and try again."}
         )
     
     return await call_next(request)

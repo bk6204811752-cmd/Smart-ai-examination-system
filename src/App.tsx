@@ -16,6 +16,7 @@ const AdminLayout   = lazy(() => import('./components/layouts/AdminLayout'))
 const LandingPage  = lazy(() => import('./pages/LandingPage'))
 const LoginPage    = lazy(() => import('./pages/LoginPage'))
 const RegisterPage = lazy(() => import('./pages/RegisterPage'))
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'))
 const NotFoundPage = lazy(() => import('./pages/NotFound'))
 
 // ─── Common Protected Pages ─────────────────────────────────────────────────
@@ -168,9 +169,10 @@ function App() {
           <div id="main-content" tabIndex={-1}>
             <Routes>
               {/* ── Public Routes ──────────────────────────────────────── */}
-              <Route path="/"         element={<LandingPage />} />
-              <Route path="/login"    element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
+              <Route path="/"               element={<LandingPage />} />
+              <Route path="/login"          element={<LoginPage />} />
+              <Route path="/register"       element={<RegisterPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
               {/* ── Generic Dashboard Redirect ────────────────────────── */}
               <Route path="/dashboard" element={<ProtectedRoute>{getDashboardByRole()}</ProtectedRoute>} />

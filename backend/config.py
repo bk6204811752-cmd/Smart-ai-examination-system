@@ -39,8 +39,9 @@ class Settings(BaseSettings):
     # Security & Rate Limiting
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_LOGIN: str = "5/minute"
-    RATE_LIMIT_REGISTER: str = "3/hour"
+    RATE_LIMIT_REGISTER: str = "10/hour"
     RATE_LIMIT_GENERAL: str = "100/minute"
+    RATE_LIMIT_OTP: str = "10/minute"
     CSRF_PROTECTION_ENABLED: bool = True
     SECURE_COOKIES: bool = True
     SAME_SITE_COOKIES: str = "strict"
@@ -50,6 +51,22 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE: int = 10485760
     UPLOAD_DIR: str = "./uploads"
     ALLOWED_UPLOAD_TYPES: list = ["image/jpeg", "image/png", "application/pdf"]
+
+    # Admin email for notifications
+    ADMIN_EMAIL: str = ""
+
+    # Email / SMTP
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_NAME: str = "Smart Examination System"
+    SMTP_FROM_EMAIL: str = ""
+    SMTP_USE_TLS: bool = True
+
+    # OTP
+    OTP_EXPIRE_MINUTES: int = 10
+    OTP_LENGTH: int = 6
 
     # AI/ML
     PROCTORING_ENABLED: bool = True

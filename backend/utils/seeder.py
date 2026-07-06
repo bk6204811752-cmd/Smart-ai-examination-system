@@ -18,7 +18,9 @@ DEMO_USERS = [
         "role": "admin",
         "status": "approved",
         "is_active": True,
+        "email_verified": True,
         "department": "Administration",
+        "created_at": "2025-01-01T00:00:00",
     },
     {
         "_id": ObjectId("66a000000000000000000002"),
@@ -28,7 +30,9 @@ DEMO_USERS = [
         "role": "teacher",
         "status": "approved",
         "is_active": True,
+        "email_verified": True,
         "department": "Computer Science",
+        "created_at": "2025-01-01T00:00:00",
     },
     {
         "_id": ObjectId("66a000000000000000000003"),
@@ -38,9 +42,11 @@ DEMO_USERS = [
         "role": "student",
         "status": "approved",
         "is_active": True,
+        "email_verified": True,
         "program": "BCA",
         "semester": 4,
         "cgpa": 8.5,
+        "created_at": "2025-01-01T00:00:00",
     },
 ]
 

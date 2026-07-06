@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore } from '../store/globalStore'
@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import {
   GraduationCap, Mail, Lock, Eye, EyeOff, User, BookOpen,
   ChevronRight, Sparkles, Shield, CheckCircle, Building,
-  ArrowLeft, Camera, BarChart3
+  ArrowLeft, Camera, BarChart3, Smartphone
 } from 'lucide-react'
 
 const PROGRAMS = ['BCA', 'BBA', 'B.Tech', 'MBA', 'MCA', 'B.Sc', 'M.Sc', 'Other']
@@ -21,6 +21,7 @@ const BENEFITS = [
 ]
 
 const STEPS = ['Account', 'Academic', 'Review']
+const OTP_COUNTDOWN = 30
 
 export default function RegisterPage() {
   const navigate = useNavigate()
@@ -31,6 +32,13 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [confirmPassword, setConfirmPassword] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [needsOTP, setNeedsOTP] = useState(false)
+  const [registrationEmail, setRegistrationEmail] = useState('')
+  const [otp, setOtp] = useState(['', '', '', '', '', ''])
+  const [otpResendTimer, setOtpResendTimer] = useState(0)
+  const [otpVerifying, setOtpVerifying] = useState(false)
+  const [otpSent, setOtpSent] = useState(false)
+  const otpRefs = useRef<(HTMLInputElement | null)[]>([])
 
   const [formData, setFormData] = useState({
     email: '',
@@ -75,17 +83,90 @@ export default function RegisterPage() {
     setStep(s => s + 1)
   }
 
+  // OTP countdown timer
+  useEffect(() => {
+    if (otpResendTimer <= 0) return
+    const interval = setInterval(() => {
+      setOtpResendTimer(prev => prev - 1)
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [otpResendTimer])
+
+  const handleOtpChange = (index: number, value: string) => {
+    if (!/^\d*$/.test(value)) return
+    const newOtp = [...otp]
+    newOtp[index] = value.slice(-1)
+    setOtp(newOtp)
+    if (value && index < 5) {
+      otpRefs.current[index + 1]?.focus()
+    }
+  }
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+      otpRefs.current[index - 1]?.focus()
+    }
+  }
+
+  const handleResendOTP = async () => {
+    if (otpResendTimer > 0) return
+    try {
+      await authAPI.sendOTP(registrationEmail)
+      toast.success('OTP resent to your email')
+      setOtpResendTimer(OTP_COUNTDOWN)
+      setOtp(['', '', '', '', '', ''])
+      otpRefs.current[0]?.focus()
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to resend OTP')
+    }
+  }
+
+  const handleVerifyOTP = async () => {
+    const otpCode = otp.join('')
+    if (otpCode.length !== 6) {
+      toast.error('Please enter the complete 6-digit OTP')
+      return
+    }
+    setOtpVerifying(true)
+    try {
+      await authAPI.verifyOTP(registrationEmail, otpCode)
+      toast.success('✅ Email verified successfully!', {
+        duration: 6000,
+        description: 'Your account is pending admin approval. You will receive an email once approved.',
+      })
+      setTimeout(() => navigate('/login'), 4000)
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'OTP verification failed')
+      setOtp(['', '', '', '', '', ''])
+      otpRefs.current[0]?.focus()
+    } finally {
+      setOtpVerifying(false)
+    }
+  }
+
   const handleSubmit = async () => {
     setIsLoading(true)
     try {
       const response = await authAPI.register(formData)
 
       if (response.pending) {
-        toast.success('🎉 Registration successful! Awaiting admin approval.', {
-          duration: 6000,
-          description: 'You will be notified once your account is activated.',
-        })
-        setTimeout(() => navigate('/login'), 3000)
+        if (response.needs_otp) {
+          setNeedsOTP(true)
+          setRegistrationEmail(response.email || formData.email)
+          setOtpSent(true)
+          setOtpResendTimer(OTP_COUNTDOWN)
+          setStep(3)
+          toast.success('📧 OTP sent to your email!', {
+            duration: 4000,
+            description: 'Please check your inbox and enter the 6-digit code.',
+          })
+        } else {
+          toast.success('🎉 Registration successful! Awaiting admin approval.', {
+            duration: 6000,
+            description: 'You will be notified once your account is activated.',
+          })
+          setTimeout(() => navigate('/login'), 3000)
+        }
       } else {
         login(response.user, response.access_token)
         toast.success('✅ Welcome to PCMT! Your account is ready.')
@@ -478,15 +559,90 @@ export default function RegisterPage() {
                 <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-2">
                   <CheckCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
                   <p className="text-xs text-amber-700 leading-relaxed">
-                    Your account requires <strong>admin approval</strong> before you can log in. You'll be notified once activated.
+                    Your account requires <strong>email verification</strong> (OTP sent after submission) plus <strong>admin approval</strong> before you can log in.
                   </p>
                 </div>
               </div>
             )}
 
+            {/* ── Step 3: OTP Verification ─────────────────────── */}
+            {step === 3 && (
+              <div className="space-y-6">
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <Smartphone className="w-8 h-8 text-blue-600" />
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-1">Verify Your Email</h3>
+                  <p className="text-sm text-gray-500">
+                    Enter the 6-digit code sent to<br />
+                    <span className="font-semibold text-gray-700">{registrationEmail}</span>
+                  </p>
+                </div>
+
+                {/* OTP Input Boxes */}
+                <div className="flex items-center justify-center gap-3">
+                  {otp.map((digit, i) => (
+                    <input
+                      key={i}
+                      ref={el => { otpRefs.current[i] = el }}
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={1}
+                      value={digit}
+                      onChange={e => handleOtpChange(i, e.target.value)}
+                      onKeyDown={e => handleOtpKeyDown(i, e)}
+                      className={`w-12 h-14 text-center text-2xl font-bold border-2 rounded-xl outline-none transition-all ${
+                        digit
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-200 bg-gray-50 text-gray-900 focus:border-blue-400'
+                      }`}
+                    />
+                  ))}
+                </div>
+
+                {/* Resend */}
+                <div className="text-center">
+                  {otpResendTimer > 0 ? (
+                    <p className="text-sm text-gray-400">
+                      Resend code in <span className="font-semibold text-gray-600">{otpResendTimer}s</span>
+                    </p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleResendOTP}
+                      className="text-sm font-semibold text-blue-600 hover:text-blue-700 transition"
+                    >
+                      Resend OTP
+                    </button>
+                  )}
+                </div>
+
+                {/* Verify Button */}
+                <motion.button
+                  type="button"
+                  onClick={handleVerifyOTP}
+                  disabled={otpVerifying || otp.join('').length !== 6}
+                  whileTap={{ scale: 0.98 }}
+                  className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold text-sm hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {otpVerifying ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Verifying...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      Verify Email
+                    </>
+                  )}
+                </motion.button>
+              </div>
+            )}
+
             {/* Actions */}
             <div className="mt-6">
-              {step < 2 ? (
+              {step === 0 && (
                 <motion.button
                   type="button"
                   onClick={handleNext}
@@ -496,7 +652,19 @@ export default function RegisterPage() {
                   Continue
                   <ChevronRight className="w-4 h-4" />
                 </motion.button>
-              ) : (
+              )}
+              {step === 1 && (
+                <motion.button
+                  type="button"
+                  onClick={handleNext}
+                  whileTap={{ scale: 0.98 }}
+                  className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold text-sm hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2"
+                >
+                  Continue
+                  <ChevronRight className="w-4 h-4" />
+                </motion.button>
+              )}
+              {step === 2 && (
                 <motion.button
                   type="button"
                   onClick={handleSubmit}

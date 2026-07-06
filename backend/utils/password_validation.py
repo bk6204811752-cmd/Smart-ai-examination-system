@@ -17,10 +17,10 @@ def validate_password_strength(password: str) -> bool:
     - At least one digit
     - At least one special character
     """
-    if len(password) < 12:
+    if len(password) < 8:
         raise HTTPException(
             status_code=400,
-            detail="Password must be at least 12 characters long"
+            detail="Password must be at least 8 characters long"
         )
     
     if not re.search(r"[A-Z]", password):
