@@ -266,49 +266,85 @@ export default function PracticeMockExam() {
     }
   }, [examState.examStarted, examState.proctoringStatus?.isActive, proctoringEngine])
 
-  // Tab switch detection
+  // Tab switch detection — PAUSE exam immediately
   useEffect(() => {
     const handleVisibilityChange = () => {
-      // Don't record examState.violations during submission process
-      if (document.hidden && examState.examStarted && !examState.examEnded && !examState.isSubmitting) {
+      if (document.hidden && examState.examStarted && !examState.examEnded && !examState.isSubmitting && !examState.proctoringStatus?.isPaused) {
         proctoringEngine.recordTabSwitch()
+        proctoringEngine.pauseExam('Tab/Window switch detected. Return to the exam window to resume.')
       }
     }
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [examState.examStarted, examState.examEnded, examState.isSubmitting])
+  }, [examState.examStarted, examState.examEnded, examState.isSubmitting, examState.proctoringStatus?.isPaused])
 
-  // Window blur detection (clicking outside browser)
+  // Window blur detection — PAUSE exam immediately
   useEffect(() => {
     const handleWindowBlur = () => {
-      // Don't record examState.violations during submission process
-      if (examState.examStarted && !examState.examEnded && !examState.isSubmitting) {
+      if (examState.examStarted && !examState.examEnded && !examState.isSubmitting && !examState.proctoringStatus?.isPaused) {
         proctoringEngine.recordWindowBlur()
+        proctoringEngine.pauseExam('Application switch detected. Return to the exam to resume.')
       }
     }
 
     window.addEventListener('blur', handleWindowBlur)
     return () => window.removeEventListener('blur', handleWindowBlur)
-  }, [examState.examStarted, examState.examEnded, examState.isSubmitting])
+  }, [examState.examStarted, examState.examEnded, examState.isSubmitting, examState.proctoringStatus?.isPaused])
 
-  // Fullscreen enforcement with auto re-entry
+  // Fullscreen enforcement — PAUSE exam on exit
   useEffect(() => {
     const handleFullscreenChange = () => {
       const isNowFullscreen = !!document.fullscreenElement
       dispatch({ type: 'SET_FULLSCREEN', payload: isNowFullscreen })
 
-      if (!isNowFullscreen && examState.examStarted && !examState.examEnded && !examState.isSubmitting) {
+      if (!isNowFullscreen && examState.examStarted && !examState.examEnded && !examState.isSubmitting && !examState.proctoringStatus?.isPaused) {
         proctoringEngine.recordFullscreenExit()
-        setTimeout(() => {
-          document.documentElement.requestFullscreen().catch(() => {})
-        }, 500)
+        proctoringEngine.pauseExam('Fullscreen mode was exited. Return to fullscreen to resume the exam.')
       }
     }
 
     document.addEventListener('fullscreenchange', handleFullscreenChange)
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
-  }, [examState.examStarted, examState.examEnded, examState.isSubmitting])
+  }, [examState.examStarted, examState.examEnded, examState.isSubmitting, examState.proctoringStatus?.isPaused])
+
+  // Keyboard blocking (Alt+Tab, Meta/Windows, Escape, PrintScreen, Ctrl+P)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!examState.examStarted || examState.examEnded || examState.isSubmitting || examState.proctoringStatus?.isPaused) return
+      if ((e.ctrlKey && e.key === 'p') || e.key === 'PrintScreen') {
+        e.preventDefault()
+      }
+      if (e.altKey && e.key === 'Tab') {
+        e.preventDefault()
+        proctoringEngine.pauseExam('Alt+Tab detected. Stay focused on the exam to resume.')
+      }
+      if (e.key === 'Meta' || e.key === 'OS') {
+        e.preventDefault()
+        proctoringEngine.pauseExam('Windows key pressed. Stay focused on the exam to resume.')
+      }
+      if (e.key === 'Escape' && document.fullscreenElement) {
+        e.preventDefault()
+        proctoringEngine.recordFullscreenExit()
+        proctoringEngine.pauseExam('Escape key pressed. Stay in fullscreen to continue the exam.')
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [examState.examStarted, examState.examEnded, examState.isSubmitting, examState.proctoringStatus?.isPaused])
+
+  // Window size / taskbar detection — PAUSE if minimized
+  useEffect(() => {
+    const checkWindowSize = () => {
+      if (!examState.examStarted || !document.fullscreenElement || examState.examEnded || examState.isSubmitting || examState.proctoringStatus?.isPaused) return
+      const ratio = window.outerHeight / window.screen.height
+      if (ratio < 0.95) {
+        proctoringEngine.pauseExam('Window was minimized or resized. Return to fullscreen to resume.')
+      }
+    }
+    const interval = setInterval(checkWindowSize, 2000)
+    return () => clearInterval(interval)
+  }, [examState.examStarted, examState.examEnded, examState.isSubmitting, examState.proctoringStatus?.isPaused])
 
   // Safety net: Stop camera on page unload + warn user
   useEffect(() => {
@@ -444,6 +480,14 @@ export default function PracticeMockExam() {
             dispatch({ type: 'REMOVE_ACTIVE_VIOLATION', payload: violation })
           }, 5000)
           dispatch({ type: 'ADD_VIOLATION', payload: violation.message })
+          // Show toast for audio and other violations
+          if (violation.type === 'AUDIO_DETECTED') {
+            alert(`🔊 Audio Warning: ${violation.message}\n\nPlease ensure a quiet environment for the exam.`)
+          } else if (violation.type === 'HEADPHONE_DETECTED') {
+            alert(`🎧 Headphone Warning: ${violation.message}\n\nPlease remove headphones during the exam.`)
+          } else if (violation.severity === 'HIGH' || violation.severity === 'CRITICAL') {
+            alert(`⚠️ ${violation.message}`)
+          }
         })
 
         proctoringEngine.setOnStatusChange((status) => {
@@ -838,8 +882,10 @@ export default function PracticeMockExam() {
 
               <button
                 onClick={() => {
-                  if (window.confirm('Are you sure you want to resume? Make sure you\'re ready to continue with proper conduct.')) {
+                  if (window.confirm('Are you sure you want to resume? Make sure you\'re in fullscreen with only the exam tab open.')) {
                     proctoringEngine.resumeExam()
+                    dispatch({ type: 'SET_PROCTORING_STATUS', payload: { ...examState.proctoringStatus, isPaused: false } })
+                    document.documentElement.requestFullscreen().catch(() => {})
                   }
                 }}
                 className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all"

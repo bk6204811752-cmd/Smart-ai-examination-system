@@ -24,4 +24,3 @@ backend/uploads/*
 .vercel
 **/__pycache__/
 **/*.pyc
-.github/

@@ -125,6 +125,18 @@ class ProctoringEngine {
   private boundKeyDownHandler: ((e: KeyboardEvent) => void) | null = null
   private boundResizeHandler: (() => void) | null = null
 
+  // Screen security
+  private originalGetDisplayMedia: any = null
+  private screenSecurityInterval: number | null = null
+  private lastKnownScreenWidth = 0
+  private lastKnownScreenHeight = 0
+  private lastKnownColorDepth = 0
+  private readonly SCREEN_SECURITY_INTERVAL = 3000
+  private rdpKeyboardCounter = 0
+  private lastRDPViolation = 0
+  private boundScreenKeyHandler: ((e: KeyboardEvent) => void) | null = null
+  private lastScreenShareViolation = 0
+
   private MODEL_LOAD_TIMEOUT = 30000
 
   async loadModels(): Promise<void> {
@@ -278,12 +290,109 @@ class ProctoringEngine {
     this.boundResizeHandler = null
   }
 
+  private setupScreenSecurity(): void {
+    this.originalGetDisplayMedia = (navigator.mediaDevices as any).getDisplayMedia
+    if (this.originalGetDisplayMedia) {
+      ;(navigator.mediaDevices as any).getDisplayMedia = () => {
+        const now = Date.now()
+        if (now - this.lastScreenShareViolation > 5000) {
+          this.lastScreenShareViolation = now
+          this.addViolation({
+            type: 'SCREEN_SHARE',
+            severity: 'CRITICAL',
+            message: 'Screen sharing is not permitted during the exam',
+          })
+        }
+        return Promise.reject(new Error('Screen sharing is disabled during exams'))
+      }
+    }
+
+    this.lastKnownScreenWidth = screen.width
+    this.lastKnownScreenHeight = screen.height
+    this.lastKnownColorDepth = screen.colorDepth
+
+    this.boundScreenKeyHandler = (e: KeyboardEvent) => {
+      const SCANCODE_RDP_THRESHOLD = 3
+      const rdpScancodes = [0x01, 0x3B, 0x3C, 0x3D, 0xC5]
+      if ((e as any).scanCode && rdpScancodes.includes((e as any).scanCode)) {
+        this.rdpKeyboardCounter++
+        if (this.rdpKeyboardCounter > SCANCODE_RDP_THRESHOLD) {
+          const now = Date.now()
+          if (now - this.lastRDPViolation > 10000) {
+            this.lastRDPViolation = now
+            this.addViolation({
+              type: 'SUSPICIOUS_BEHAVIOR',
+              severity: 'CRITICAL',
+              message: 'Remote desktop protocol (RDP) detected — exam terminated',
+            })
+            this.pauseExam('Remote desktop access detected. Please contact your proctor.')
+          }
+        }
+      }
+    }
+    document.addEventListener('keydown', this.boundScreenKeyHandler)
+
+    this.screenSecurityInterval = window.setInterval(() => {
+      const now = Date.now()
+
+      if (screen.width !== this.lastKnownScreenWidth || screen.height !== this.lastKnownScreenHeight) {
+        const prevWidth = this.lastKnownScreenWidth
+        const prevHeight = this.lastKnownScreenHeight
+        this.lastKnownScreenWidth = screen.width
+        this.lastKnownScreenHeight = screen.height
+        this.addViolation({
+          type: 'SUSPICIOUS_BEHAVIOR',
+          severity: 'HIGH',
+          message: `Screen resolution changed from ${prevWidth}x${prevHeight} to ${screen.width}x${screen.height}`,
+        })
+      }
+
+      if (screen.colorDepth !== this.lastKnownColorDepth) {
+        const oldDepth = this.lastKnownColorDepth
+        this.lastKnownColorDepth = screen.colorDepth
+        this.addViolation({
+          type: 'SUSPICIOUS_BEHAVIOR',
+          severity: 'HIGH',
+          message: `Screen color depth changed from ${oldDepth}-bit to ${screen.colorDepth}-bit — possible remote desktop connection`,
+        })
+      }
+
+      if (screen.width <= 800 || screen.height <= 600) {
+        if (now - this.lastRDPViolation > 15000) {
+          this.lastRDPViolation = now
+          this.addViolation({
+            type: 'SUSPICIOUS_BEHAVIOR',
+            severity: 'HIGH',
+            message: 'Low screen resolution detected — possible remote desktop connection',
+          })
+        }
+      }
+    }, this.SCREEN_SECURITY_INTERVAL)
+  }
+
+  private removeScreenSecurity(): void {
+    if (this.originalGetDisplayMedia) {
+      ;(navigator.mediaDevices as any).getDisplayMedia = this.originalGetDisplayMedia
+      this.originalGetDisplayMedia = null
+    }
+    if (this.screenSecurityInterval !== null) {
+      clearInterval(this.screenSecurityInterval)
+      this.screenSecurityInterval = null
+    }
+    if (this.boundScreenKeyHandler) {
+      document.removeEventListener('keydown', this.boundScreenKeyHandler)
+      this.boundScreenKeyHandler = null
+    }
+    this.rdpKeyboardCounter = 0
+  }
+
   startMonitoring(): void {
     if (this.isMonitoring) return
     this.isMonitoring = true
     this.status.isActive = true
     this.frameCount = 0
     this.setupBlockingHandlers()
+    this.setupScreenSecurity()
     this.processFrame()
   }
 
@@ -295,6 +404,7 @@ class ProctoringEngine {
       this.animFrameId = null
     }
     this.removeBlockingHandlers()
+    this.removeScreenSecurity()
   }
 
   isMonitoringActive(): boolean {

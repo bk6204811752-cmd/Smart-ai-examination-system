@@ -60,6 +60,7 @@ export default function ExamPage() {
   const [violationOverlaySeverity, setViolationOverlaySeverity] = useState<'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'>('HIGH')
   const [teacherMessage, setTeacherMessage] = useState<{text: string; from: string} | null>(null)
   const [examPausedByTeacher, setExamPausedByTeacher] = useState(false)
+  const [examPausedByEngine, setExamPausedByEngine] = useState(false)
 
   // Screen sharing & window detection
   const [screenShareDetected, setScreenShareDetected] = useState(false)
@@ -87,6 +88,14 @@ export default function ExamPage() {
   // Fullscreen state
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [fullscreenExited, setFullscreenExited] = useState(false)
+
+  // Refs to avoid stale closures in event listeners
+  const examStartedRef = useRef(false)
+  const submittingRef = useRef(false)
+  const examPausedByEngineRef = useRef(false)
+  examStartedRef.current = examStarted
+  submittingRef.current = submitting
+  examPausedByEngineRef.current = examPausedByEngine
 
   // Connection quality
   const [connectionQuality, setConnectionQuality] = useState<'excellent' | 'good' | 'poor'>('excellent')
@@ -142,38 +151,23 @@ export default function ExamPage() {
     const handleFullscreenChange = () => {
       const isNowFullscreen = !!document.fullscreenElement
       setIsFullscreen(isNowFullscreen)
-      if (!isNowFullscreen && examStarted && !submitting) {
+      if (!isNowFullscreen && examStartedRef.current && !submittingRef.current && !examPausedByEngineRef.current) {
         setFullscreenExited(true)
         setTabSwitches(prev => prev + 1)
         createProctoringFlag('fullscreen_exit', 'high', 'Student exited fullscreen mode')
-        // Start a 30-second countdown to auto-submit if not returned
-        let count = 30
-        setFullscreenCountdown(count)
-        if (fullscreenCountdownRef.current) clearInterval(fullscreenCountdownRef.current)
-        fullscreenCountdownRef.current = window.setInterval(() => {
-          count--
-          setFullscreenCountdown(count)
-          if (count <= 0) {
-            clearInterval(fullscreenCountdownRef.current!)
-            fullscreenCountdownRef.current = null
-            setFullscreenCountdown(null)
-            // Auto-submit on countdown end
-            createProctoringFlag('fullscreen_timeout', 'critical', 'Auto-submitted: student did not return to fullscreen within 30 seconds')
-            doSubmitExam()
-          }
-        }, 1000)
+        setTrustScore(prev => Math.max(0, prev - 10))
+        // PAUSE the exam immediately
+        const engine = proctoringEngineRef.current
+        if (engine) {
+          engine.pauseExam('Fullscreen mode was exited. Return to fullscreen to resume the exam.')
+        }
       } else if (isNowFullscreen) {
         setFullscreenExited(false)
-        setFullscreenCountdown(null)
-        if (fullscreenCountdownRef.current) {
-          clearInterval(fullscreenCountdownRef.current)
-          fullscreenCountdownRef.current = null
-        }
       }
     }
     document.addEventListener('fullscreenchange', handleFullscreenChange)
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
-  }, [examStarted, submitting])
+  }, [])
 
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -377,7 +371,9 @@ export default function ExamPage() {
         })
 
         engine.setOnPause((reason: string) => {
-          toast.error(`Exam Paused: ${reason}`, { duration: 10000 })
+          setExamPausedByEngine(true)
+          showViolationAlert('SUSPICIOUS_BEHAVIOR', `⏸️ Exam Paused: ${reason}`, 'CRITICAL')
+          toast.error(`Exam Paused: ${reason}`, { duration: 10000, id: 'exam-pause' })
         })
 
         // Capture reference face after 3s
@@ -665,7 +661,7 @@ export default function ExamPage() {
     // ── Window Size / Taskbar Detection ───────────────────────────
     // If window height is significantly less than screen height, taskbar may be visible
     const checkWindowSize = () => {
-      if (!examStarted || !document.fullscreenElement) return
+      if (!examStartedRef.current || !document.fullscreenElement || submittingRef.current || examPausedByEngineRef.current) return
       const screenH = window.screen.height
       const windowH = window.outerHeight
       const ratio = windowH / screenH
@@ -673,9 +669,9 @@ export default function ExamPage() {
         // Window is smaller than screen - user exited fullscreen or taskbar visible
         setWindowMinimized(true)
         createProctoringFlag('window_resized', 'high', `Window minimized or taskbar visible (ratio: ${(ratio * 100).toFixed(0)}%)`)
-        showViolationAlert('WINDOW_MINIMIZED', 'Exam window was minimized or resized. Please return to fullscreen mode immediately.', 'HIGH')
-        // Force fullscreen again
-        setTimeout(() => requestFullscreen(), 500)
+        showViolationAlert('WINDOW_MINIMIZED', 'Exam window was minimized or resized. Exam paused.', 'HIGH')
+        const engine = proctoringEngineRef.current
+        if (engine) engine.pauseExam('Window was resized or minimized. Return to fullscreen to resume.')
       } else {
         setWindowMinimized(false)
       }
@@ -684,9 +680,11 @@ export default function ExamPage() {
 
     // ── Blur Detection (clicking outside browser) ─────────────────
     const handleBlur = () => {
-      if (!examStarted) return
-      createProctoringFlag('window_blur', 'medium', 'Browser window lost focus - possible alt-tab or external app')
-      showViolationAlert('TAB_SWITCH', 'You switched to another application! This has been recorded.', 'MEDIUM')
+      if (!examStartedRef.current || submittingRef.current || examPausedByEngineRef.current) return
+      createProctoringFlag('window_blur', 'high', 'Browser window lost focus - possible alt-tab or external app')
+      showViolationAlert('TAB_SWITCH', 'Application switch detected! Exam paused.', 'HIGH')
+      const engine = proctoringEngineRef.current
+      if (engine) engine.pauseExam('Application switch detected. Return to the exam to resume.')
     }
     window.addEventListener('blur', handleBlur)
 
@@ -707,29 +705,40 @@ export default function ExamPage() {
 
   const setupProctoringListeners = () => {
     const handleVisibilityChange = () => {
-      if (document.hidden && examStarted) {
+      if (document.hidden && examStartedRef.current && !submittingRef.current && !examPausedByEngineRef.current) {
         setTabSwitches(prev => prev + 1)
-        setTrustScore(prev => Math.max(0, prev - 5))
+        setTrustScore(prev => Math.max(0, prev - 10))
         setShowViolationFlash(true)
         setTimeout(() => setShowViolationFlash(false), 500)
-        createProctoringFlag('tab_switch', 'medium', 'Student switched tabs or minimized window')
-        showViolationAlert('TAB_SWITCH', 'Tab switch detected! Returning to another tab or app during exam is a violation.', 'HIGH')
-        toast.warning('⚠️ Tab switch detected — recorded', { duration: 3000 })
+        createProctoringFlag('tab_switch', 'high', 'Student switched tabs or minimized window')
+        showViolationAlert('TAB_SWITCH', 'Tab switch detected! Exam paused. Return to the exam window to resume.', 'HIGH')
+        toast.warning('⚠️ Tab switch detected — exam paused', { duration: 5000 })
+        // PAUSE the exam immediately
+        const engine = proctoringEngineRef.current
+        if (engine) {
+          engine.pauseExam('Tab/Window switch detected. Focus on the exam window to resume.')
+        }
       }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!examStartedRef.current || submittingRef.current || examPausedByEngineRef.current) return
       if ((e.ctrlKey && e.key === 'p') || e.key === 'PrintScreen') {
         e.preventDefault()
         createProctoringFlag('screenshot_attempt', 'medium', 'Screenshot attempt detected')
       }
       if (e.altKey && e.key === 'Tab') {
+        e.preventDefault()
         createProctoringFlag('alt_tab', 'high', 'Alt+Tab shortcut attempt detected')
+        const engine = proctoringEngineRef.current
+        if (engine) engine.pauseExam('Alt+Tab detected. Stay focused on the exam to resume.')
       }
       if (e.key === 'Meta' || e.key === 'OS') {
         e.preventDefault()
         createProctoringFlag('win_key', 'medium', 'Windows key pressed during exam')
+        const engine = proctoringEngineRef.current
+        if (engine) engine.pauseExam('Windows key pressed. Stay focused on the exam to resume.')
       }
       if (e.key === 'Escape' && document.fullscreenElement) {
         createProctoringFlag('escape_key', 'low', 'Escape key pressed during exam')
@@ -868,6 +877,22 @@ export default function ExamPage() {
     setSubmitting(false)
     startCamera()
   }
+
+  // ─── Resume from Pause ──────────────────────────────────────────────────────
+  const handleResumeFromPause = useCallback(async () => {
+    const engine = proctoringEngineRef.current
+    if (engine) {
+      engine.resumeExam()
+    }
+    setExamPausedByEngine(false)
+    setExamPausedByTeacher(false)
+    setFullscreenExited(false)
+    // Re-enter fullscreen immediately
+    await requestFullscreen()
+    // Reset suspicious activity score after resume
+    setTrustScore(prev => Math.min(100, prev + 10))
+    toast.success('✅ Exam resumed. Stay focused!', { duration: 3000 })
+  }, [])
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
   const formatTime = (seconds: number) => {
@@ -1266,6 +1291,55 @@ export default function ExamPage() {
                 Return to Fullscreen
               </motion.button>
               <p className="text-gray-600 text-xs mt-4">Violations: {tabSwitches} total</p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Engine/Tab/Fullscreen Pause Overlay */}
+      <AnimatePresence>
+        {(examPausedByEngine || examPausedByTeacher) && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] bg-gray-950/98 backdrop-blur-md flex items-center justify-center"
+          >
+            <motion.div
+              initial={{ scale: 0.85, opacity: 0, y: 30 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              transition={{ type: 'spring', bounce: 0.3 }}
+              className="max-w-md w-full mx-4 text-center"
+            >
+              <div className="w-24 h-24 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-red-500/40">
+                <AlertTriangle className="w-12 h-12 text-red-400" />
+              </div>
+              <h2 className="text-3xl font-black text-white mb-3">⏸️ Exam Paused</h2>
+              <p className="text-red-400 font-bold text-lg mb-2">
+                {examPausedByTeacher ? 'Paused by Teacher' : '⚠️ Violation Detected'}
+              </p>
+              <div className="bg-gray-900 rounded-xl p-4 mb-6 text-left">
+                <p className="text-gray-300 text-sm">
+                  {proctoringStatus?.pauseReason || 'Exam has been paused due to suspicious activity.'}
+                </p>
+              </div>
+              <div className="bg-gray-900/50 rounded-xl p-4 mb-6 space-y-2 text-left">
+                <p className="text-gray-400 text-sm font-semibold">To resume:</p>
+                <p className="text-gray-400 text-sm">✅ Return to fullscreen mode</p>
+                <p className="text-gray-400 text-sm">✅ Ensure only the exam tab is open</p>
+                <p className="text-gray-400 text-sm">✅ Face the camera directly</p>
+                <p className="text-gray-400 text-sm">✅ Ensure adequate lighting</p>
+              </div>
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={handleResumeFromPause}
+                className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl font-bold text-lg shadow-2xl shadow-blue-500/40 hover:from-blue-500 hover:to-indigo-500 transition-all"
+              >
+                <Maximize className="w-5 h-5 inline mr-2" />
+                Resume Exam
+              </motion.button>
+              <p className="text-gray-600 text-xs mt-4">Continuing violations may result in auto-submission</p>
             </motion.div>
           </motion.div>
         )}
