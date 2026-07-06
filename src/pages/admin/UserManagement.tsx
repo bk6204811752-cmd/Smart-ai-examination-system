@@ -51,6 +51,12 @@ export default function UserManagementPage() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [openMenu, setOpenMenu]     = useState<string | null>(null)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [createLoading, setCreateLoading] = useState(false)
+  const [createForm, setCreateForm] = useState({
+    full_name: '', email: '', password: '', role: 'student',
+    program: '', semester: '', department: ''
+  })
 
   const loadUsers = useCallback(async () => {
     setLoading(true)
@@ -58,9 +64,16 @@ export default function UserManagementPage() {
       const params: Record<string, string> = {}
       if (filterRole !== 'all') params.role = filterRole
       const { data } = await api.get('/api/users', { params })
-      setUsers(data)
+      setUsers(Array.isArray(data) ? data : [])
     } catch (err: any) {
-      toast.error('Failed to load users: ' + (err?.response?.data?.detail || err.message))
+      const msg = err?.response?.data?.detail || err.message || 'Unknown error'
+      if (err?.response?.status === 401) {
+        toast.error('Session expired. Please login again.')
+      } else if (err?.response?.status === 403) {
+        toast.error('You do not have permission to view users.')
+      } else {
+        toast.error('Failed to load users: ' + msg)
+      }
     } finally {
       setLoading(false)
     }
@@ -130,12 +143,58 @@ export default function UserManagementPage() {
   }
 
   const filtered = users.filter(u => {
-    const matchSearch = u.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        u.email.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchSearch = (u.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        (u.email || '').toLowerCase().includes(searchTerm.toLowerCase())
     const matchRole   = filterRole === 'all'   || u.role === filterRole
     const matchStatus = filterStatus === 'all' || u.status === filterStatus
     return matchSearch && matchRole && matchStatus
   })
+
+  const handleExportCSV = () => {
+    if (filtered.length === 0) { toast.error('No users to export'); return }
+    const headers = ['Name', 'Email', 'Role', 'Status', 'Program/Dept', 'Joined']
+    const rows = filtered.map(u => [
+      u.full_name, u.email, u.role, u.status,
+      u.program || u.department || '—',
+      u.created_at ? new Date(u.created_at).toLocaleDateString('en-IN') : '—'
+    ])
+    const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url  = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `users-${new Date().toISOString().slice(0,10)}.csv`; a.click()
+    URL.revokeObjectURL(url)
+    toast.success(`Exported ${filtered.length} users`)
+  }
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!createForm.full_name || !createForm.email || !createForm.password) {
+      toast.error('Name, email and password are required')
+      return
+    }
+    setCreateLoading(true)
+    try {
+      const payload: any = {
+        full_name: createForm.full_name,
+        email: createForm.email,
+        password: createForm.password,
+        role: createForm.role,
+      }
+      if (createForm.program)    payload.program    = createForm.program
+      if (createForm.department) payload.department = createForm.department
+      if (createForm.semester)   payload.semester   = parseInt(createForm.semester)
+      await api.post('/api/users', payload)
+      toast.success(`✅ User "${createForm.full_name}" created successfully!`)
+      setShowCreateModal(false)
+      setCreateForm({ full_name: '', email: '', password: '', role: 'student', program: '', semester: '', department: '' })
+      loadUsers()
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || 'Failed to create user')
+    } finally {
+      setCreateLoading(false)
+    }
+  }
 
   const stats = {
     total:     users.length,
@@ -170,13 +229,29 @@ export default function UserManagementPage() {
             <h1 className="text-2xl font-black text-gray-900">User Management</h1>
             <p className="text-gray-500 text-sm mt-0.5">Manage all users — students, teachers, admins</p>
           </div>
-          <button
-            onClick={loadUsers}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition shadow-sm"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportCSV}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition shadow-sm"
+            >
+              <Download className="w-4 h-4" />
+              Export CSV
+            </button>
+            <button
+              onClick={loadUsers}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition shadow-sm"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition shadow-sm"
+            >
+              <Plus className="w-4 h-4" />
+              Add User
+            </button>
+          </div>
         </div>
 
         {/* Stats */}
@@ -582,6 +657,147 @@ export default function UserManagementPage() {
       {openMenu && (
         <div className="fixed inset-0 z-10" onClick={() => setOpenMenu(null)} />
       )}
+
+      {/* ── Create User Modal ───────────────────────────────────────── */}
+      <AnimatePresence>
+        {showCreateModal && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setShowCreateModal(false)}
+              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            >
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+                {/* Modal header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50">
+                  <div>
+                    <h2 className="text-lg font-black text-gray-900">Create New User</h2>
+                    <p className="text-xs text-gray-500 mt-0.5">User will be immediately approved</p>
+                  </div>
+                  <button onClick={() => setShowCreateModal(false)} className="p-2 hover:bg-white/60 rounded-xl transition">
+                    <X className="w-5 h-5 text-gray-500" />
+                  </button>
+                </div>
+
+                {/* Form */}
+                <form onSubmit={handleCreateUser} className="p-6 space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2">
+                      <label className="block text-xs font-semibold text-gray-600 mb-1.5">Full Name *</label>
+                      <input
+                        type="text"
+                        value={createForm.full_name}
+                        onChange={e => setCreateForm(f => ({ ...f, full_name: e.target.value }))}
+                        placeholder="e.g. Rahul Sharma"
+                        required
+                        className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs font-semibold text-gray-600 mb-1.5">Email Address *</label>
+                      <input
+                        type="email"
+                        value={createForm.email}
+                        onChange={e => setCreateForm(f => ({ ...f, email: e.target.value }))}
+                        placeholder="user@pcmt.edu.in"
+                        required
+                        className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1.5">Password *</label>
+                      <input
+                        type="password"
+                        value={createForm.password}
+                        onChange={e => setCreateForm(f => ({ ...f, password: e.target.value }))}
+                        placeholder="Min 8 characters"
+                        required
+                        minLength={6}
+                        className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1.5">Role *</label>
+                      <select
+                        value={createForm.role}
+                        onChange={e => setCreateForm(f => ({ ...f, role: e.target.value }))}
+                        className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 bg-white"
+                      >
+                        <option value="student">Student</option>
+                        <option value="teacher">Teacher</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </div>
+                    {createForm.role === 'student' ? (
+                      <>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Program</label>
+                          <input
+                            type="text"
+                            value={createForm.program}
+                            onChange={e => setCreateForm(f => ({ ...f, program: e.target.value }))}
+                            placeholder="e.g. BCA, MCA"
+                            className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Semester</label>
+                          <input
+                            type="number"
+                            value={createForm.semester}
+                            onChange={e => setCreateForm(f => ({ ...f, semester: e.target.value }))}
+                            placeholder="1–8"
+                            min="1" max="8"
+                            className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="col-span-2">
+                        <label className="block text-xs font-semibold text-gray-600 mb-1.5">Department</label>
+                        <input
+                          type="text"
+                          value={createForm.department}
+                          onChange={e => setCreateForm(f => ({ ...f, department: e.target.value }))}
+                          placeholder="e.g. Computer Science"
+                          className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateModal(false)}
+                      className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={createLoading}
+                      className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition disabled:opacity-60 flex items-center justify-center gap-2"
+                    >
+                      {createLoading ? (
+                        <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Creating...</>
+                      ) : (
+                        <><Plus className="w-4 h-4" /> Create User</>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
