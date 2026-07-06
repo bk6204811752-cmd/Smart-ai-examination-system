@@ -80,7 +80,12 @@ async def get_pending_users(
     db=Depends(get_db),
     current_user: dict = Depends(require_admin)
 ):
-    cursor = db.users.find({"status": "pending"}).sort("_id", -1)
+    # CRITICAL FIX: Only show users who have verified their email (email_verified=True)
+    # This prevents unverified users from appearing in admin approval list
+    cursor = db.users.find({
+        "status": "pending",
+        "email_verified": True
+    }).sort("_id", -1)
     users = [serialize(u) async for u in cursor]
     return users
 

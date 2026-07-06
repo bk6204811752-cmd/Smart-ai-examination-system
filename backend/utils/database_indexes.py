@@ -96,6 +96,15 @@ async def create_all_indexes(db):
         await db.sessions.create_index([("user_id", 1), ("exam_id", 1)])
         logger.info("✅ Sessions indexes created")
         
+        # ── Exam Sessions Collection ──────────────────────────────────────────
+        await db.exam_sessions.create_index("student_id")
+        await db.exam_sessions.create_index("exam_id")
+        await db.exam_sessions.create_index([("exam_id", 1), ("student_id", 1)])
+        await db.exam_sessions.create_index("status")
+        await db.exam_sessions.create_index([("exam_id", 1), ("status", 1)])
+        await db.exam_sessions.create_index("started_at")
+        logger.info("✅ Exam sessions indexes created")
+        
         logger.info("🎉 All database indexes created successfully")
         return True
         

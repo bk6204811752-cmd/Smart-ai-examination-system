@@ -52,15 +52,22 @@ export default function UserApprovalManagement() {
   const fetchUsers = async () => {
     try {
       setLoading(true)
-      const [pendingRes, allRes] = await Promise.all([
-        api.get('/api/users/pending'),
-        api.get('/api/users')
-      ])
-      setPendingUsers(pendingRes.data)
-      setAllUsers(allRes.data)
+      // Fetch pending users (only those who verified email)
+      const pendingRes = await api.get('/api/users/pending')
+      setPendingUsers(pendingRes.data || [])
+      
+      // Fetch all users for other tabs
+      const allRes = await api.get('/api/users')
+      setAllUsers(allRes.data || [])
+      
+      toast.success('Users loaded successfully', {
+        description: `Showing ${pendingRes.data?.length || 0} pending approvals`
+      })
     } catch (error: any) {
       toast.error('Failed to fetch users')
-      console.error(error)
+      console.error('Error fetching users:', error)
+      setPendingUsers([])
+      setAllUsers([])
     } finally {
       setLoading(false)
     }
@@ -77,7 +84,8 @@ export default function UserApprovalManagement() {
         description: 'User can now login to the system'
       })
       
-      fetchUsers()
+      // Refresh user lists immediately
+      await fetchUsers()
     } catch (error: any) {
       toast.error('Failed to approve user')
       console.error(error)
@@ -100,7 +108,8 @@ export default function UserApprovalManagement() {
         description: reason
       })
       
-      fetchUsers()
+      // Refresh user lists immediately
+      await fetchUsers()
     } catch (error: any) {
       toast.error('Failed to reject user')
       console.error(error)
