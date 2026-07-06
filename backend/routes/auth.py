@@ -115,10 +115,31 @@ def _email_configured() -> bool:
 @router.post("/login")
 async def login(request: Request, login_data: LoginRequest, db=Depends(get_db)):
     client_ip = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "Unknown")
+    now_str = datetime.utcnow().isoformat()
     user = await db.users.find_one({"email": login_data.email.lower()})
 
     if not user or not verify_password(login_data.password, user["password"]):
         logger.warning(f"Failed login attempt for {login_data.email} from {client_ip}")
+        await db.audit_logs.insert_one({
+            "action": "Failed Login",
+            "user_id": str(user["_id"]) if user else "",
+            "user_name": user.get("full_name", "Unknown") if user else "Unknown",
+            "ip_address": client_ip,
+            "device": user_agent[:100] if user_agent else "Unknown",
+            "status": "failed",
+            "timestamp": now_str,
+        })
+        await db.security_events.insert_one({
+            "type": "failed_login",
+            "severity": "medium",
+            "description": f"Failed login attempt from {client_ip} for {login_data.email}",
+            "user_id": str(user["_id"]) if user else "",
+            "user_name": user.get("full_name", "Unknown") if user else "Unknown",
+            "ip_address": client_ip,
+            "timestamp": now_str,
+            "resolved": False,
+        })
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     if user.get("status") == "pending":
@@ -146,6 +167,17 @@ async def login(request: Request, login_data: LoginRequest, db=Depends(get_db)):
         {"sub": str(user["_id"]), "role": user["role"]},
         expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
+
+    await db.audit_logs.insert_one({
+        "action": "Login",
+        "user_id": str(user["_id"]),
+        "user_name": user.get("full_name", "Unknown"),
+        "ip_address": client_ip,
+        "device": user_agent[:100] if user_agent else "Unknown",
+        "status": "success",
+        "timestamp": now_str,
+    })
+    await db.users.update_one({"_id": user["_id"]}, {"$set": {"last_login": now_str}})
 
     logger.info(f"Successful login for user {user['email']} (role: {user['role']})")
 

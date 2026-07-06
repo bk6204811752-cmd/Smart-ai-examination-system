@@ -2,15 +2,16 @@
 WebSocket Manager for Real-Time Exam Monitoring
 - Manages WebSocket connections for students and teachers
 - Broadcasts violations from students to teachers monitoring the same exam
-- Handles video frame streaming
+- Handles video frame streaming with frame caching
 - Supports teacher interventions (warn/pause students)
+- Tracks active streams and student heartbeats
 """
 
 from fastapi import WebSocket
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Optional
 import json
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 class ExamConnectionManager:
@@ -21,6 +22,12 @@ class ExamConnectionManager:
         self.connections: Dict[str, List[dict]] = {}
         # All active connections for global broadcasts
         self.all_connections: Set[WebSocket] = set()
+        # Cache latest video frame per student: exam_id -> student_id -> frame_data
+        self._frame_cache: Dict[str, Dict[str, str]] = {}
+        # Cache latest proctoring status per student: exam_id -> student_id -> status_dict
+        self._status_cache: Dict[str, Dict[str, dict]] = {}
+        # Heartbeat tracking: exam_id -> student_id -> last_seen ISO string
+        self._heartbeats: Dict[str, Dict[str, str]] = {}
 
     async def connect(self, websocket: WebSocket, exam_id: str, user_id: str, role: str):
         await websocket.accept()
@@ -40,12 +47,19 @@ class ExamConnectionManager:
     def disconnect(self, websocket: WebSocket, exam_id: str):
         self.all_connections.discard(websocket)
         if exam_id in self.connections:
+            # Find the disconnecting user
+            for conn in self.connections[exam_id]:
+                if conn["ws"] == websocket:
+                    user_id = conn["user_id"]
+                    role = conn["role"]
+                    print(f"[WS] {role} {user_id} disconnected from exam {exam_id}")
+                    break
+
             self.connections[exam_id] = [
                 c for c in self.connections[exam_id] if c["ws"] != websocket
             ]
             if not self.connections[exam_id]:
                 del self.connections[exam_id]
-        print(f"[WS] Connection closed for exam {exam_id}")
 
     async def broadcast_to_teachers(self, exam_id: str, message: dict):
         """Send message to all teachers monitoring this exam"""
@@ -63,7 +77,11 @@ class ExamConnectionManager:
 
         # Clean up dead connections
         for conn in dead:
-            self.connections[exam_id].remove(conn)
+            if exam_id in self.connections:
+                try:
+                    self.connections[exam_id].remove(conn)
+                except ValueError:
+                    pass
             self.all_connections.discard(conn["ws"])
 
     async def send_to_student(self, exam_id: str, student_id: str, message: dict):
@@ -97,13 +115,108 @@ class ExamConnectionManager:
                 dead.append(conn)
 
         for conn in dead:
-            self.connections[exam_id].remove(conn)
+            if exam_id in self.connections:
+                try:
+                    self.connections[exam_id].remove(conn)
+                except ValueError:
+                    pass
             self.all_connections.discard(conn["ws"])
+
+    # ── Frame Caching ────────────────────────────────────────────────────────
+
+    def cache_student_frame(self, exam_id: str, student_id: str, frame_data: str):
+        """Cache the latest video frame for a student (for new teacher connections)"""
+        if exam_id not in self._frame_cache:
+            self._frame_cache[exam_id] = {}
+        self._frame_cache[exam_id][student_id] = frame_data
+
+    def get_student_frame(self, exam_id: str, student_id: str) -> Optional[str]:
+        """Get the cached video frame for a student"""
+        return self._frame_cache.get(exam_id, {}).get(student_id)
+
+    # ── Status Caching ───────────────────────────────────────────────────────
+
+    def cache_student_status(self, exam_id: str, student_id: str, status: dict):
+        """Cache proctoring status for a student"""
+        if exam_id not in self._status_cache:
+            self._status_cache[exam_id] = {}
+        self._status_cache[exam_id][student_id] = {
+            **status,
+            "last_seen": datetime.utcnow().isoformat()
+        }
+
+    def get_student_status(self, exam_id: str, student_id: str) -> Optional[dict]:
+        """Get cached proctoring status for a student"""
+        return self._status_cache.get(exam_id, {}).get(student_id)
+
+    # ── Heartbeat Tracking ───────────────────────────────────────────────────
+
+    def update_student_heartbeat(self, exam_id: str, student_id: str):
+        """Update the last seen timestamp for a student"""
+        if exam_id not in self._heartbeats:
+            self._heartbeats[exam_id] = {}
+        self._heartbeats[exam_id][student_id] = datetime.utcnow().isoformat()
+
+    def get_student_heartbeat(self, exam_id: str, student_id: str) -> Optional[str]:
+        """Get last heartbeat time for a student"""
+        return self._heartbeats.get(exam_id, {}).get(student_id)
+
+    def is_student_online(self, exam_id: str, student_id: str, timeout_seconds: int = 30) -> bool:
+        """Check if a student is currently online based on heartbeat"""
+        last_seen = self.get_student_heartbeat(exam_id, student_id)
+        if not last_seen:
+            return False
+        try:
+            last_dt = datetime.fromisoformat(last_seen)
+            return (datetime.utcnow() - last_dt).total_seconds() < timeout_seconds
+        except Exception:
+            return False
+
+    # ── Active Streams ───────────────────────────────────────────────────────
+
+    def get_active_streams(self, exam_id: str) -> dict:
+        """
+        Get all active video streams for an exam.
+        Returns: { student_id: { video: frame_data, status: {...} } }
+        """
+        result = {}
+
+        # Get connected students
+        connected_students = set()
+        if exam_id in self.connections:
+            for conn in self.connections[exam_id]:
+                if conn["role"] == "student":
+                    connected_students.add(conn["user_id"])
+
+        # Combine frame cache with status cache for connected students
+        frames = self._frame_cache.get(exam_id, {})
+        statuses = self._status_cache.get(exam_id, {})
+        heartbeats = self._heartbeats.get(exam_id, {})
+
+        # Include all students who have sent frames recently
+        all_student_ids = set(frames.keys()) | set(statuses.keys()) | connected_students
+
+        for student_id in all_student_ids:
+            frame = frames.get(student_id)
+            status = statuses.get(student_id, {})
+            last_hb = heartbeats.get(student_id)
+            is_online = student_id in connected_students or self.is_student_online(exam_id, student_id)
+
+            result[student_id] = {
+                "video": frame,
+                "status": status,
+                "last_seen": last_hb or status.get("last_seen"),
+                "is_online": is_online,
+            }
+
+        return result
+
+    # ── Stats ────────────────────────────────────────────────────────────────
 
     def get_exam_stats(self, exam_id: str) -> dict:
         """Get connection stats for an exam"""
         if exam_id not in self.connections:
-            return {"students": 0, "teachers": 0, "total": 0}
+            return {"students": 0, "teachers": 0, "total": 0, "student_ids": []}
 
         conns = self.connections[exam_id]
         students = [c for c in conns if c["role"] == "student"]

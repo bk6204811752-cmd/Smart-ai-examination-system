@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/globalStore'
 import { analyticsAPI, userAPI } from '../../lib/api'
 import Toast from '../../components/Toast'
+import CommunicationModal from '../../components/CommunicationModal'
 import { 
   Users, BookOpen, FileText, Activity, Shield, 
   TrendingUp, AlertTriangle, CheckCircle, Clock, Server,
@@ -273,8 +274,6 @@ export default function AdminDashboard() {
   const handleSendCommunication = (type: 'email' | 'push' | 'alert') => {
     setCommunicationType(type)
     setShowCommunicationModal(true)
-    const typeNames = { email: 'Email Broadcast', push: 'Push Notification', alert: 'System Alert' }
-    showToast(`Opening ${typeNames[type]} composer...`, 'info')
   }
 
   const handleRefreshData = async () => {
@@ -1231,6 +1230,14 @@ export default function AdminDashboard() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Communication Modal */}
+      <CommunicationModal
+        isOpen={showCommunicationModal}
+        onClose={() => setShowCommunicationModal(false)}
+        mode={communicationType}
+        onToast={showToast}
+      />
 
       {/* Toast Notification */}
       <Toast

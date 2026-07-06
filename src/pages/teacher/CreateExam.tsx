@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Trash2, Save, Calendar, Clock, Users, BookOpen } from 'lucide-react'
+import { toast } from 'sonner'
 import { examAPI } from '../../lib/api'
 
 interface Question {
@@ -99,38 +100,38 @@ export default function CreateExamPage() {
     e.preventDefault()
     
     if (!examData.title || !examData.course || !examData.scheduled_date) {
-      alert('Please fill in all required fields: Title, Course, and Scheduled Date')
+      toast.error('Please fill in all required fields: Title, Course, and Scheduled Date')
       return
     }
 
     if (questions.length === 0) {
-      alert('Please add at least one question')
+      toast.error('Please add at least one question')
       return
     }
 
     for (const q of questions) {
       if (!q.question.trim()) {
-        alert('All questions must have question text')
+        toast.error('All questions must have question text')
         return
       }
       if ((q.type === 'mcq' || q.type === 'multiple_select') && q.options.some(o => !o.trim())) {
-        alert(`Question "${q.question.slice(0, 30)}..." has empty options. Please fill all options.`)
+        toast.error(`Question "${q.question.slice(0, 30)}..." has empty options. Please fill all options.`)
         return
       }
       if ((q.type === 'mcq' || q.type === 'multiple_select') && q.options.length < 2) {
-        alert(`Question "${q.question.slice(0, 30)}..." needs at least 2 options`)
+        toast.error(`Question "${q.question.slice(0, 30)}..." needs at least 2 options`)
         return
       }
       if (q.type === 'mcq' && q.correct_answer === '') {
-        alert(`Question "${q.question.slice(0, 30)}..." — please select the correct answer`)
+        toast.error(`Question "${q.question.slice(0, 30)}..." — please select the correct answer`)
         return
       }
       if (q.type === 'multiple_select' && (!q.correct_answer || q.correct_answer.length === 0)) {
-        alert(`Question "${q.question.slice(0, 30)}..." — please select at least one correct answer`)
+        toast.error(`Question "${q.question.slice(0, 30)}..." — please select at least one correct answer`)
         return
       }
       if (q.type === 'true_false' && q.correct_answer === '') {
-        alert(`Question "${q.question.slice(0, 30)}..." — please select True or False`)
+        toast.error(`Question "${q.question.slice(0, 30)}..." — please select True or False`)
         return
       }
     }
@@ -171,11 +172,11 @@ export default function CreateExamPage() {
       }
       
       await examAPI.createExam(payload)
-      alert('Exam created successfully!')
+      toast.success('Exam created successfully!')
       navigate('/teacher/dashboard')
     } catch (error) {
       console.error('Failed to create exam:', error)
-      alert('Failed to create exam. Please try again.')
+      toast.error('Failed to create exam. Please try again.')
     } finally {
       setLoading(false)
     }

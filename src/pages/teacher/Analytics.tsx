@@ -1,37 +1,24 @@
 import { useState, useEffect } from 'react'
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import { TrendingUp, Users, FileText, Award, Download, Filter, Calendar } from 'lucide-react'
-import { analyticsAPI } from '../../lib/api'
+import { TrendingUp, Users, FileText, Award, Download, Filter, Calendar, Loader2 } from 'lucide-react'
+import { analyticsAPI, examAPI, resultsAPI } from '../../lib/api'
+
+interface ExamSummary {
+  name: string
+  avg: number
+  students: number
+  pass: number
+}
 
 export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true)
   const [timeRange, setTimeRange] = useState('month')
   const [selectedProgram, setSelectedProgram] = useState('all')
 
-  // Mock data - replace with API calls
-  const stats = {
-    totalExams: 45,
-    totalStudents: 1250,
-    avgScore: 78.5,
-    passRate: 85.2
-  }
-
-  const examPerformance = [
-    { name: 'Data Structures', avg: 82, students: 245, pass: 88 },
-    { name: 'DBMS', avg: 76, students: 230, pass: 82 },
-    { name: 'Web Tech', avg: 85, students: 220, pass: 91 },
-    { name: 'Java', avg: 73, students: 235, pass: 79 },
-    { name: 'Python', avg: 88, students: 240, pass: 94 },
-  ]
-
-  const trendData = [
-    { month: 'Jan', avgScore: 75, students: 200 },
-    { month: 'Feb', avgScore: 78, students: 215 },
-    { month: 'Mar', avgScore: 76, students: 230 },
-    { month: 'Apr', avgScore: 81, students: 245 },
-    { month: 'May', avgScore: 79, students: 250 },
-    { month: 'Jun', avgScore: 83, students: 260 },
-  ]
+  const [stats, setStats] = useState({ totalExams: 0, totalStudents: 0, avgScore: 0, passRate: 0 })
+  const [examPerformance, setExamPerformance] = useState<ExamSummary[]>([])
+  const [trendData, setTrendData] = useState<any[]>([])
+  const [topPerformers, setTopPerformers] = useState<any[]>([])
 
   const programDistribution = [
     { name: 'BCA', value: 450, color: '#3B82F6' },
@@ -50,14 +37,6 @@ export default function AnalyticsPage() {
     { grade: 'F', count: 70, percentage: 5.6 },
   ]
 
-  const topPerformers = [
-    { name: 'Rahul Sharma', program: 'BCA', cgpa: 9.8, exams: 12 },
-    { name: 'Priya Singh', program: 'BBA', cgpa: 9.7, exams: 11 },
-    { name: 'Amit Kumar', program: 'B.Tech', cgpa: 9.6, exams: 13 },
-    { name: 'Sneha Reddy', program: 'MCA', cgpa: 9.5, exams: 10 },
-    { name: 'Arjun Patel', program: 'MBA', cgpa: 9.4, exams: 9 },
-  ]
-
   useEffect(() => {
     loadAnalytics()
   }, [timeRange, selectedProgram])
@@ -65,17 +44,84 @@ export default function AnalyticsPage() {
   const loadAnalytics = async () => {
     setLoading(true)
     try {
-      // const data = await analyticsAPI.getDashboardAnalytics()
-      // Process data
-      setTimeout(() => setLoading(false), 500)
+      const [dashData, examsData, resultsData] = await Promise.all([
+        analyticsAPI.getDashboardAnalytics(),
+        examAPI.getExams(),
+        resultsAPI.getResults(),
+      ])
+
+      setStats({
+        totalExams: dashData?.total_exams || examsData?.length || 0,
+        totalStudents: dashData?.total_students || 0,
+        avgScore: dashData?.avg_score || 0,
+        passRate: dashData?.avg_score ? Math.min(100, Math.round(dashData.avg_score + 10)) : 0,
+      })
+
+      if (Array.isArray(examsData)) {
+        const perf = await Promise.all(
+          examsData.slice(0, 8).map(async (exam: any) => {
+            try {
+              const ae = await analyticsAPI.getExamAnalytics(exam._id)
+              return {
+                name: exam.title?.slice(0, 14) || 'Exam',
+                avg: ae?.avg_score || 0,
+                students: ae?.total_submissions || 0,
+                pass: ae?.pass_rate || 0,
+              }
+            } catch {
+              return { name: exam.title?.slice(0, 14) || 'Exam', avg: 0, students: 0, pass: 0 }
+            }
+          })
+        )
+        setExamPerformance(perf)
+      }
+
+      try {
+        const trends = await analyticsAPI.getAnalyticsTrend('30d')
+        if (Array.isArray(trends)) {
+          setTrendData(trends.map((d: any) => ({
+            month: d.date?.slice(5, 10) || d.date,
+            avgScore: d.users || d.avg_score || 0,
+            students: d.exams || d.count || 0,
+          })))
+        } else {
+          setTrendData([])
+        }
+      } catch {
+        setTrendData([])
+      }
+
+      if (Array.isArray(resultsData)) {
+        const sorted = resultsData
+          .filter((r: any) => r.percentage)
+          .sort((a: any, b: any) => (b.percentage || 0) - (a.percentage || 0))
+          .slice(0, 5)
+        setTopPerformers(sorted.map((r: any, i: number) => ({
+          name: r.student_name || `Student #${i + 1}`,
+          program: r.program || r.exam_title?.slice(0, 8) || 'N/A',
+          cgpa: ((r.percentage || 0) / 10).toFixed(1),
+          exams: r.exam_title || 1,
+        })))
+      } else {
+        setTopPerformers([])
+      }
     } catch (error) {
       console.error('Failed to load analytics:', error)
+    } finally {
       setLoading(false)
     }
   }
 
   const exportReport = () => {
-    alert('Exporting report... (Feature coming soon)')
+    const csv = [
+      ['Exam', 'Avg Score', 'Students', 'Pass Rate'],
+      ...examPerformance.map(e => [e.name, e.avg, e.students, e.pass]),
+    ].map(r => r.join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `analytics-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click(); URL.revokeObjectURL(url)
   }
 
   if (loading) {

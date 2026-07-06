@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/globalStore'
-import { examAPI } from '../../lib/api'
+import { examAPI, analyticsAPI, notificationsAPI } from '../../lib/api'
+import { toast } from 'sonner'
 import { 
   PlusCircle, Users, BarChart, Monitor, LogOut, BookOpen,
   TrendingUp, CheckCircle, AlertTriangle, Clock, Award,
@@ -30,20 +31,31 @@ export default function TeacherDashboard() {
   const [loading, setLoading] = useState(true)
   const [activeExams, setActiveExams] = useState(0)
   const [totalStudents, setTotalStudents] = useState(0)
+  const [teacherStats, setTeacherStats] = useState<{ avg_score: number; pass_rate: number } | null>(null)
+  const [recentActivity, setRecentActivity] = useState<any[]>([])
+  const [notifCount, setNotifCount] = useState(0)
 
   useEffect(() => {
-    loadExams()
+    loadData()
   }, [])
 
-  const loadExams = async () => {
+  const loadData = async () => {
     try {
-      const examsData = await examAPI.getExams()
-      const myExamsData = examsData.filter((e: any) => e.created_by === user?.email)
+      const [examsData, teacherData, activityData, notifData] = await Promise.all([
+        examAPI.getExams(),
+        analyticsAPI.getTeacherAnalytics().catch(() => null),
+        analyticsAPI.getRecentActivity().catch(() => []),
+        notificationsAPI.getNotifications(true, 1).catch(() => ({ total: 0 })),
+      ])
+      const myExamsData = (examsData || []).filter((e: any) => e.created_by === user?.email)
       setMyExams(myExamsData)
       setActiveExams(myExamsData.filter((e: any) => e.status === 'active').length)
       setTotalStudents(myExamsData.reduce((sum: number, e: any) => sum + (e.enrolled_students || 0), 0))
+      setTeacherStats(teacherData ? { avg_score: teacherData.avg_score, pass_rate: teacherData.pass_rate } : null)
+      setRecentActivity(Array.isArray(activityData) ? activityData : [])
+      setNotifCount(notifData?.total || 0)
     } catch (error) {
-      console.error('Error loading exams:', error)
+      console.error('Error loading data:', error)
     } finally {
       setLoading(false)
     }
@@ -75,9 +87,9 @@ export default function TeacherDashboard() {
     },
     {
       icon: CheckCircle,
-      label: 'Completion Rate',
-      value: '87%',
-      change: '+5% this month',
+      label: 'Pass Rate',
+      value: teacherStats ? `${teacherStats.pass_rate}%` : 'N/A',
+      change: teacherStats ? 'Current average' : 'Loading...',
       color: 'purple',
       bgColor: 'bg-purple-50',
       iconColor: 'text-purple-600'
@@ -85,7 +97,7 @@ export default function TeacherDashboard() {
     {
       icon: Award,
       label: 'Avg Score',
-      value: '76%',
+      value: teacherStats ? `${teacherStats.avg_score}%` : 'N/A',
       change: 'Class average',
       color: 'orange',
       bgColor: 'bg-orange-50',
@@ -132,30 +144,6 @@ export default function TeacherDashboard() {
     },
   ]
 
-  const recentActivity = [
-    {
-      title: 'Database Systems Exam submitted',
-      students: 45,
-      time: '2 hours ago',
-      icon: CheckCircle,
-      color: 'green'
-    },
-    {
-      title: '3 students flagged in AI Exam',
-      students: 3,
-      time: '4 hours ago',
-      icon: AlertTriangle,
-      color: 'red'
-    },
-    {
-      title: 'New exam "Web Development" created',
-      students: 0,
-      time: '1 day ago',
-      icon: FileText,
-      color: 'blue'
-    },
-  ]
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-purple-50 to-blue-50">
       {/* Header */}
@@ -176,7 +164,11 @@ export default function TeacherDashboard() {
             <div className="flex items-center space-x-4">
               <button className="relative p-2 text-gray-600 hover:text-purple-600 transition">
                 <Bell className="w-5 h-5" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                {notifCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+                    {notifCount > 9 ? '9+' : notifCount}
+                  </span>
+                )}
               </button>
               <div className="text-right hidden sm:block">
                 <p className="text-sm font-medium">{user?.full_name}</p>
@@ -343,17 +335,27 @@ export default function TeacherDashboard() {
                 Recent Activity
               </h3>
               <div className="space-y-3">
-                {recentActivity.map((activity, index) => (
-                  <div key={index} className="flex items-start space-x-3">
-                    <div className={`w-10 h-10 bg-${activity.color}-100 rounded-lg flex items-center justify-center flex-shrink-0`}>
-                      <activity.icon className={`w-5 h-5 text-${activity.color}-600`} />
+                {recentActivity.map((activity, index) => {
+                  const colorMap: Record<string, string> = { exam: 'blue', alert: 'red', user: 'green', system: 'purple' }
+                  const c = colorMap[activity.type] || 'gray'
+                  return (
+                    <div key={index} className="flex items-start space-x-3">
+                      <div className={`w-10 h-10 bg-${c}-100 rounded-lg flex items-center justify-center flex-shrink-0`}>
+                        {activity.type === 'alert' ? <AlertTriangle className={`w-5 h-5 text-${c}-600`} /> :
+                         activity.type === 'exam' ? <FileText className={`w-5 h-5 text-${c}-600`} /> :
+                         activity.type === 'user' ? <Users className={`w-5 h-5 text-${c}-600`} /> :
+                         <Activity className={`w-5 h-5 text-${c}-600`} />}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-sm">{activity.action}</p>
+                        <p className="text-xs text-gray-600">{activity.time}</p>
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-sm">{activity.title}</p>
-                      <p className="text-xs text-gray-600">{activity.time}</p>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
+                {recentActivity.length === 0 && (
+                  <p className="text-sm text-gray-500 text-center py-4">No recent activity</p>
+                )}
               </div>
             </div>
 

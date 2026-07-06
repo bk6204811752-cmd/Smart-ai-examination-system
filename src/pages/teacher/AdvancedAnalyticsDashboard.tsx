@@ -49,57 +49,8 @@ export default function AdvancedAnalyticsDashboard() {
   const fetchAdvancedMetrics = async () => {
     setLoading(true)
     try {
-      // Simulated advanced metrics - in production, fetch from backend
-      const mockMetrics: AdvancedMetrics = {
-        overview: {
-          total_exams: 156,
-          total_students: 1243,
-          avg_completion_rate: 94.3,
-          avg_pass_rate: 78.5,
-          total_violations: 342,
-          high_risk_sessions: 23
-        },
-        performance: {
-          exam_difficulty_accuracy: 92.7,
-          question_quality_avg: 87.3,
-          discrimination_index_avg: 0.42,
-          prediction_accuracy: 89.1
-        },
-        proctoring: {
-          sessions_monitored: 1243,
-          violations_detected: 342,
-          false_positive_rate: 4.2,
-          auto_interventions: 23,
-          manual_interventions: 45,
-          avg_risk_score: 18.5
-        },
-        trends: {
-          daily_exams: Array.from({ length: 7 }, (_, i) => ({
-            date: new Date(Date.now() - (6 - i) * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-            count: Math.floor(Math.random() * 30) + 10,
-            violations: Math.floor(Math.random() * 10) + 1
-          })),
-          violation_types: [
-            { type: 'Looking Away', count: 123, severity: 'medium' },
-            { type: 'Multiple Faces', count: 45, severity: 'critical' },
-            { type: 'Phone Detected', count: 67, severity: 'high' },
-            { type: 'Voice Detected', count: 34, severity: 'high' },
-            { type: 'Suspicious Movement', count: 73, severity: 'medium' }
-          ],
-          emotion_distribution: [
-            { emotion: 'Focused', percentage: 42 },
-            { emotion: 'Neutral', percentage: 28 },
-            { emotion: 'Confused', percentage: 15 },
-            { emotion: 'Stressed', percentage: 10 },
-            { emotion: 'Suspicious', percentage: 5 }
-          ],
-          attention_trends: Array.from({ length: 24 }, (_, i) => ({
-            hour: i,
-            avg_attention: Math.random() * 30 + 70
-          }))
-        }
-      }
-      setMetrics(mockMetrics)
+      const data = await analyticsAPI.getAdvancedAnalytics()
+      setMetrics(data)
     } catch (error) {
       console.error('Failed to fetch metrics:', error)
     } finally {

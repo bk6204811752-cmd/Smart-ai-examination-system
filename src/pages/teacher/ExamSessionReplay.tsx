@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { Play, Pause, SkipForward, SkipBack, AlertTriangle, Eye, Brain, Maximize2, Volume2 } from 'lucide-react'
+import { Play, Pause, SkipForward, SkipBack, AlertTriangle, Eye, Brain, Maximize2, Volume2, AlertCircle } from 'lucide-react'
+import { sessionAPI } from '../../lib/api'
 
 interface SessionFrame {
   timestamp: number
@@ -69,34 +70,15 @@ export default function ExamSessionReplay({ sessionId = '' }: { sessionId?: stri
   }, [isPlaying, playbackSpeed, session])
 
   const fetchSessionData = async () => {
-    // Simulated session data - in production, fetch from backend
-    const mockSession: ExamSession = {
-      session_id: sessionId,
-      student_id: 'student_123',
-      student_name: 'John Doe',
-      exam_id: 'exam_456',
-      exam_title: 'Computer Science Final',
-      start_time: Date.now() - 3600000,
-      end_time: Date.now(),
-      duration: 3600,
-      total_violations: 5,
-      final_risk_score: 45,
-      frames: Array.from({ length: 60 }, (_, i) => ({
-        timestamp: Date.now() - (60 - i) * 60000,
-        frame_data: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480"><rect width="640" height="480" fill="%23f0f0f0"/><text x="320" y="240" text-anchor="middle" font-size="20" fill="%23666">Frame ' + (i + 1) + '</text></svg>',
-        metrics: {
-          risk_score: Math.random() * 100,
-          attention_score: Math.random() * 100,
-          emotion: ['focused', 'neutral', 'confused'][Math.floor(Math.random() * 3)],
-          gaze_horizontal: (Math.random() - 0.5) * 30,
-          gaze_vertical: (Math.random() - 0.5) * 20,
-          violations: i % 10 === 0 ? ['looking_away'] : []
-        },
-        events: i === 0 ? [{ type: 'question_change', description: 'Started Question 1' }] :
-                i % 15 === 0 ? [{ type: 'question_change', description: `Moved to Question ${Math.floor(i / 15) + 1}` }] : []
-      }))
+    if (!sessionId) {
+      return
     }
-    setSession(mockSession)
+    try {
+      const data = await sessionAPI.getSessionReplay(sessionId)
+      setSession(data)
+    } catch (error) {
+      console.error('Failed to fetch session replay:', error)
+    }
   }
 
   const handleSeek = (frameIndex: number) => {
@@ -113,6 +95,18 @@ export default function ExamSessionReplay({ sessionId = '' }: { sessionId?: stri
 
   const skipBackward = () => {
     handleSeek(currentFrame - 10)
+  }
+
+  if (!sessionId) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <AlertCircle className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+          <p className="text-gray-500">No session selected for replay</p>
+          <p className="text-sm text-gray-400 mt-2">Select a session from Live Monitoring to view replay</p>
+        </div>
+      </div>
+    )
   }
 
   if (!session) {

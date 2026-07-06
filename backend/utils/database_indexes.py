@@ -72,10 +72,23 @@ async def create_all_indexes(db):
         logger.info("✅ Notifications indexes created")
         
         # ── Audit Logs Collection ─────────────────────────────────────────────
-        await db.audit_logs.create_index("admin_id")
+        await db.audit_logs.create_index("user_id")
         await db.audit_logs.create_index("timestamp")
-        await db.audit_logs.create_index([("admin_id", 1), ("timestamp", -1)])
+        await db.audit_logs.create_index([("user_id", 1), ("timestamp", -1)])
+        await db.audit_logs.create_index("status")
         logger.info("✅ Audit logs indexes created")
+
+        # ── Security Events Collection ─────────────────────────────────────────
+        await db.security_events.create_index("severity")
+        await db.security_events.create_index("resolved")
+        await db.security_events.create_index([("timestamp", -1)])
+        await db.security_events.create_index([("severity", 1), ("resolved", 1)])
+        logger.info("✅ Security events indexes created")
+
+        # ── Blocked IPs Collection ─────────────────────────────────────────────
+        await db.blocked_ips.create_index("ip", unique=True)
+        await db.blocked_ips.create_index("active")
+        logger.info("✅ Blocked IPs indexes created")
         
         # ── Sessions Collection ───────────────────────────────────────────────
         await db.sessions.create_index("user_id")

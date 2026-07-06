@@ -47,6 +47,10 @@ from routes.communication import router as communication_router
 from routes.webhooks import router as webhooks_router
 from routes.websocket_routes import router as websocket_router
 from routes.advanced_features import router as advanced_router
+from routes.security import router as security_router
+from routes.questions import router as questions_router
+from routes.plagiarism import router as plagiarism_router
+from routes.templates import router as templates_router
 
 from utils.seeder import seed_database
 
@@ -180,6 +184,10 @@ app.include_router(communication_router)
 app.include_router(webhooks_router)
 app.include_router(websocket_router)  # Real-time WebSocket monitoring
 app.include_router(advanced_router)   # Advanced/stub feature routes
+app.include_router(security_router)   # Security Center routes
+app.include_router(questions_router)  # Question Bank routes
+app.include_router(plagiarism_router) # Plagiarism Checker routes
+app.include_router(templates_router)  # Exam Templates routes
 
 
 # ── Extra Utility Routes ──────────────────────────────────────────────────────

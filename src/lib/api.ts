@@ -404,6 +404,10 @@ export const sessionAPI = {
     const response = await api.patch(`/api/sessions/${examId}/update`, data)
     return response.data
   },
+  getSessionReplay: async (sessionId: string) => {
+    const response = await api.get(`/api/sessions/replay/${sessionId}`)
+    return response.data
+  },
 }
 
 // Notifications API
@@ -511,37 +515,184 @@ export const analyticsAPI = {
     return response.data
   },
   getAnalyticsTrend: async (period: string = '7d') => {
-    // Simulated analytics trend data
     const days = period === '7d' ? 7 : period === '30d' ? 30 : 90
-    const data = []
-    for (let i = days - 1; i >= 0; i--) {
-      const date = new Date()
-      date.setDate(date.getDate() - i)
-      data.push({
-        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        users: Math.floor(Math.random() * 50) + 100,
-        exams: Math.floor(Math.random() * 20) + 10,
-        violations: Math.floor(Math.random() * 5) + 1
-      })
-    }
-    return data
+    const response = await api.get('/api/analytics/trends', { params: { days } })
+    return response.data
   },
   getSecurityAlerts: async () => {
-    // Simulated security alerts - in production, from security monitoring system
-    return [
-      { type: 'warning', message: '3 failed login attempts from IP 192.168.1.45', severity: 'medium', time: '10 min ago' },
-      { type: 'info', message: 'SSL certificate expires in 30 days', severity: 'low', time: '1 hour ago' },
-      { type: 'warning', message: 'Unusual traffic detected from unknown region', severity: 'high', time: '25 min ago' }
-    ]
+    const response = await api.get('/api/security/events', { params: { per_page: 10, resolved: false } })
+    const events = response.data.events || []
+    return events.map((ev: any) => ({
+      type: ev.severity === 'critical' || ev.severity === 'high' ? 'warning' : 'info',
+      message: ev.description,
+      severity: ev.severity,
+      time: ev.timestamp || 'recently',
+    }))
+  },
+  getCalibrationData: async (examId: string) => {
+    const response = await api.get(`/api/analytics/calibrate/${examId}`)
+    return response.data
   },
   getRecentActivity: async () => {
-    // Simulated recent activity
-    return [
-      { action: 'New user registered', user: 'john.doe@pcmt.edu', time: '2 min ago', type: 'user' },
-      { action: 'Exam completed', user: 'AI-101 Final', time: '5 min ago', type: 'exam' },
-      { action: 'Violation detected', user: 'jane.smith@pcmt.edu', time: '12 min ago', type: 'alert' },
-      { action: 'New exam created', user: 'Prof. Kumar', time: '18 min ago', type: 'exam' },
-      { action: 'System backup completed', user: 'System', time: '30 min ago', type: 'system' }
-    ]
+    const response = await api.get('/api/analytics/recent-activity')
+    return response.data
+  },
+  getTeacherAnalytics: async () => {
+    const response = await api.get('/api/analytics/teacher')
+    return response.data
+  },
+  getAdvancedAnalytics: async () => {
+    const response = await api.get('/api/analytics/advanced')
+    return response.data
+  },
+}
+
+export const plagiarismAPI = {
+  checkText: async (data: { text: string; content_type?: string; language?: string; student_name?: string; student_id?: string }) => {
+    const response = await api.post('/api/plagiarism/check', data)
+    return response.data
+  },
+  submitForComparison: async (data: { text: string; content_type?: string; language?: string; student_name?: string; student_id?: string }) => {
+    const response = await api.post('/api/plagiarism/submit', data)
+    return response.data
+  },
+  getResults: async (params?: { status?: string; limit?: number }) => {
+    const response = await api.get('/api/plagiarism/results', { params })
+    return response.data
+  },
+  getResult: async (resultId: string) => {
+    const response = await api.get(`/api/plagiarism/results/${resultId}`)
+    return response.data
+  },
+  getStats: async () => {
+    const response = await api.get('/api/plagiarism/stats')
+    return response.data
+  },
+  deleteResult: async (resultId: string) => {
+    const response = await api.delete(`/api/plagiarism/results/${resultId}`)
+    return response.data
+  },
+}
+
+export const templateAPI = {
+  getTemplates: async () => {
+    const response = await api.get('/api/templates')
+    return response.data
+  },
+  getTemplate: async (templateId: string) => {
+    const response = await api.get(`/api/templates/${templateId}`)
+    return response.data
+  },
+  createTemplate: async (data: any) => {
+    const response = await api.post('/api/templates', data)
+    return response.data
+  },
+  updateTemplate: async (templateId: string, data: any) => {
+    const response = await api.put(`/api/templates/${templateId}`, data)
+    return response.data
+  },
+  deleteTemplate: async (templateId: string) => {
+    const response = await api.delete(`/api/templates/${templateId}`)
+    return response.data
+  },
+  duplicateTemplate: async (templateId: string) => {
+    const response = await api.post(`/api/templates/${templateId}/duplicate`)
+    return response.data
+  },
+}
+
+export const questionBankAPI = {
+  getQuestions: async (params?: {
+    subject?: string
+    difficulty?: string
+    type?: string
+    search?: string
+    tag?: string
+    sort_by?: string
+  }) => {
+    const response = await api.get('/api/questions', { params })
+    return response.data
+  },
+  getStats: async () => {
+    const response = await api.get('/api/questions/stats')
+    return response.data
+  },
+  getSubjects: async () => {
+    const response = await api.get('/api/questions/subjects')
+    return response.data
+  },
+  getTags: async () => {
+    const response = await api.get('/api/questions/tags')
+    return response.data
+  },
+  getQuestion: async (questionId: string) => {
+    const response = await api.get(`/api/questions/${questionId}`)
+    return response.data
+  },
+  createQuestion: async (data: any) => {
+    const response = await api.post('/api/questions', data)
+    return response.data
+  },
+  updateQuestion: async (questionId: string, data: any) => {
+    const response = await api.put(`/api/questions/${questionId}`, data)
+    return response.data
+  },
+  deleteQuestion: async (questionId: string) => {
+    const response = await api.delete(`/api/questions/${questionId}`)
+    return response.data
+  },
+  duplicateQuestion: async (questionId: string) => {
+    const response = await api.post(`/api/questions/${questionId}/duplicate`)
+    return response.data
+  },
+}
+
+export const securityAPI = {
+  getOverview: async () => {
+    const response = await api.get('/api/security/overview')
+    return response.data
+  },
+  getLogs: async (params: {
+    page?: number
+    per_page?: number
+    status?: string
+    search?: string
+    time_range?: string
+  }) => {
+    const response = await api.get('/api/security/logs', { params })
+    return response.data
+  },
+  getEvents: async (params: {
+    page?: number
+    per_page?: number
+    severity?: string
+    resolved?: boolean
+  }) => {
+    const response = await api.get('/api/security/events', { params })
+    return response.data
+  },
+  getBlockedIPs: async () => {
+    const response = await api.get('/api/security/blocked-ips')
+    return response.data
+  },
+  blockIP: async (data: { ip: string; reason: string }) => {
+    const response = await api.post('/api/security/block-ip', data)
+    return response.data
+  },
+  unblockIP: async (data: { ip: string }) => {
+    const response = await api.post('/api/security/unblock-ip', data)
+    return response.data
+  },
+  logEvent: async (data: {
+    type: string
+    severity?: string
+    description: string
+    user_id?: string
+    user_name?: string
+    ip_address?: string
+    metadata?: Record<string, any>
+  }) => {
+    const response = await api.post('/api/security/log-event', data)
+    return response.data
   },
 }

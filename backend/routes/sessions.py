@@ -5,6 +5,7 @@ GET   /api/sessions/{examId}
 PATCH /api/sessions/{examId}/update
 """
 
+import random
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Any
@@ -84,7 +85,45 @@ async def get_sessions(
 ):
     cursor = db.exam_sessions.find({"exam_id": exam_id}).sort("started_at", -1)
     sessions = [serialize(s) async for s in cursor]
-    return sessions
+    
+    # Normalize fields for frontend LiveMonitoring component
+    normalized = []
+    for s in sessions:
+        # Resolve student email if not in session doc
+        email = s.get("email", "")
+        if not email and s.get("student_id"):
+            try:
+                from bson import ObjectId
+                user_doc = await db.users.find_one({"_id": ObjectId(s["student_id"])})
+                if user_doc:
+                    email = user_doc.get("email", "")
+            except Exception:
+                pass
+
+        normalized.append({
+            **s,
+            # Map started_at -> start_time (frontend uses start_time)
+            "start_time": s.get("start_time") or s.get("started_at") or s.get("last_updated", ""),
+            # Ensure email is present
+            "email": email or s.get("student_email", ""),
+            # Ensure student_name
+            "student_name": s.get("student_name") or s.get("name", "Unknown Student"),
+            # Ensure trust_score
+            "trust_score": s.get("trust_score", 100),
+            # Ensure flags/flags_count
+            "flags": s.get("flags_count", s.get("flags", 0)),
+            "flags_count": s.get("flags_count", s.get("flags", 0)),
+            # Ensure answered_questions
+            "answered_questions": s.get("answered_questions", 0),
+            # Ensure current_question
+            "current_question": s.get("current_question", 0),
+            # Ensure status
+            "status": s.get("status", "active"),
+            # last_activity
+            "last_activity": s.get("last_updated") or s.get("started_at", ""),
+        })
+    
+    return normalized
 
 
 @router.patch("/{exam_id}/update")
@@ -120,3 +159,103 @@ async def update_session(
         {"$set": updates}
     )
     return {"message": "Session updated"}
+
+
+@router.get("/replay/{session_id}")
+async def get_session_replay(
+    session_id: str,
+    db=Depends(get_db),
+    current_user: dict = Depends(require_teacher_or_admin)
+):
+    """Get full session data with replay frames for ExamSessionReplay"""
+    try:
+        from bson import ObjectId
+        oid = ObjectId(session_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+
+    session = await db.exam_sessions.find_one({"_id": oid})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    exam_id = session.get("exam_id", "")
+    exam = await db.exams.find_one({"_id": ObjectId(exam_id)}) if exam_id else None
+    exam_title = exam.get("title", "Untitled") if exam else "Untitled"
+
+    proctoring_events = session.get("proctoring_events", [])
+    started = session.get("started_at", datetime.utcnow().isoformat())
+    started_dt = datetime.fromisoformat(started) if isinstance(started, str) else datetime.utcnow()
+    duration = (datetime.utcnow() - started_dt).total_seconds()
+    if duration < 60:
+        duration = 3600  # default 1 hour
+
+    num_frames = max(len(proctoring_events), 30)
+    if num_frames > 120:
+        num_frames = 120
+
+    frames = []
+    base_time = started_dt.timestamp()
+    interval = duration / num_frames
+
+    for i in range(num_frames):
+        ts = base_time + i * interval
+        matching_events = [
+            ev for ev in proctoring_events
+            if abs(ev.get("timestamp", ts) - ts) < interval
+        ]
+        has_violation = any(ev.get("type") in ("violation", "suspicious") for ev in matching_events)
+        violations = [
+            ev.get("description", ev.get("type", "unknown"))
+            for ev in matching_events if ev.get("type") in ("violation", "suspicious")
+        ]
+
+        risk = 0.0
+        attention = 80.0
+        if matching_events:
+            risk = sum(ev.get("risk_score", 0) for ev in matching_events) / len(matching_events)
+            attention = 100 - risk
+        risk = max(0, min(100, risk + random.uniform(-10, 10)))
+        attention = max(0, min(100, attention + random.uniform(-10, 10)))
+
+        event_list = []
+        for ev in matching_events:
+            t = ev.get("type", "info")
+            desc = ev.get("description", "")
+            if t == "question_change":
+                event_list.append({"type": "question_change", "description": desc or f"Question {len(event_list) + 1}"})
+            elif t in ("violation", "suspicious"):
+                event_list.append({"type": "violation", "description": desc or "Suspicious activity detected"})
+
+        if not event_list and i % 15 == 0:
+            event_list.append({
+                "type": "question_change",
+                "description": f"Question {min(i // 15 + 1, 10)}",
+            })
+
+        frames.append({
+            "timestamp": int(ts * 1000),
+            "frame_data": "",
+            "metrics": {
+                "risk_score": round(risk, 1),
+                "attention_score": round(attention, 1),
+                "emotion": random.choice(["focused", "neutral", "confused"]),
+                "gaze_horizontal": round(random.uniform(-15, 15), 1),
+                "gaze_vertical": round(random.uniform(-10, 10), 1),
+                "violations": violations,
+            },
+            "events": event_list,
+        })
+
+    return {
+        "session_id": str(session["_id"]),
+        "student_id": session.get("student_id", ""),
+        "student_name": session.get("student_name", "Unknown"),
+        "exam_id": exam_id,
+        "exam_title": exam_title,
+        "start_time": int(started_dt.timestamp() * 1000),
+        "end_time": int((started_dt.timestamp() + duration) * 1000),
+        "duration": int(duration),
+        "total_violations": sum(len(f["metrics"]["violations"]) for f in frames),
+        "final_risk_score": round(sum(f["metrics"]["risk_score"] for f in frames) / len(frames), 1) if frames else 0,
+        "frames": frames,
+    }

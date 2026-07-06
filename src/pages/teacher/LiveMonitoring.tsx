@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Users, AlertTriangle, Eye, CheckCircle, XCircle, Clock,
@@ -44,7 +44,10 @@ interface ViolationFlag {
 }
 
 export default function LiveMonitoringPage() {
-  const { examId } = useParams<{ examId: string }>()
+  const { examId: examIdParam } = useParams<{ examId: string }>()
+  const [searchParams] = useSearchParams()
+  // Support both /teacher/monitoring/:examId and /teacher/live-monitoring?exam=ID
+  const examId = examIdParam || searchParams.get('exam') || undefined
   const [exam, setExam] = useState<any>(null)
   const [sessions, setSessions] = useState<StudentSession[]>([])
   const [flags, setFlags] = useState<ViolationFlag[]>([])
@@ -68,15 +71,18 @@ export default function LiveMonitoringPage() {
   const audioContextRef = useRef<AudioContext | null>(null)
   const user = useAuthStore(state => state.user)
 
+  const streamRefreshIntervalRef = useRef<number | null>(null)
+
   useEffect(() => {
     if (examId) {
       loadExamData()
       loadFlags()
-      initializeWebSocket()
+      const streamInterval = initializeWebSocket()
+      if (streamInterval) streamRefreshIntervalRef.current = streamInterval as unknown as number
 
       staleFrameCheckInterval.current = window.setInterval(() => {
         const now = Date.now()
-        const staleThreshold = 15000
+        const staleThreshold = 30000 // 30 seconds before marking as stale
         setLastFrameTime(prev => {
           const updated = { ...prev }
           let removed = 0
@@ -108,6 +114,9 @@ export default function LiveMonitoringPage() {
       if (staleFrameCheckInterval.current) {
         clearInterval(staleFrameCheckInterval.current)
       }
+      if (streamRefreshIntervalRef.current) {
+        clearInterval(streamRefreshIntervalRef.current)
+      }
     }
   }, [examId])
 
@@ -117,9 +126,29 @@ export default function LiveMonitoringPage() {
         await loadFlags()
         try {
           const sessionsData = await sessionAPI.getSessions(examId)
-          setSessions(Array.isArray(sessionsData) ? sessionsData : [])
+          setSessions(prev => {
+            const newSessions = Array.isArray(sessionsData) ? sessionsData : []
+            // Merge: keep real-time WS updates (audio, face detection, etc.) but update DB data
+            return newSessions.map(newS => {
+              const existing = prev.find(s => s.student_id === newS.student_id)
+              if (existing) {
+                return {
+                  ...newS,
+                  // Preserve real-time WS data
+                  audio_level: existing.audio_level,
+                  face_detected: existing.face_detected,
+                  looking_at_screen: existing.looking_at_screen,
+                  attention_level: existing.attention_level,
+                  integrity_score: existing.integrity_score,
+                  // Use WS trust_score if available and different
+                  trust_score: existing.trust_score !== 100 ? Math.min(existing.trust_score, newS.trust_score || 100) : (newS.trust_score || 100),
+                }
+              }
+              return newS
+            })
+          })
         } catch {}
-      }, 5000)
+      }, 3000) // Poll every 3s for better real-time feel
       return () => clearInterval(interval)
     }
   }, [autoRefresh, examId])
@@ -174,7 +203,15 @@ export default function LiveMonitoringPage() {
     const userId = user._id || user.email || 'unknown'
 
     wsClient.on('connected', () => setWsStatus('connected'))
-    wsClient.on('connection_established', () => setWsStatus('connected'))
+    wsClient.on('connection_established', (data: any) => {
+      setWsStatus('connected')
+      // Request active streams snapshot immediately on connect
+      wsClient.send({ type: 'request_streams', exam_id: examId })
+      // Update session stats from connection data
+      if (data.stats) {
+        console.log('[LiveMonitor] Connected, exam stats:', data.stats)
+      }
+    })
     wsClient.on('disconnect', () => setWsStatus('disconnected'))
     wsClient.onStatusChange(status => setWsStatus(status))
 
@@ -231,6 +268,7 @@ export default function LiveMonitoringPage() {
             looking_at_screen: data.status.lookingAtScreen,
             attention_level: data.status.attentionLevel,
             integrity_score: data.status.integrityScore,
+            trust_score: data.trust_score ?? session.trust_score,
             last_activity: new Date().toISOString()
           }
         }
@@ -241,14 +279,72 @@ export default function LiveMonitoringPage() {
     wsClient.on('active_streams', (data: any) => {
       if (data.streams) {
         const streams: Record<string, string> = {}
+        const now = Date.now()
         Object.entries(data.streams).forEach(([sid, sd]: [string, any]) => {
-          if (sd.video) streams[sid] = sd.video
+          if (sd.video) {
+            streams[sid] = sd.video
+            setLastFrameTime(prev => ({ ...prev, [sid]: now }))
+          }
         })
-        setVideoStreams(streams)
+        if (Object.keys(streams).length > 0) {
+          setVideoStreams(prev => ({ ...prev, ...streams }))
+          setFrameUpdateTrigger(prev => prev + 1)
+        }
+      }
+    })
+
+    // Track student heartbeats for online/offline status
+    wsClient.on('student_heartbeat', (data: any) => {
+      if (data.student_id) {
+        setSessions(prev => prev.map(s => {
+          if (s.student_id === data.student_id) {
+            return { ...s, last_activity: new Date().toISOString(), status: 'active' as const }
+          }
+          return s
+        }))
+      }
+    })
+
+    // Track when students join
+    wsClient.on('student_joined', (data: any) => {
+      if (data.student_id) {
+        toast.success(`Student joined: ${data.student_id}`, { duration: 2000 })
+        // Refresh sessions to get the new student
+        sessionAPI.getSessions(examId!).then(sessionsData => {
+          setSessions(Array.isArray(sessionsData) ? sessionsData : [])
+        }).catch(() => {})
+      }
+    })
+
+    // Track when students disconnect
+    wsClient.on('student_disconnected', (data: any) => {
+      if (data.student_id) {
+        // Mark as possibly disconnected but don't remove
+        setSessions(prev => prev.map(s => {
+          if (s.student_id === data.student_id && s.status === 'active') {
+            return { ...s, last_activity: new Date().toISOString() }
+          }
+          return s
+        }))
+        // Remove stale video frame
+        setVideoStreams(prev => {
+          const updated = { ...prev }
+          delete updated[data.student_id]
+          return updated
+        })
       }
     })
 
     wsClient.connect({ userId, role: 'teacher', examId })
+
+    // Periodically re-request active streams to catch any missed frames
+    const streamRefreshInterval = window.setInterval(() => {
+      if (wsClient.isConnected()) {
+        wsClient.send({ type: 'request_streams', exam_id: examId })
+      }
+    }, 30000)
+
+    return streamRefreshInterval
   }
 
   const handleIntervene = useCallback(async (studentId: string, action: 'warn' | 'pause' | 'terminate', message: string) => {

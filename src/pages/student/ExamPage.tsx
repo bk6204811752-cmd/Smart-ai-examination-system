@@ -460,9 +460,12 @@ export default function ExamPage() {
       toast.info(`📢 Teacher: ${data.message}`, { duration: 8000 })
     })
 
-    wsClient.on('connection_established', () =>
+    wsClient.on('connection_established', () => {
       toast.success('🔗 Live monitoring active', { duration: 1500 })
-    )
+      // ── CRITICAL FIX: Start video streaming when WebSocket connects ─────
+      // This was missing - without this call, teachers see NO video feeds
+      startVideoStreaming()
+    })
 
     // ── Heartbeat: send alive ping every 10 seconds ────────────────────
     heartbeatRef.current = window.setInterval(() => {
@@ -476,29 +479,29 @@ export default function ExamPage() {
       }
     }, 10000)
 
-    // ── Trust Score Sync: send proctoring_status every 30 seconds ─────
+    // ── Trust Score Sync: send proctoring_status every 15 seconds ─────
     trustSyncRef.current = window.setInterval(() => {
-      if (wsClient.isConnected() && proctoringStatus) {
+      if (wsClient.isConnected()) {
         wsClient.send({
           type: 'proctoring_status',
           exam_id: examId,
           student_id: userId,
           trust_score: trustScore,
           status: {
-            faceDetected: proctoringStatus.faceDetected,
-            faceCount: proctoringStatus.faceCount,
-            lookingAtScreen: proctoringStatus.lookingAtScreen,
-            audioLevel: proctoringStatus.audioLevel,
-            attentionLevel: proctoringStatus.attentionLevel,
-            environmentScore: proctoringStatus.environmentScore,
-            integrityScore: proctoringStatus.integrityScore,
-            tabSwitchCount: proctoringStatus.tabSwitchCount,
+            faceDetected: proctoringStatus?.faceDetected ?? true,
+            faceCount: proctoringStatus?.faceCount ?? 1,
+            lookingAtScreen: proctoringStatus?.lookingAtScreen ?? true,
+            audioLevel: proctoringStatus?.audioLevel ?? 0,
+            attentionLevel: proctoringStatus?.attentionLevel ?? 100,
+            environmentScore: proctoringStatus?.environmentScore ?? 100,
+            integrityScore: proctoringStatus?.integrityScore ?? trustScore,
+            tabSwitchCount: proctoringStatus?.tabSwitchCount ?? tabSwitches,
             violationCount: flags.length,
           },
           timestamp: new Date().toISOString(),
         })
       }
-    }, 30000)
+    }, 15000)
 
     // ── Brightness Monitoring During Exam ─────────────────────────────
     brightnessCheckRef.current = window.setInterval(() => {
