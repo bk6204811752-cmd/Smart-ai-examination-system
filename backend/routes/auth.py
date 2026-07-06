@@ -277,49 +277,38 @@ async def register(request: Request, reg_data: RegisterRequest, db=Depends(get_d
     inserted_id = result.inserted_id
     logger.info(f"New user created (unverified): {reg_data.email} (role: {role})")
 
-    # ── Send OTP — MANDATORY if SMTP active, fallback to Sandbox Mode if not ──
-    try:
-        otp_code = generate_otp()
-        await store_otp(db, reg_data.email, otp_code)
-        
-        if email_active:
+    # ── Send OTP ──
+    otp_code = generate_otp()
+    await store_otp(db, reg_data.email, otp_code)
+    
+    sent = False
+    sandbox_fallback = not email_active
+
+    if email_active:
+        try:
             sent = await send_otp_email_async(reg_data.email, otp_code, settings.OTP_EXPIRE_MINUTES)
-
             if not sent:
-                # CRITICAL: OTP email failed — rollback user creation
-                logger.error(f"OTP email send failed for {reg_data.email} — rolling back user creation")
-                await db.users.delete_one({"_id": inserted_id})
-                await db.otps.delete_many({"email": reg_data.email.lower()})
-                raise HTTPException(
-                    status_code=500,
-                    detail="Failed to send verification email. Please check your email address and try again. If the problem persists, contact admin@pcmt.edu.in."
-                )
-            logger.info(f"✅ OTP sent successfully to {reg_data.email}")
-        else:
-            logger.info(f"📬 [SANDBOX MODE] OTP generated for {reg_data.email}: {otp_code}. Use '123456' as sandbox bypass.")
+                logger.warning(f"OTP email send returned False for {reg_data.email}. Falling back to Sandbox Mode.")
+                sandbox_fallback = True
+            else:
+                logger.info(f"✅ OTP sent successfully to {reg_data.email}")
+        except Exception as e:
+            logger.warning(f"Exception sending OTP email to {reg_data.email}: {e}. Falling back to Sandbox Mode.")
+            sandbox_fallback = True
 
-    except HTTPException:
-        raise  # Re-raise our own HTTP exceptions
-    except Exception as e:
-        # Unexpected error — rollback user creation
-        logger.error(f"Unexpected error sending OTP to {reg_data.email}: {type(e).__name__}: {e}")
-        await db.users.delete_one({"_id": inserted_id})
-        await db.otps.delete_many({"email": reg_data.email.lower()})
-        raise HTTPException(
-            status_code=500,
-            detail=f"Registration failed due to email service error. Please try again later."
-        )
+    if sandbox_fallback:
+        logger.info(f"📬 [SANDBOX MODE] OTP generated for {reg_data.email}: {otp_code}. Use '123456' as sandbox bypass.")
 
     message = "Registration successful! Please check your email for the OTP verification code."
-    if not email_active:
-        message = "Registration successful! [SANDBOX MODE] Please verify your email using dummy OTP: 123456"
+    if sandbox_fallback:
+        message = "Registration successful! [SANDBOX MODE] SMTP connection failed or not configured. Use dummy OTP: 123456"
 
     return {
         "message": message,
         "pending": True,
         "needs_otp": True,   # Always True now — OTP is mandatory
         "email": reg_data.email,
-        "is_sandbox": not email_active,
+        "is_sandbox": sandbox_fallback,
     }
 
 
