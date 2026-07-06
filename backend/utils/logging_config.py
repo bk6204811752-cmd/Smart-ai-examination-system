@@ -8,6 +8,7 @@ Structured logging setup
 import logging
 import logging.handlers
 import json
+import os
 import sys
 from datetime import datetime
 from config import settings
@@ -70,10 +71,11 @@ def setup_logging():
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.DEBUG if settings.DEBUG else logging.INFO)
     
-    # Skip file loggers on Vercel/production read-only filesystem
-    if not settings.is_production:
-        # Create logs directory
-        import os
+    # Skip file loggers on Vercel (all environments have read-only filesystem)
+    # VERCEL env var is set in ALL Vercel environments (production, preview, development)
+    is_vercel = os.getenv("VERCEL") is not None
+    if not is_vercel and not settings.is_production:
+        # Create logs directory only on local development
         os.makedirs("logs", exist_ok=True)
     
     # Console handler
@@ -93,7 +95,7 @@ def setup_logging():
     root_logger.addHandler(console_handler)
     
     # File handler - Application logs (development only)
-    if not settings.DEBUG and not settings.is_production:
+    if not settings.DEBUG and not settings.is_production and not is_vercel:
         file_handler = logging.handlers.RotatingFileHandler(
             "logs/app.log",
             maxBytes=10 * 1024 * 1024,  # 10MB
