@@ -357,14 +357,6 @@ export default function ExamPage() {
         await engine.initialize(videoRef.current!, stream)
 
         engine.setOnViolation((violation: ProctoringViolation) => {
-          setFlags(prev => [...prev, {
-            exam_id: examId!,
-            flag_type: violation.type,
-            severity: violation.severity,
-            timestamp: violation.timestamp.toISOString(),
-            evidence: violation.message
-          }])
-
           const penalty = violation.severity === 'CRITICAL' ? 15
             : violation.severity === 'HIGH' ? 10
             : violation.severity === 'MEDIUM' ? 5 : 2

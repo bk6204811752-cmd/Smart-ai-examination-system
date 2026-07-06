@@ -35,19 +35,28 @@ def send_email(
     cc: Optional[List[str]] = None,
 ) -> bool:
     """
-    Send an email using SMTP.
-    Returns True on success, False on failure.
+    Send an email using Gmail SMTP over SSL (port 465).
+    Returns True on success, raises Exception on failure.
     """
-    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
-        logger.warning("SMTP not configured — cannot send email")
+    smtp_user     = settings.SMTP_USER
+    smtp_password = settings.SMTP_PASSWORD
+    smtp_host     = settings.SMTP_HOST or "smtp.gmail.com"
+    smtp_port     = 465  # Use SSL directly — more reliable on serverless/Lambda
+    from_email    = settings.SMTP_FROM_EMAIL or smtp_user
+    from_name     = settings.SMTP_FROM_NAME or "Smart Examination System"
+
+    if not smtp_user or not smtp_password:
+        logger.warning(
+            f"SMTP not configured — SMTP_USER={repr(smtp_user)}, "
+            f"SMTP_PASSWORD={'set' if smtp_password else 'empty'}"
+        )
         return False
 
     try:
         msg = MIMEMultipart("alternative")
-        msg["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_FROM_EMAIL}>"
-        msg["To"] = to_email
+        msg["From"]    = f"{from_name} <{from_email}>"
+        msg["To"]      = to_email
         msg["Subject"] = subject
-
         if cc:
             msg["Cc"] = ", ".join(cc)
 
@@ -57,19 +66,19 @@ def send_email(
 
         context = ssl.create_default_context()
 
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-            if settings.SMTP_USE_TLS:
-                server.starttls(context=context)
-            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+        # Use SMTP_SSL (port 465) — wraps connection in SSL from the start
+        # Much faster than STARTTLS on port 587; avoids serverless timeout issues
+        with smtplib.SMTP_SSL(smtp_host, smtp_port, context=context, timeout=15) as server:
+            server.login(smtp_user, smtp_password)
             recipients = [to_email] + (cc or [])
-            server.sendmail(settings.SMTP_FROM_EMAIL, recipients, msg.as_string())
+            server.sendmail(from_email, recipients, msg.as_string())
 
         logger.info(f"Email sent to {to_email}: {subject}")
         return True
 
     except Exception as e:
-        logger.error(f"Failed to send email to {to_email}: {e}")
-        return False
+        logger.error(f"SMTP ERROR sending to {to_email}: {type(e).__name__}: {e}")
+        raise  # Re-raise so callers can catch and react
 
 
 async def send_email_async(
@@ -78,8 +87,11 @@ async def send_email_async(
     body_text: str,
     body_html: Optional[str] = None,
 ) -> bool:
-    """Async wrapper — runs SMTP in a thread to avoid blocking."""
-    return await asyncio.to_thread(send_email, to_email, subject, body_text, body_html)
+    """Async wrapper — runs SMTP in a thread pool to avoid blocking the event loop."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        None, lambda: send_email(to_email, subject, body_text, body_html)
+    )
 
 
 # ── Shared HTML helpers ───────────────────────────────────────────────────────
@@ -159,8 +171,9 @@ Pailan College of Management and Technology"""
 
 
 async def send_otp_email_async(to_email: str, otp_code: str, expire_minutes: int = 10) -> bool:
-    """Async wrapper — runs OTP email in a thread."""
-    return await asyncio.to_thread(send_otp_email, to_email, otp_code, expire_minutes)
+    """Async wrapper — runs OTP email in executor."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: send_otp_email(to_email, otp_code, expire_minutes))
 
 
 # ── 2. Registration Pending (Waiting for Admin Approval) ─────────────────────
@@ -217,7 +230,8 @@ Pailan College of Management and Technology"""
 
 
 async def send_registration_pending_email_async(to_email: str, full_name: str) -> bool:
-    return await asyncio.to_thread(send_registration_pending_email, to_email, full_name)
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: send_registration_pending_email(to_email, full_name))
 
 
 # ── 3. Account Approved ───────────────────────────────────────────────────────
