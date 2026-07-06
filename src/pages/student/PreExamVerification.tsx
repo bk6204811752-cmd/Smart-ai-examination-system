@@ -142,6 +142,7 @@ export default function PreExamVerification() {
     startVerification()
     return () => {
       cleanup()
+      delete (window as any).__preExamStream
     }
   }, [])
 
@@ -177,13 +178,11 @@ export default function PreExamVerification() {
   }, [stream])
 
   const cleanup = () => {
-    // Do NOT stop the stream tracks here — if the user is navigating to the
-    // exam, we want to preserve the stream for reuse via window.__preExamStream.
-    // The stream will be cleaned up by ExamPage on unmount.
-    //
-    // Only stop if we are NOT handing it off to the exam page.
-    if (stream && !(window as any).__preExamStream) {
-      stream.getTracks().forEach(track => track.stop())
+    if (stream) {
+      const preExamStream = (window as any).__preExamStream
+      if (preExamStream !== stream) {
+        stream.getTracks().forEach(track => track.stop())
+      }
     }
     if (audioCtxRef.current) {
       audioCtxRef.current.close().catch(() => {})
@@ -292,8 +291,8 @@ export default function PreExamVerification() {
   const checkMicrophone = async () => {
     updateCheck('microphone', 'checking', 'Testing microphone sensitivity...')
     await delay(1200)
-    if (audioLevel > 0 || true) { // If webcam check got audio
-      updateCheck('microphone', 'passed', 'Microphone working ✓', `Audio monitoring active`)
+    if (audioLevel > 0) {
+      updateCheck('microphone', 'passed', 'Microphone working ✓', `Audio monitoring active (level: ${audioLevel})`)
     } else {
       updateCheck('microphone', 'warning', 'Microphone detected but silent', 'Try speaking to test')
     }
@@ -421,12 +420,7 @@ export default function PreExamVerification() {
           updateCheck('face', 'passed', `Face detected ✓`, 'Keep face centered and well-lit during exam')
         } else {
           setFaceDetected(false)
-          if (brightness >= 40) {
-            updateCheck('face', 'warning', 'Face not clearly detected — please check positioning', 'Move closer to camera · Face camera directly · Remove glasses if possible')
-            setFaceDetected(true)
-          } else {
-            updateCheck('face', 'failed', 'No face detected — improve lighting and positioning', 'Turn on room lights · Face the camera directly · Move closer')
-          }
+          updateCheck('face', 'warning', 'Face not clearly detected — please check positioning', 'Move closer to camera · Face camera directly · Remove glasses if possible')
         }
       }
     } catch (err) {

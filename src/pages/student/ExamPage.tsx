@@ -25,6 +25,7 @@ export default function ExamPage() {
   const navigate = useNavigate()
   const videoRef = useRef<HTMLVideoElement>(null)
   const proctoringEngineRef = useRef<ProctoringEngine | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
   const wsClientRef = useRef<WebSocketClient | null>(null)
   const videoStreamIntervalRef = useRef<number | null>(null)
   const initializingRef = useRef<boolean>(false)
@@ -51,7 +52,7 @@ export default function ExamPage() {
   const [tabSwitches, setTabSwitches] = useState(0)
   const [trustScore, setTrustScore] = useState(100)
   const [showViolationFlash, setShowViolationFlash] = useState(false)
-  const [copyBlocked, setCopyBlocked] = useState(false)
+  const [audioWaveData, setAudioWaveData] = useState<number[]>([])
 
   // Advanced violation overlay
   const [violationOverlayType, setViolationOverlayType] = useState<ViolationOverlayType | null>(null)
@@ -238,6 +239,21 @@ export default function ExamPage() {
     }
   }, [examStarted, timeRemaining, submitting])
 
+  // Real-time audio wave polling during exam
+  useEffect(() => {
+    if (!examStarted || submitting) return
+    const interval = setInterval(() => {
+      const engine = proctoringEngineRef.current
+      if (engine && typeof engine.getAudioFrequencyData === 'function') {
+        const freqData = engine.getAudioFrequencyData()
+        if (freqData.length > 0) {
+          setAudioWaveData(freqData.slice(0, 32))
+        }
+      }
+    }, 100)
+    return () => clearInterval(interval)
+  }, [examStarted, submitting])
+
   // ─── API Calls ─────────────────────────────────────────────────────────────
   const loadExam = async () => {
     try {
@@ -296,11 +312,7 @@ export default function ExamPage() {
         videoRef.current.play().catch(e => console.warn('[Camera] play():', e))
       }
 
-      // Store stream reference for cleanup
-      ;(proctoringEngineRef as any).current = {
-        _stream: stream,
-        _cleanup: () => stream.getTracks().forEach(t => t.stop())
-      }
+      streamRef.current = stream
 
       setCameraReady(true)
       setProctoringActive(true)
@@ -413,11 +425,7 @@ export default function ExamPage() {
           createProctoringFlag('dark_room', 'critical', `Room too dark (brightness: ${brightness}/255)`)
         } else {
           console.warn('[Proctoring] AI engine failed, basic monitoring continues:', msg)
-          const currentStream = videoRef.current?.srcObject as MediaStream
-          ;(proctoringEngineRef as any).current = {
-            _stream: currentStream,
-            _cleanup: () => currentStream?.getTracks().forEach(t => t.stop())
-          }
+          streamRef.current = videoRef.current?.srcObject as MediaStream | null
         }
       }
     }, 500)
@@ -625,15 +633,10 @@ export default function ExamPage() {
       wsClientRef.current.disconnect()
       wsClientRef.current = null
     }
-    if (proctoringEngineRef.current) {
-      const ref = proctoringEngineRef.current as any
-      if (typeof ref.cleanup === 'function') {
-        ref.cleanup()
-      } else if (typeof ref._cleanup === 'function') {
-        ref._cleanup()
-      }
-      proctoringEngineRef.current = null
-    }
+    proctoringEngineRef.current?.cleanup()
+    proctoringEngineRef.current = null
+    streamRef.current?.getTracks().forEach(t => t.stop())
+    streamRef.current = null
     if (videoRef.current?.srcObject) {
       (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop())
       videoRef.current.srcObject = null
@@ -724,51 +727,18 @@ export default function ExamPage() {
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
-    const preventCopy = (e: ClipboardEvent) => {
-      e.preventDefault()
-      setCopyBlocked(true)
-      setTimeout(() => setCopyBlocked(false), 2000)
-      createProctoringFlag('copy_attempt', 'low', 'Copy/paste attempt detected')
-    }
-    document.addEventListener('copy', preventCopy)
-    document.addEventListener('paste', preventCopy)
-    document.addEventListener('cut', preventCopy as any)
-
-    // Right-click prevention
-    const preventContextMenu = (e: MouseEvent) => {
-      e.preventDefault()
-      createProctoringFlag('right_click', 'low', 'Right-click attempt during exam')
-    }
-    document.addEventListener('contextmenu', preventContextMenu)
-
-    // Enhanced DevTools + OS shortcuts blocking
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Block F12, Ctrl+Shift+I, Ctrl+U, Ctrl+Shift+J, Ctrl+Shift+C
-      if (
-        e.key === 'F12' ||
-        (e.ctrlKey && e.shiftKey && ['I', 'J', 'C', 'K'].includes(e.key)) ||
-        (e.ctrlKey && e.key === 'u') ||
-        (e.ctrlKey && e.key === 'U')
-      ) {
-        e.preventDefault()
-        createProctoringFlag('devtools_attempt', 'high', 'DevTools access attempt detected')
-        toast.error('Developer tools are not allowed during exam', { duration: 3000 })
-      }
-      // Block screen capture shortcuts
       if ((e.ctrlKey && e.key === 'p') || e.key === 'PrintScreen') {
         e.preventDefault()
         createProctoringFlag('screenshot_attempt', 'medium', 'Screenshot attempt detected')
       }
-      // Block Alt+Tab (partial - can't fully prevent OS level)
       if (e.altKey && e.key === 'Tab') {
         createProctoringFlag('alt_tab', 'high', 'Alt+Tab shortcut attempt detected')
       }
-      // Block Win key attempts
       if (e.key === 'Meta' || e.key === 'OS') {
         e.preventDefault()
         createProctoringFlag('win_key', 'medium', 'Windows key pressed during exam')
       }
-      // Block Escape (might exit fullscreen)
       if (e.key === 'Escape' && document.fullscreenElement) {
         createProctoringFlag('escape_key', 'low', 'Escape key pressed during exam')
       }
@@ -777,13 +747,11 @@ export default function ExamPage() {
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
-      document.removeEventListener('copy', preventCopy)
-      document.removeEventListener('paste', preventCopy)
-      document.removeEventListener('cut', preventCopy as any)
-      document.removeEventListener('contextmenu', preventContextMenu)
       document.removeEventListener('keydown', handleKeyDown)
     }
   }
+
+  const lastFlagApiCall = useRef<Record<string, number>>({})
 
   const createProctoringFlag = async (type: string, severity: string, evidence: string) => {
     const flag = {
@@ -795,6 +763,11 @@ export default function ExamPage() {
       evidence
     }
     setFlags(prev => [...prev, flag])
+
+    const now = Date.now()
+    const lastCall = lastFlagApiCall.current[type] || 0
+    if (now - lastCall < 2000) return
+    lastFlagApiCall.current[type] = now
 
     try {
       await proctoringAPI.createFlag(flag)
@@ -1247,21 +1220,6 @@ export default function ExamPage() {
             transition={{ duration: 0.15 }}
             className="violation-flash"
           />
-        )}
-      </AnimatePresence>
-
-      {/* Copy Blocked Toast */}
-      <AnimatePresence>
-        {copyBlocked && (
-          <motion.div
-            initial={{ opacity: 0, y: -20, x: '-50%' }}
-            animate={{ opacity: 1, y: 0, x: '-50%' }}
-            exit={{ opacity: 0, y: -20, x: '-50%' }}
-            className="fixed top-4 left-1/2 z-50 bg-gray-900 text-white text-xs font-medium px-4 py-2 rounded-full shadow-xl flex items-center gap-2"
-          >
-            <X className="w-3.5 h-3.5 text-red-400" />
-            Copy/Paste not allowed during exam
-          </motion.div>
         )}
       </AnimatePresence>
 
@@ -1733,6 +1691,7 @@ export default function ExamPage() {
                 isActive: proctoringStatus.isActive,
                 integrityScore: proctoringStatus.integrityScore,
               } : null}
+              audioWaveData={audioWaveData}
               tabSwitches={tabSwitches}
               flags={flags}
               mode="live"

@@ -27,6 +27,7 @@ interface ProctoringRightPanelProps {
   tabSwitches: number
   flags: ViolationEntry[]
   mode?: 'live' | 'practice'  // 'live' = red LIVE badge, 'practice' = green PRACTICE badge
+  audioWaveData?: number[]  // real frequency data for live waveform
 }
 
 export default function ProctoringRightPanel({
@@ -38,6 +39,7 @@ export default function ProctoringRightPanel({
   tabSwitches,
   flags,
   mode = 'live',
+  audioWaveData,
 }: ProctoringRightPanelProps) {
   const audioLevel = proctoringStatus?.audioLevel ?? 0
   const isLoud = audioLevel > 30
@@ -147,12 +149,14 @@ export default function ProctoringRightPanel({
             {isLoud ? '🔊 Loud' : '🔇 Quiet'}
           </div>
         </div>
-        {/* Live waveform bars driven by actual audio level */}
+        {/* Live waveform bars driven by real frequency data */}
         <div className="flex items-end gap-1 h-10 justify-center">
-          {Array.from({ length: 12 }).map((_, i) => {
-            const barHeight = proctoringActive
-              ? Math.min(100, 15 + (audioLevel / 2.55) * (0.5 + (i % 3) * 0.25))
-              : 15
+          {(audioWaveData || Array.from({ length: 12 })).map((val, i) => {
+            const barHeight = proctoringActive && audioWaveData
+              ? Math.max(4, (val / 255) * 100)
+              : proctoringActive
+                ? Math.min(100, 15 + (audioLevel / 2.55) * (0.5 + (i % 3) * 0.25))
+                : 15
             return (
               <motion.div
                 key={i}
@@ -164,7 +168,7 @@ export default function ProctoringRightPanel({
                     : 'bg-gray-200'
                 }`}
                 animate={{ height: `${barHeight}%` }}
-                transition={{ duration: 0.15, ease: 'easeOut' }}
+                transition={{ duration: 0.1, ease: 'easeOut' }}
                 style={{ minHeight: '4px' }}
               />
             )

@@ -85,6 +85,8 @@ class ProctoringEngine {
   private lastHeadphoneWarning = 0
   private lastStatusUpdate = 0
   private readonly STATUS_UPDATE_INTERVAL = 1000
+  private lastBrightnessUpdate = 0
+  private readonly BRIGHTNESS_UPDATE_INTERVAL = 2000
 
   private status: ProctoringStatus = {
     isActive: false,
@@ -334,7 +336,11 @@ class ProctoringEngine {
       this.detectFace()
     }
 
-    this.status.brightness = this.getBrightness()
+    const now = Date.now()
+    if (now - this.lastBrightnessUpdate > this.BRIGHTNESS_UPDATE_INTERVAL) {
+      this.lastBrightnessUpdate = now
+      this.status.brightness = this.getBrightness()
+    }
 
     if (this.objectDetector && this.frameCount % 60 === 0) {
       this.detectObjects()
@@ -345,7 +351,6 @@ class ProctoringEngine {
     this.evaluateViolations()
     this.updateIntegrityScore()
 
-    const now = Date.now()
     if (now - this.lastStatusUpdate > this.STATUS_UPDATE_INTERVAL) {
       this.lastStatusUpdate = now
       this.onStatusChange?.(this.status)
@@ -417,6 +422,9 @@ class ProctoringEngine {
     } else {
       this.consecutiveHeadphone = Math.max(0, this.consecutiveHeadphone - 1)
     }
+    if (this.consecutiveHeadphone > 0 && this.status.audioLevel >= 10) {
+      this.consecutiveHeadphone = Math.max(0, this.consecutiveHeadphone - 10)
+    }
   }
 
   private checkDevTools(): void {
@@ -473,7 +481,7 @@ class ProctoringEngine {
     const gazeY = lookDown - lookUp
     const gazeMagnitude = Math.sqrt(gazeX * gazeX + gazeY * gazeY)
 
-    const isLookingAtScreen = gazeMagnitude < 0.15 && headDeviation < 0.15
+    const isLookingAtScreen = gazeMagnitude < 0.3 && headDeviation < 0.3
     this.status.lookingAtScreen = isLookingAtScreen
 
     const attentionPenalty = gazeMagnitude * 40 + (headDeviation > 1 ? Math.min(headDeviation * 30, 60) : 0)
@@ -514,25 +522,25 @@ class ProctoringEngine {
       }
     }
 
-    if (!this.status.lookingAtScreen && this.consecutiveLookingAway > 10) {
-      if (now - this.lastLookingAwayWarning > SAME_VIOLATION_COOLDOWN) {
+    if (!this.status.lookingAtScreen && this.consecutiveLookingAway > 45) {
+      if (now - this.lastLookingAwayWarning > 6000) {
         this.lastLookingAwayWarning = now
         this.addViolation({
           type: 'FACE_NOT_LOOKING',
-          severity: this.consecutiveLookingAway > 30 ? 'HIGH' : 'MEDIUM',
+          severity: this.consecutiveLookingAway > 90 ? 'HIGH' : 'MEDIUM',
           message: 'You are looking away from the screen',
           metadata: { attentionScore: this.status.attentionLevel },
         })
       }
     }
 
-    if (this.status.audioLevel > 30) {
+    if (this.status.audioLevel > 80) {
       this.consecutiveAudio++
-      if (this.consecutiveAudio > 20 && now - this.lastAudioWarning > SAME_VIOLATION_COOLDOWN) {
+      if (this.consecutiveAudio > 30 && now - this.lastAudioWarning > SAME_VIOLATION_COOLDOWN) {
         this.lastAudioWarning = now
         this.addViolation({
           type: 'AUDIO_DETECTED',
-          severity: this.status.audioLevel > 60 ? 'HIGH' : 'LOW',
+          severity: this.status.audioLevel > 150 ? 'HIGH' : 'LOW',
           message: `Sustained audio detected (level: ${this.status.audioLevel})`,
           metadata: { audioLevel: this.status.audioLevel },
         })
@@ -691,7 +699,10 @@ class ProctoringEngine {
     try {
       this.mediaRecorder = new MediaRecorder(this.stream, { mimeType: 'video/webm;codecs=vp9' })
       this.mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) this.recordedChunks.push(e.data)
+        if (e.data.size > 0) {
+          this.recordedChunks.push(e.data)
+          if (this.recordedChunks.length > 12) this.recordedChunks.shift()
+        }
       }
       this.mediaRecorder.start(5000)
       this.status.sessionRecording = true
@@ -699,7 +710,10 @@ class ProctoringEngine {
       try {
         this.mediaRecorder = new MediaRecorder(this.stream, { mimeType: 'video/webm' })
         this.mediaRecorder.ondataavailable = (e) => {
-          if (e.data.size > 0) this.recordedChunks.push(e.data)
+          if (e.data.size > 0) {
+            this.recordedChunks.push(e.data)
+            if (this.recordedChunks.length > 12) this.recordedChunks.shift()
+          }
         }
         this.mediaRecorder.start(5000)
         this.status.sessionRecording = true
@@ -713,6 +727,16 @@ class ProctoringEngine {
     }
     this.mediaRecorder = null
     this.status.sessionRecording = false
+  }
+
+  getAudioFrequencyData(): number[] {
+    if (!this.audioAnalyser || !this.audioDataArray) return []
+    this.audioAnalyser.getByteFrequencyData(this.audioDataArray)
+    return Array.from(this.audioDataArray)
+  }
+
+  getAudioLevel(): number {
+    return this.status.audioLevel
   }
 
   setOnViolation(cb: (v: ProctoringViolation) => void): void { this.onViolation = cb }

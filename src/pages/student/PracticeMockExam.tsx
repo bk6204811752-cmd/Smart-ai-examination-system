@@ -59,6 +59,7 @@ export default function PracticeMockExam() {
   // Local state
   const [examPaused, setExamPaused] = useState(false)
   const [initMessage, setInitMessage] = useState('Preparing your exam...')
+  const [audioWaveData, setAudioWaveData] = useState<number[]>([])
 
   // Proctoring Engine V1 (same as live exams)
   const proctoringEngine = useMemo(() => new ProctoringEngine(), [])
@@ -99,11 +100,6 @@ export default function PracticeMockExam() {
         trustSyncRef.current = null
       }
       
-      // Stop monitoring first
-      if (proctoringEngine) {
-        proctoringEngine.stopMonitoring()
-      }
-      
       // Get all tracks and stop them
       const stopAllTracks = (videoEl: HTMLVideoElement | null) => {
         if (videoEl?.srcObject) {
@@ -141,7 +137,7 @@ export default function PracticeMockExam() {
   useEffect(() => {
     return () => {
       if (proctoringEngine) {
-        proctoringEngine.stopMonitoring()
+        proctoringEngine.cleanup()
       }
       
       const cleanupVideo = (ref: React.RefObject<HTMLVideoElement>) => {
@@ -187,6 +183,18 @@ export default function PracticeMockExam() {
     }
   }, [examState.timeRemaining, examState.examStarted, examState.examEnded, examState.isSubmitting])
 
+  // Real-time audio wave polling during exam
+  useEffect(() => {
+    if (!examState.examStarted || examState.examEnded) return
+    const interval = setInterval(() => {
+      const freqData = proctoringEngine.getAudioFrequencyData()
+      if (freqData.length > 0) {
+        setAudioWaveData(freqData.slice(0, 32))
+      }
+    }, 100)
+    return () => clearInterval(interval)
+  }, [examState.examStarted, examState.examEnded, proctoringEngine])
+
   // Start camera when camera not yet enabled
   useEffect(() => {
     if (!examState.cameraEnabled && !examState.isInitializingCamera) {
@@ -197,22 +205,35 @@ export default function PracticeMockExam() {
   // Update sidebar video stream when exam starts
   useEffect(() => {
     const connectSidebarVideo = async () => {
-      if (sidebarVideoRef.current && examState.examStarted && examState.proctoringStatus?.isActive) {
+      if (examState.examStarted && examState.proctoringStatus?.isActive) {
         const stream = proctoringEngine.getStream()
         if (stream) {
           logger.debug('Connecting sidebar video stream')
           
-          sidebarVideoRef.current.srcObject = stream
+          // Attach to sidebar video (small camera preview in UI)
+          if (sidebarVideoRef.current) {
+            sidebarVideoRef.current.srcObject = stream
+            try {
+              await sidebarVideoRef.current.play()
+              logger.debug('Sidebar video playing', {
+                width: sidebarVideoRef.current.videoWidth,
+                height: sidebarVideoRef.current.videoHeight
+              })
+            } catch (error) {
+              logger.error('Failed to play sidebar video', error)
+            }
+          }
           
-          // Wait for video to be ready and play
-          try {
-            await sidebarVideoRef.current.play()
-            logger.debug('Sidebar video playing', {
-              width: sidebarVideoRef.current.videoWidth,
-              height: sidebarVideoRef.current.videoHeight
-            })
-          } catch (error) {
-            logger.error('Failed to play sidebar video', error)
+          // Also re-attach to main videoRef (ProctoringRightPanel's video)
+          // This handles the case where the loading screen's <video> unmounted
+          // and the ProctoringRightPanel's <video> just mounted with no srcObject
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream
+            try {
+              await videoRef.current.play()
+            } catch (error) {
+              logger.error('Failed to play main video', error)
+            }
           }
         } else {
           logger.warn('No stream available from proctoring engine')
@@ -633,7 +654,10 @@ export default function PracticeMockExam() {
         weakAreas,
         learningPath,
         performanceMetrics,
-        performanceTrend, difficultyHistory: examState.difficultyHistory
+        performanceTrend, difficultyHistory: examState.difficultyHistory,
+        // Question review data
+        questions: mockTestData.questions,
+        userAnswers: examState.answers
       }
     })
     
@@ -1100,6 +1124,7 @@ export default function PracticeMockExam() {
               isActive: examState.proctoringStatus.isActive,
               integrityScore: examState.proctoringStatus.integrityScore,
             } : null}
+            audioWaveData={audioWaveData}
             tabSwitches={examState.tabSwitches}
             flags={examState.violations.map((v: any) => typeof v === 'string' ? { evidence: v, severity: 'medium' } : v)}
             mode="practice"
