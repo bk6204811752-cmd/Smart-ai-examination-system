@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import * as faceapi from 'face-api.js'
+import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision'
 import {
   Camera, Mic, Monitor, CheckCircle, XCircle, AlertTriangle,
   Wifi, Cpu, Upload, Shield, Eye, Sun, Smartphone, Chrome,
@@ -18,6 +18,9 @@ interface VerificationCheck {
   required: boolean
   category: 'hardware' | 'software' | 'environment' | 'identity'
 }
+
+const MEDIAPIPE_WASM_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm'
+const FACE_LANDMARKER_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task'
 
 export default function PreExamVerification() {
   const params = useParams<{ examId?: string; testId?: string }>()
@@ -366,30 +369,9 @@ export default function PreExamVerification() {
 
   const checkFaceDetection = async () => {
     updateCheck('face', 'checking', 'Running AI face detection...')
-    // Give camera extra time after lighting check before running AI model
     await delay(800)
 
-    // FIX: Use REAL face-api.js detection, not a brightness proxy
-    // First check brightness as a precondition
-    let brightness = brightnessLevel
-    if (brightness === 0 && videoRef.current && canvasRef.current) {
-      const canvas = canvasRef.current
-      const ctx = canvas.getContext('2d')
-      const video = videoRef.current
-      if (ctx && video.videoWidth > 0) {
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-        const data = imageData.data
-        let sum = 0
-        for (let i = 0; i < data.length; i += 4) {
-          sum += (data[i] * 299 + data[i + 1] * 587 + data[i + 2] * 114) / 1000
-        }
-        brightness = Math.round(sum / (data.length / 4))
-      }
-    }
-
+    const brightness = brightnessLevel
     if (brightness < 35) {
       setFaceDetected(false)
       updateCheck('face', 'failed', 'Cannot detect face — room too dark', 'Fix lighting first, then re-run checks')
@@ -402,94 +384,53 @@ export default function PreExamVerification() {
       return
     }
 
+    let faceLandmarker: FaceLandmarker | null = null
     try {
-      // Load models — try primary CDN, then fallback CDN
-      if (!faceapi.nets.tinyFaceDetector.isLoaded) {
-        updateCheck('face', 'checking', 'Loading face detection AI model...')
-        const CDNS = [
-          'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/',
-          'https://unpkg.com/@vladmandic/face-api/model/'
-        ]
-        let loaded = false
-        for (const cdnUrl of CDNS) {
-          try {
-            await Promise.race([
-              faceapi.nets.tinyFaceDetector.loadFromUri(cdnUrl),
-              new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 15000))
-            ])
-            loaded = true
-            break
-          } catch {
-            console.warn('CDN failed, trying next:', cdnUrl)
-          }
-        }
-        if (!loaded) {
-          // Both CDNs failed — use brightness-based heuristic
-          updateCheck('face', 'warning', 'AI model unavailable — using basic check', 'Face detection may be less accurate')
-          setFaceDetected(brightness >= 40)
-          return
-        }
-      }
+      updateCheck('face', 'checking', 'Loading face detection AI model...')
+      const vision = await Promise.race([
+        FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_CDN),
+        new Promise<any>((_, reject) => setTimeout(() => reject(new Error('MediaPipe WASM load timeout')), 20000)),
+      ])
 
-      // Helper: try detection with given threshold
-      const tryDetect = async (threshold: number, size: number) => {
-        return faceapi.detectSingleFace(
-          videoRef.current!,
-          new faceapi.TinyFaceDetectorOptions({ inputSize: size, scoreThreshold: threshold })
-        )
-      }
+      faceLandmarker = await Promise.race([
+        FaceLandmarker.createFromOptions(vision, {
+          baseOptions: { modelAssetPath: FACE_LANDMARKER_MODEL, delegate: 'GPU' },
+          runningMode: 'VIDEO',
+          numFaces: 3,
+        }),
+        new Promise<FaceLandmarker>((_, reject) => setTimeout(() => reject(new Error('FaceLandmarker model load timeout')), 20000)),
+      ])
 
-      // Run detection with progressive thresholds
-      // Start lenient (0.3) — standard laptop webcams produce 0.25-0.45 confidence
       updateCheck('face', 'checking', 'Scanning for your face...')
-      let detection = await tryDetect(0.3, 224)
+      await delay(500)
 
-      // If nothing found, wait 1 second and retry with even lower threshold
-      if (!detection) {
-        await delay(1000)
-        detection = await tryDetect(0.2, 320)
-      }
+      const result = faceLandmarker.detectForVideo(videoRef.current!, performance.now())
+      const faceCount = result.faceLandmarks?.length || 0
 
-      // One more attempt with smallest possible threshold
-      if (!detection) {
-        await delay(1000)
-        detection = await tryDetect(0.15, 416)
-      }
-
-      if (detection) {
-        const confidence = Math.round(detection.score * 100)
+      if (faceCount > 0) {
         setFaceDetected(true)
-        updateCheck(
-          'face',
-          'passed',
-          `Face detected ✓ (${confidence}% confidence)`,
-          'Keep face centered and well-lit during exam'
-        )
+        updateCheck('face', 'passed', `Face detected ✓ (${faceCount} face${faceCount > 1 ? 's' : ''})`, 'Keep face centered and well-lit during exam')
       } else {
-        // Still nothing — give helpful guidance instead of hard failure
-        setFaceDetected(false)
-        if (brightness >= 40) {
-          // Light is OK but face not found — likely positioning issue
-          updateCheck(
-            'face',
-            'warning',
-            'Face not clearly detected — please check positioning',
-            'Move closer to camera · Face camera directly · Remove glasses if possible'
-          )
-          // Treat as warning (not hard fail) if lighting is OK
+        // Retry after a short wait
+        await delay(1000)
+        const retryResult = faceLandmarker.detectForVideo(videoRef.current!, performance.now())
+        const retryCount = retryResult.faceLandmarks?.length || 0
+
+        if (retryCount > 0) {
           setFaceDetected(true)
+          updateCheck('face', 'passed', `Face detected ✓`, 'Keep face centered and well-lit during exam')
         } else {
-          updateCheck(
-            'face',
-            'failed',
-            'No face detected — improve lighting and positioning',
-            'Turn on room lights · Face the camera directly · Move closer'
-          )
+          setFaceDetected(false)
+          if (brightness >= 40) {
+            updateCheck('face', 'warning', 'Face not clearly detected — please check positioning', 'Move closer to camera · Face camera directly · Remove glasses if possible')
+            setFaceDetected(true)
+          } else {
+            updateCheck('face', 'failed', 'No face detected — improve lighting and positioning', 'Turn on room lights · Face the camera directly · Move closer')
+          }
         }
       }
     } catch (err) {
       console.warn('Face detection error:', err)
-      // Graceful fallback: if light is decent, allow with warning
       if (brightness >= 40) {
         setFaceDetected(true)
         updateCheck('face', 'warning', 'Face check limited — camera active ✓', 'Sit clearly in front of camera during exam')
@@ -497,6 +438,8 @@ export default function PreExamVerification() {
         setFaceDetected(false)
         updateCheck('face', 'failed', 'Face detection failed — improve lighting', 'Turn on lights and reposition')
       }
+    } finally {
+      faceLandmarker?.close()
     }
   }
 

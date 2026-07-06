@@ -58,6 +58,7 @@ export default function PracticeMockExam() {
 
   // Local state
   const [examPaused, setExamPaused] = useState(false)
+  const [initMessage, setInitMessage] = useState('Preparing your exam...')
 
   // Proctoring Engine V1 (same as live exams)
   const proctoringEngine = useMemo(() => new ProctoringEngine(), [])
@@ -167,6 +168,17 @@ export default function PracticeMockExam() {
     return () => clearInterval(timer)
   }, [examState.examStarted, examState.examEnded, examState.isSubmitting])
 
+  // Auto-start exam when camera + proctoring are ready
+  useEffect(() => {
+    if (examState.cameraEnabled && examState.proctoringStatus?.isActive && !examState.examStarted && !examState.isSubmitting) {
+      setInitMessage('Starting exam...')
+      const timer = setTimeout(() => {
+        handleStartExam(true)
+      }, 800)
+      return () => clearTimeout(timer)
+    }
+  }, [examState.cameraEnabled, examState.proctoringStatus?.isActive])
+
   // Auto-submit when time expires (separate effect)
   useEffect(() => {
     if (examState.examStarted && !examState.examEnded && !examState.isSubmitting && examState.timeRemaining === 0) {
@@ -259,15 +271,17 @@ export default function PracticeMockExam() {
     return () => window.removeEventListener('blur', handleWindowBlur)
   }, [examState.examStarted, examState.examEnded, examState.isSubmitting])
 
-  // Fullscreen enforcement
+  // Fullscreen enforcement with auto re-entry
   useEffect(() => {
     const handleFullscreenChange = () => {
       const isNowFullscreen = !!document.fullscreenElement
-      dispatch({ type: 'TOGGLE_FULLSCREEN' })
+      dispatch({ type: 'SET_FULLSCREEN', payload: isNowFullscreen })
 
-      // Don't record examState.violations during submission process
       if (!isNowFullscreen && examState.examStarted && !examState.examEnded && !examState.isSubmitting) {
         proctoringEngine.recordFullscreenExit()
+        setTimeout(() => {
+          document.documentElement.requestFullscreen().catch(() => {})
+        }, 500)
       }
     }
 
@@ -301,6 +315,7 @@ export default function PracticeMockExam() {
 
   const startCamera = async () => {
     dispatch({ type: 'SET_INITIALIZING_CAMERA', payload: true })
+    setInitMessage('Initializing camera...')
 
     // ── PHASE 1: Attach stream to video element immediately ────────────
     try {
@@ -393,6 +408,7 @@ export default function PracticeMockExam() {
     }
 
     // ── PHASE 2: Initialize AI engine with the already-playing stream ──
+    setInitMessage('Loading AI proctoring engine...')
     setTimeout(async () => {
       const stream = videoRef.current?.srcObject as MediaStream | null
       if (!stream || !stream.active || !videoRef.current) return
@@ -435,8 +451,12 @@ export default function PracticeMockExam() {
     }, 500)
   }
 
-  const handleStartExam = async () => {
+  const handleStartExam = async (isAutoStart = false) => {
     if (!examState.cameraEnabled || !examState.micEnabled) {
+      if (isAutoStart) {
+        console.warn('[AutoStart] Camera/mic not ready, deferring')
+        return
+      }
       alert(
         '⚠️ CAMERA AND MICROPHONE REQUIRED\n\n' +
         'You must enable camera and microphone before starting the exam.\n\n' +
@@ -449,27 +469,30 @@ export default function PracticeMockExam() {
       return
     }
     
-    // Final examState.brightness check before allowing exam to start
+    // Brightness check: warn during auto-start, block during manual
     const currentBrightness = proctoringEngine.getBrightness()
     if (currentBrightness < 50) {
-      alert(
-        `🚨 CANNOT START EXAM\n\n` +
-        `Room lighting is too low: ${Math.round(currentBrightness)}/255\n` +
-        `Minimum required: 50/255\n\n` +
-        `✅ Turn on lights immediately\n` +
-        `✅ Ensure your face is well-lit\n` +
-        `✅ Sit near a window or lamp\n\n` +
-        `Exam cannot start until lighting improves.\n` +
-        `This is mandatory to prevent cheating.`
-      )
-      return
+      if (isAutoStart) {
+        console.warn(`[AutoStart] Low brightness (${Math.round(currentBrightness)}/255), starting anyway`)
+      } else {
+        alert(
+          `🚨 CANNOT START EXAM\n\n` +
+          `Room lighting is too low: ${Math.round(currentBrightness)}/255\n` +
+          `Minimum required: 50/255\n\n` +
+          `✅ Turn on lights immediately\n` +
+          `✅ Ensure your face is well-lit\n` +
+          `✅ Sit near a window or lamp\n\n` +
+          `Exam cannot start until lighting improves.\n` +
+          `This is mandatory to prevent cheating.`
+        )
+        return
+      }
     }
 
     // Enter fullscreen mode
     await enterFullscreen()
     
     dispatch({ type: 'START_EXAM' })
-    // setTimeRemaining(mockTestData.duration * 60)
   }
 
   const handleAnswerChange = (questionId: number, answer: any) => {
@@ -635,302 +658,60 @@ export default function PracticeMockExam() {
 
   if (!examState.examStarted) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        {/* Violation Warnings */}
-        <AnimatePresence>
-          {examState.activeViolations.map((violation, index) => (
-            <div key={`${violation.timestamp.getTime()}-${index}`} style={{ top: `${4 + index * 120}px` }}>
-              <ViolationWarning
-                violation={violation}
-                onDismiss={() => dispatch({ type: 'REMOVE_ACTIVE_VIOLATION', payload: violation })}
-              />
-            </div>
-          ))}
-        </AnimatePresence>
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto px-6">
+          {/* Logo */}
+          <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-500/30">
+            <Brain className="w-8 h-8 text-white" />
+          </div>
 
-        {/* Header */}
-        <header className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg">
-          <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <Brain className="w-8 h-8" />
-                <div>
-                  <h1 className="text-lg sm:text-xl font-bold">{mockTestData.title}</h1>
-                  <p className="text-xs sm:text-sm text-blue-100">AI-Proctored Mock Test</p>
-                </div>
+          {/* Title */}
+          <h1 className="text-2xl font-bold text-white mb-2">
+            {mockTestData.title}
+          </h1>
+          <p className="text-gray-400 text-sm mb-8">AI-Proctored Mock Test</p>
+
+          {/* Spinner + Status */}
+          {examState.isInitializingCamera && (
+            <>
+              <div className="animate-spin w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+              <p className="text-blue-400 font-medium text-sm">{initMessage}</p>
+              <p className="text-gray-600 text-xs mt-2">This may take a few seconds</p>
+            </>
+          )}
+
+          {/* Camera preview (hidden but accessible for ref) */}
+          <div className={`mt-6 bg-gray-900 rounded-xl overflow-hidden ${examState.cameraEnabled ? 'w-48 h-36 mx-auto' : 'sr-only h-0'}`}>
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover"
+            />
+          </div>
+
+          {/* Error: camera failed */}
+          {!examState.isInitializingCamera && !examState.cameraEnabled && (
+            <div className="mt-4">
+              <div className="bg-red-900/30 border border-red-500/30 rounded-xl p-4 mb-4">
+                <p className="text-red-400 font-medium text-sm">Camera initialization failed</p>
+                <p className="text-red-300 text-xs mt-1">Please check camera permissions and try again</p>
               </div>
               <button
+                onClick={() => startCamera()}
+                className="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition"
+              >
+                Retry Camera
+              </button>
+              <button
                 onClick={() => navigate('/practice')}
-                className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition min-h-[44px] text-sm sm:text-base touch-manipulation"
+                className="px-6 py-3 mt-2 bg-gray-800 text-gray-300 rounded-xl font-medium hover:bg-gray-700 transition block w-full"
               >
                 Cancel
               </button>
             </div>
-          </div>
-        </header>
-
-        <div className="max-w-4xl mx-auto px-4 py-8">
-          {/* System Check */}
-          <div className="bg-white rounded-xl shadow-lg p-6 sm:p-8 mb-6">
-            <h2 className="text-2xl font-bold mb-6 flex items-center">
-              <Target className="w-6 h-6 mr-2 text-blue-600" />
-              Pre-Exam System Check
-            </h2>
-
-            <div className="space-y-4 mb-6">
-              {/* Camera Check */}
-              <div className="flex items-center justify-between p-4 border-2 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <Camera className={`w-6 h-6 ${examState.cameraEnabled ? 'text-green-600' : 'text-gray-400'}`} />
-                  <div>
-                    <p className="font-semibold">Camera Access</p>
-                    <p className="text-sm text-gray-600">Required for proctoring</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    logger.info('Camera button clicked')
-                    logger.info('Camera state', { cameraEnabled: examState.cameraEnabled, isInitializing: examState.isInitializingCamera })
-                    if (examState.cameraEnabled) {
-                      stopCamera()
-                    } else {
-                      startCamera()
-                    }
-                  }}
-                  disabled={examState.isInitializingCamera}
-                  className={`px-4 py-2 rounded-lg min-h-[44px] touch-manipulation transition-colors ${
-                    examState.isInitializingCamera 
-                      ? 'bg-yellow-500 text-white cursor-wait' 
-                      : examState.cameraEnabled 
-                        ? 'bg-green-600 text-white hover:bg-green-700' 
-                        : 'bg-blue-600 text-white hover:bg-blue-700'
-                  }`}
-                >
-                  {examState.isInitializingCamera ? '⏳ Initializing...' : examState.cameraEnabled ? '✓ Enabled (Click to Disable)' : 'Enable Camera'}
-                </button>
-              </div>
-
-              {/* Microphone Check */}
-              <div className="flex items-center justify-between p-4 border-2 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <Mic className={`w-6 h-6 ${examState.micEnabled ? 'text-green-600' : 'text-gray-400'}`} />
-                  <div>
-                    <p className="font-semibold">Microphone Access</p>
-                    <p className="text-sm text-gray-600">Audio monitoring enabled automatically</p>
-                  </div>
-                </div>
-                <div className={`px-4 py-2 rounded-lg ${examState.micEnabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                  {examState.micEnabled ? 'Enabled ✓' : 'Enable camera first'}
-                </div>
-              </div>
-
-              {/* Screen Sharing */}
-              <div className="flex items-center justify-between p-4 border-2 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <Monitor className={`w-6 h-6 ${examState.screenSharing ? 'text-green-600' : 'text-gray-400'}`} />
-                  <div>
-                    <p className="font-semibold">Screen Sharing</p>
-                    <p className="text-sm text-gray-600">Optional screen recording</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => {}}
-                  className={`px-4 py-2 rounded-lg min-h-[44px] touch-manipulation ${
-                    examState.screenSharing ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-600'
-                  }`}
-                >
-                  {examState.screenSharing ? 'Enabled' : 'Enable'}
-                </button>
-              </div>
-            </div>
-
-            {/* Diagnostic Tools */}
-            <div className="bg-gray-50 border-2 border-gray-200 rounded-lg p-4 mb-6">
-              <h3 className="font-semibold text-gray-700 mb-3">🔧 Diagnostic Tools</h3>
-              <div className="grid grid-cols-1 gap-3">
-                <button
-                  onClick={async () => {
-                    console.log('🧪 Testing basic camera access...')
-                    try {
-                      const testStream = await navigator.mediaDevices.getUserMedia({ 
-                        video: true, 
-                        audio: true 
-                      })
-                      console.log('✅ Camera test successful!', testStream)
-                      alert('✅ Camera Test PASSED!\n\nYour camera and microphone are working correctly.\n\nCamera tracks: ' + testStream.getVideoTracks().length + '\nAudio tracks: ' + testStream.getAudioTracks().length + '\n\nYou can now try enabling the camera above.')
-                      // Stop test stream
-                      testStream.getTracks().forEach(track => track.stop())
-                    } catch (err) {
-                      console.error('❌ Camera test failed:', err)
-                      const error = err as Error
-                      alert('❌ Camera Test FAILED!\n\nError: ' + error.name + '\nMessage: ' + error.message + '\n\nPlease check:\n✅ Camera permissions\n✅ Camera not in use by other apps\n✅ Camera drivers installed')
-                    }
-                  }}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 min-h-[44px] touch-manipulation text-sm"
-                >
-                  🎥 Test Camera Independently
-                </button>
-                <button
-                  onClick={() => {
-                    logger.info('System Information')
-                    logger.info('Browser', navigator.userAgent)
-                    logger.info('Camera and mic state', { cameraEnabled: examState.cameraEnabled, micEnabled: examState.micEnabled })
-                    logger.info('Proctoring status', examState.proctoringStatus)
-                    logger.info('Video ref exists', !!videoRef.current)
-                    logger.info('MediaDevices available', !!navigator.mediaDevices)
-                    alert('📊 System info logged to console (F12)\n\nCheck console for details.')
-                  }}
-                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 min-h-[44px] touch-manipulation text-sm"
-                >
-                  📊 Show System Info
-                </button>
-              </div>
-            </div>
-
-            {/* Camera Preview - Always render for ref */}
-            <div className="mb-6">
-              {examState.cameraEnabled && <p className="font-semibold mb-2">Camera Preview</p>}
-              <div className={`relative bg-black rounded-lg overflow-hidden aspect-video ${!examState.cameraEnabled ? 'sr-only h-0 overflow-hidden' : ''}`}>
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover"
-                />
-                {examState.cameraEnabled && (
-                  <>
-                    <div className="absolute top-2 right-2 bg-red-600 text-white px-3 py-1 rounded-full text-sm flex items-center">
-                      <div className="w-2 h-2 bg-white rounded-full mr-2 animate-pulse" />
-                      Live
-                    </div>
-                  
-                  {/* Audio Level Meter */}
-                  <div className="absolute top-2 left-2 bg-black/80 rounded-lg p-2">
-                    <div className="flex items-center space-x-2">
-                      <Mic className={`w-4 h-4 ${(examState.proctoringStatus?.audioLevel || 0) > 10 ? 'text-red-400 animate-pulse' : 'text-green-400'}`} />
-                      <div className="w-32 h-2 bg-gray-700 rounded-full overflow-hidden">
-                        <div 
-                          className={`h-full transition-all ${
-                            (examState.proctoringStatus?.audioLevel || 0) > 20 ? 'bg-red-500' :
-                            (examState.proctoringStatus?.audioLevel || 0) > 10 ? 'bg-yellow-500' :
-                            'bg-green-500'
-                          }`}
-                          style={{ width: `${Math.min((examState.proctoringStatus?.audioLevel || 0) * 2, 100)}%` }}
-                        />
-                      </div>
-                      <span className="text-white text-xs font-mono">{Math.round(examState.proctoringStatus?.audioLevel || 0)}</span>
-                    </div>
-                  </div>
-                  
-                  {/* Debug Info Overlay */}
-                  <div className="absolute bottom-2 left-2 bg-black/80 text-white p-2 rounded text-xs space-y-1">
-                    <div className="flex items-center space-x-2">
-                      <span className={examState.proctoringStatus?.isActive ? 'text-green-400' : 'text-red-400'}>●</span>
-                      <span>Monitoring: {examState.proctoringStatus?.isActive ? 'Active' : 'Inactive'}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <span className={examState.proctoringStatus?.faceDetected ? 'text-green-400' : 'text-red-400'}>●</span>
-                      <span>Face: {examState.proctoringStatus?.faceDetected ? 'Detected' : 'Not Detected'}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <span className={(examState.proctoringStatus?.audioLevel || 0) > 10 ? 'text-yellow-400' : 'text-green-400'}>●</span>
-                      <span>Audio: {Math.round(examState.proctoringStatus?.audioLevel || 0)} {(examState.proctoringStatus?.audioLevel || 0) > 10 ? '🔊' : ''}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <span className={(examState.violations.length || 0) > 0 ? 'text-orange-400' : 'text-green-400'}>●</span>
-                      <span>Violations: {examState.violations.length || 0}</span>
-                    </div>
-                    {examState.proctoringStatus?.integrityScore !== undefined && (
-                      <div className="flex items-center space-x-2">
-                        <span className={examState.proctoringStatus.integrityScore > 70 ? 'text-green-400' : 'text-orange-400'}>●</span>
-                        <span>Integrity: {Math.round(examState.proctoringStatus.integrityScore)}%</span>
-                      </div>
-                    )}
-                  </div>
-                  </>
-                )}
-              </div>
-              
-              {examState.cameraEnabled && (
-                <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="flex items-start space-x-2 text-sm">
-                    <AlertTriangle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                    <div className="text-gray-700 flex-1">
-                      <strong className="text-blue-700">Testing Audio Detection:</strong>
-                      <ul className="mt-1 space-y-1 text-xs">
-                        <li>• Open console (F12) to see detailed logs</li>
-                        <li>• Make any sound - watch the audio meter above</li>
-                        <li>• You should see "🎤 Audio:" messages in console</li>
-                        <li>• Warning will appear after detecting sound</li>
-                      </ul>
-                      <button
-                        onClick={() => {
-                          console.log('🧪 Manual audio test triggered')
-                          console.log('Current audio level:', examState.proctoringStatus?.audioLevel)
-                          alert('Check console (F12) for audio monitoring details.\n\nIf you see "🎤 Audio:" messages appearing continuously, audio monitoring is working!\n\nTry talking or making noise now.')
-                        }}
-                        className="mt-2 px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
-                      >
-                        Test Audio System
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Exam Instructions */}
-            <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 mb-6">
-              <h3 className="font-bold text-lg mb-3 flex items-center">
-                <AlertTriangle className="w-5 h-5 mr-2 text-blue-600" />
-                Important Instructions
-              </h3>
-              <ul className="space-y-2 text-sm text-gray-700">
-                <li className="flex items-start">
-                  <CheckCircle className="w-4 h-4 mr-2 text-green-600 mt-0.5 flex-shrink-0" />
-                  <span>Ensure you are in a quiet, well-lit environment</span>
-                </li>
-                <li className="flex items-start">
-                  <CheckCircle className="w-4 h-4 mr-2 text-green-600 mt-0.5 flex-shrink-0" />
-                  <span>Do not switch tabs or minimize the browser during the exam</span>
-                </li>
-                <li className="flex items-start">
-                  <CheckCircle className="w-4 h-4 mr-2 text-green-600 mt-0.5 flex-shrink-0" />
-                  <span>Your face must be visible throughout the exam</span>
-                </li>
-                <li className="flex items-start">
-                  <CheckCircle className="w-4 h-4 mr-2 text-green-600 mt-0.5 flex-shrink-0" />
-                  <span>Exam will run in fullscreen mode - do not exit fullscreen</span>
-                </li>
-                <li className="flex items-start">
-                  <CheckCircle className="w-4 h-4 mr-2 text-green-600 mt-0.5 flex-shrink-0" />
-                  <span>No external assistance or resources allowed</span>
-                </li>
-                <li className="flex items-start">
-                  <CheckCircle className="w-4 h-4 mr-2 text-green-600 mt-0.5 flex-shrink-0" />
-                  <span>Questions: {mockTestData.questions.length} | Duration: {mockTestData.duration} minutes</span>
-                </li>
-                <li className="flex items-start">
-                  <CheckCircle className="w-4 h-4 mr-2 text-green-600 mt-0.5 flex-shrink-0" />
-                  <span>Passing score: {mockTestData.passingScore}%</span>
-                </li>
-              </ul>
-            </div>
-
-            {/* Start Button */}
-            <button
-              onClick={handleStartExam}
-              disabled={!examState.cameraEnabled}
-              className={`w-full py-4 rounded-lg text-lg font-bold transition min-h-[44px] touch-manipulation ${
-                examState.cameraEnabled
-                  ? 'bg-green-600 text-white hover:bg-green-700'
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              }`}
-            >
-              {examState.cameraEnabled ? 'Start Exam' : 'Enable Camera to Start'}
-            </button>
-          </div>
+          )}
         </div>
       </div>
     )
@@ -972,7 +753,7 @@ export default function PracticeMockExam() {
           lookingAtScreen={examState.proctoringStatus.lookingAtScreen}
           audioLevel={examState.proctoringStatus.audioLevel}
           isFullscreen={examState.isFullscreen}
-          brightness={examState.brightness}
+          brightness={examState.proctoringStatus.brightness ?? examState.brightness}
           attentionLevel={examState.proctoringStatus.attentionLevel}
           integrityScore={examState.proctoringStatus.integrityScore}
         />
@@ -989,17 +770,6 @@ export default function PracticeMockExam() {
           >
             Enter Fullscreen
           </button>
-        </div>
-      )}
-
-      {/* Submitting Overlay */}
-      {examState.isSubmitting && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
-          <div className="bg-white rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl text-center">
-            <div className="animate-spin w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Submitting Exam...</h2>
-            <p className="text-gray-600">Please wait while we process your answers and stop the camera.</p>
-          </div>
         </div>
       )}
 

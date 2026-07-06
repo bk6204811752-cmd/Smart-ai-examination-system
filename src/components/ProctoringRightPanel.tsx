@@ -40,7 +40,7 @@ export default function ProctoringRightPanel({
   mode = 'live',
 }: ProctoringRightPanelProps) {
   const audioLevel = proctoringStatus?.audioLevel ?? 0
-  const isLoud = audioLevel > 0.3
+  const isLoud = audioLevel > 30
 
   return (
     <div className="space-y-3 h-full">
@@ -147,34 +147,28 @@ export default function ProctoringRightPanel({
             {isLoud ? '🔊 Loud' : '🔇 Quiet'}
           </div>
         </div>
-        {/* Animated waveform bars */}
+        {/* Live waveform bars driven by actual audio level */}
         <div className="flex items-end gap-1 h-10 justify-center">
-          {Array.from({ length: 12 }).map((_, i) => (
-            <motion.div
-              key={i}
-              className={`w-2 rounded-full ${
-                proctoringActive
-                  ? isLoud
-                    ? 'bg-orange-400'
-                    : 'bg-blue-400'
-                  : 'bg-gray-200'
-              }`}
-              animate={proctoringActive ? {
-                height: [
-                  `${20 + ((i * 17 + 23) % 60)}%`,
-                  `${30 + ((i * 31 + 11) % 50)}%`,
-                  `${15 + ((i * 43 + 7) % 70)}%`,
-                ]
-              } : { height: '20%' }}
-              transition={{
-                duration: 0.5 + i * 0.05,
-                repeat: Infinity,
-                repeatType: 'reverse',
-                ease: 'easeInOut',
-              }}
-              style={{ minHeight: '4px' }}
-            />
-          ))}
+          {Array.from({ length: 12 }).map((_, i) => {
+            const barHeight = proctoringActive
+              ? Math.min(100, 15 + (audioLevel / 2.55) * (0.5 + (i % 3) * 0.25))
+              : 15
+            return (
+              <motion.div
+                key={i}
+                className={`w-2 rounded-full ${
+                  proctoringActive
+                    ? isLoud
+                      ? 'bg-orange-400'
+                      : 'bg-blue-400'
+                    : 'bg-gray-200'
+                }`}
+                animate={{ height: `${barHeight}%` }}
+                transition={{ duration: 0.15, ease: 'easeOut' }}
+                style={{ minHeight: '4px' }}
+              />
+            )
+          })}
         </div>
       </div>
 

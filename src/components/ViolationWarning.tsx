@@ -159,7 +159,7 @@ export function ProctoringStatusBar({
             <div className="w-24 h-2 bg-gray-700 rounded-full overflow-hidden">
               <div 
                 className={`h-full transition-all ${audioLevel > 15 ? 'bg-yellow-400' : 'bg-green-400'}`}
-                style={{ width: `${Math.min(audioLevel * 4, 100)}%` }}
+                style={{ width: `${Math.min((audioLevel / 255) * 100, 100)}%` }}
               />
             </div>
             {audioLevel > 15 && (

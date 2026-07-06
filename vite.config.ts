@@ -36,7 +36,7 @@ export default defineConfig({
           'ui-vendor': ['framer-motion', 'lucide-react'],
           'data-vendor': ['@tanstack/react-query', 'zustand'],
           // Proctoring in separate chunk
-          'proctoring': ['face-api.js'],
+          'proctoring': ['@mediapipe/tasks-vision'],
         },
       },
     },
@@ -46,6 +46,6 @@ export default defineConfig({
   // Enable esbuild optimization
   optimizeDeps: {
     include: ['react', 'react-dom', 'react-router-dom'],
-    exclude: ['face-api.js'], // Let it load dynamically
+    exclude: [],
   },
 })
