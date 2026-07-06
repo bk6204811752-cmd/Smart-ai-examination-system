@@ -193,26 +193,73 @@ async def login(request: Request, login_data: LoginRequest, db=Depends(get_db)):
 
 @router.post("/register")
 async def register(request: Request, reg_data: RegisterRequest, db=Depends(get_db)):
+    # Check if email already registered
     existing = await db.users.find_one({"email": reg_data.email.lower()})
     if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        # If user is unverified (previous failed attempt), delete and allow re-registration
+        if existing.get("status") == "unverified" and not existing.get("email_verified"):
+            await db.users.delete_one({"email": reg_data.email.lower()})
+            await db.otps.delete_many({"email": reg_data.email.lower()})
+            logger.info(f"Deleted stale unverified user for re-registration: {reg_data.email}")
+        else:
+            raise HTTPException(status_code=400, detail="Email already registered")
 
     role = reg_data.role.lower()
     if role not in ["student", "teacher", "admin"]:
         raise HTTPException(status_code=400, detail="Invalid role")
 
-    # CRITICAL FIX: Only set status to "pending" AFTER email is verified
-    # Initially set status to "unverified" to prevent admin approval before OTP verification
-    status = "approved" if role == "admin" else "unverified"
+    # Admin: immediate access, no OTP needed
+    if role == "admin":
+        user_doc = {
+            "email": reg_data.email.lower(),
+            "password": hash_password(reg_data.password),
+            "full_name": reg_data.full_name,
+            "role": role,
+            "status": "approved",
+            "is_active": True,
+            "email_verified": True,
+            "program": reg_data.program,
+            "semester": reg_data.semester,
+            "department": reg_data.department,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "avatar": None,
+            "cgpa": None,
+            "preferences": {
+                "theme": "light", "fontSize": "medium", "language": "en",
+                "notifications": {"email": True, "push": True, "sms": False,
+                    "examReminders": True, "resultNotifications": True, "systemUpdates": True},
+                "accessibility": {"highContrast": False, "largeText": False,
+                    "colorBlindMode": "none", "screenReader": False, "keyboardOnly": False}
+            },
+            "statistics": {"totalExamsTaken": 0, "averageScore": 0,
+                "studyHours": 0, "rank": 0, "achievements": []}
+        }
+        result = await db.users.insert_one(user_doc)
+        user_doc["_id"] = result.inserted_id
+        token = create_access_token(
+            {"sub": str(result.inserted_id), "role": role},
+            expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        )
+        return {"access_token": token, "token_type": "bearer", "user": serialize_user(user_doc), "pending": False}
 
+    # ── MANDATORY Email Check for students/teachers ─────────────────────────
+    # OTP is REQUIRED. Block registration if SMTP not configured.
+    if not _email_configured():
+        logger.error("Registration blocked: SMTP not configured. Set SMTP_USER and SMTP_PASSWORD in environment.")
+        raise HTTPException(
+            status_code=503,
+            detail="Email service is not configured on the server. Registration requires email verification. Please contact admin@pcmt.edu.in."
+        )
+
+    # Create user as "unverified" — they cannot login until OTP is verified
     user_doc = {
         "email": reg_data.email.lower(),
         "password": hash_password(reg_data.password),
         "full_name": reg_data.full_name,
         "role": role,
-        "status": status,  # unverified until email is verified
-        "is_active": (role == "admin"),  # Only admin is active immediately
-        "email_verified": (role == "admin"),  # Only admin email is pre-verified,
+        "status": "unverified",   # Changes to "pending" only after OTP verified
+        "is_active": False,        # Inactive until admin approves
+        "email_verified": False,   # False until OTP verified
         "program": reg_data.program,
         "semester": reg_data.semester,
         "department": reg_data.department,
@@ -220,66 +267,54 @@ async def register(request: Request, reg_data: RegisterRequest, db=Depends(get_d
         "avatar": None,
         "cgpa": None,
         "preferences": {
-            "theme": "light",
-            "fontSize": "medium",
-            "language": "en",
-            "notifications": {
-                "email": True, "push": True, "sms": False,
-                "examReminders": True, "resultNotifications": True, "systemUpdates": True
-            },
-            "accessibility": {
-                "highContrast": False, "largeText": False,
-                "colorBlindMode": "none", "screenReader": False, "keyboardOnly": False
-            }
+            "theme": "light", "fontSize": "medium", "language": "en",
+            "notifications": {"email": True, "push": True, "sms": False,
+                "examReminders": True, "resultNotifications": True, "systemUpdates": True},
+            "accessibility": {"highContrast": False, "largeText": False,
+                "colorBlindMode": "none", "screenReader": False, "keyboardOnly": False}
         },
-        "statistics": {
-            "totalExamsTaken": 0,
-            "averageScore": 0,
-            "studyHours": 0,
-            "rank": 0,
-            "achievements": []
-        }
+        "statistics": {"totalExamsTaken": 0, "averageScore": 0,
+            "studyHours": 0, "rank": 0, "achievements": []}
     }
 
     result = await db.users.insert_one(user_doc)
-    user_doc["_id"] = result.inserted_id
+    inserted_id = result.inserted_id
+    logger.info(f"New user created (unverified): {reg_data.email} (role: {role})")
 
-    logger.info(f"New user registered: {reg_data.email} (role: {role}, status: {status})")
+    # ── Send OTP — MANDATORY. Rollback user if email fails. ─────────────────
+    try:
+        otp_code = generate_otp()
+        await store_otp(db, reg_data.email, otp_code)
+        sent = await send_otp_email_async(reg_data.email, otp_code, settings.OTP_EXPIRE_MINUTES)
 
-    if role == "admin":
-        token = create_access_token(
-            {"sub": str(result.inserted_id), "role": role},
-            expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        if not sent:
+            # CRITICAL: OTP email failed — rollback user creation
+            logger.error(f"OTP email send failed for {reg_data.email} — rolling back user creation")
+            await db.users.delete_one({"_id": inserted_id})
+            await db.otps.delete_many({"email": reg_data.email.lower()})
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to send verification email. Please check your email address and try again. If the problem persists, contact admin@pcmt.edu.in."
+            )
+
+        logger.info(f"✅ OTP sent successfully to {reg_data.email}")
+
+    except HTTPException:
+        raise  # Re-raise our own HTTP exceptions
+    except Exception as e:
+        # Unexpected error — rollback user creation
+        logger.error(f"Unexpected error sending OTP to {reg_data.email}: {type(e).__name__}: {e}")
+        await db.users.delete_one({"_id": inserted_id})
+        await db.otps.delete_many({"email": reg_data.email.lower()})
+        raise HTTPException(
+            status_code=500,
+            detail=f"Registration failed due to email service error. Please try again later."
         )
-        return {
-            "access_token": token,
-            "token_type": "bearer",
-            "user": serialize_user(user_doc),
-            "pending": False
-        }
-
-    # Send OTP for email verification (non-blocking)
-    needs_otp = _email_configured()
-    if needs_otp:
-        try:
-            otp_code = generate_otp()
-            await store_otp(db, reg_data.email, otp_code)
-            sent = await send_otp_email_async(reg_data.email, otp_code, settings.OTP_EXPIRE_MINUTES)
-            if sent:
-                logger.info(f"✅ OTP sent successfully to {reg_data.email}")
-            else:
-                logger.warning(f"⚠️ send_otp_email_async returned False for {reg_data.email}")
-                needs_otp = False
-        except Exception as e:
-            logger.error(f"❌ Failed to send OTP to {reg_data.email}: {type(e).__name__}: {e}")
-            needs_otp = False
-    else:
-        logger.warning("⚠️ Email service not configured (SMTP_USER/SMTP_PASSWORD empty). OTP will not be sent.")
 
     return {
-        "message": "Registration successful. Please verify your email.",
+        "message": "Registration successful! Please check your email for the OTP verification code.",
         "pending": True,
-        "needs_otp": needs_otp,
+        "needs_otp": True,   # Always True now — OTP is mandatory
         "email": reg_data.email,
     }
 

@@ -59,6 +59,7 @@ class UpdateUserRequest(BaseModel):
 @router.get("")
 async def get_users(
     role: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
     db=Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
@@ -66,9 +67,20 @@ async def get_users(
     if current_user["role"] not in ["admin", "teacher"]:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    query = {}
+    # IMPORTANT: Never show fully unverified users in user management
+    # Unverified = registered but haven't verified email yet
+    query: dict = {
+        "$or": [
+            {"email_verified": True},        # Verified email users (pending/approved/suspended/rejected)
+            {"role": "admin"}                 # Admins are always visible (no OTP required)
+        ]
+    }
+
     if role and role != "all":
         query["role"] = role
+
+    if status and status != "all":
+        query["status"] = status
 
     cursor = db.users.find(query).sort("_id", -1)
     users = [serialize(u) async for u in cursor]
