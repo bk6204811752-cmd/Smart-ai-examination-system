@@ -884,7 +884,9 @@ export default function PracticeMockExam() {
                 onClick={() => {
                   if (window.confirm('Are you sure you want to resume? Make sure you\'re in fullscreen with only the exam tab open.')) {
                     proctoringEngine.resumeExam()
-                    dispatch({ type: 'SET_PROCTORING_STATUS', payload: { ...examState.proctoringStatus, isPaused: false } })
+                    if (examState.proctoringStatus) {
+                      dispatch({ type: 'SET_PROCTORING_STATUS', payload: { ...examState.proctoringStatus, isPaused: false } as ProctoringStatus })
+                    }
                     document.documentElement.requestFullscreen().catch(() => {})
                   }
                 }}
