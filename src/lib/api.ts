@@ -292,6 +292,10 @@ export const examAPI = {
     const response = await api.post(`/api/exams/${examId}/submit`, data)
     return response.data
   },
+  updateExam: async (examId: string, data: any) => {
+    const response = await api.patch(`/api/exams/${examId}`, data)
+    return response.data
+  },
 }
 
 // Results API

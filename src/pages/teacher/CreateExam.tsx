@@ -98,31 +98,76 @@ export default function CreateExamPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Validation
     if (!examData.title || !examData.course || !examData.scheduled_date) {
-      alert('Please fill in all required fields')
+      alert('Please fill in all required fields: Title, Course, and Scheduled Date')
       return
     }
 
-    if (questions.some(q => !q.question)) {
-      alert('All questions must have a question text')
+    if (questions.length === 0) {
+      alert('Please add at least one question')
       return
+    }
+
+    for (const q of questions) {
+      if (!q.question.trim()) {
+        alert('All questions must have question text')
+        return
+      }
+      if ((q.type === 'mcq' || q.type === 'multiple_select') && q.options.some(o => !o.trim())) {
+        alert(`Question "${q.question.slice(0, 30)}..." has empty options. Please fill all options.`)
+        return
+      }
+      if ((q.type === 'mcq' || q.type === 'multiple_select') && q.options.length < 2) {
+        alert(`Question "${q.question.slice(0, 30)}..." needs at least 2 options`)
+        return
+      }
+      if (q.type === 'mcq' && q.correct_answer === '') {
+        alert(`Question "${q.question.slice(0, 30)}..." — please select the correct answer`)
+        return
+      }
+      if (q.type === 'multiple_select' && (!q.correct_answer || q.correct_answer.length === 0)) {
+        alert(`Question "${q.question.slice(0, 30)}..." — please select at least one correct answer`)
+        return
+      }
+      if (q.type === 'true_false' && q.correct_answer === '') {
+        alert(`Question "${q.question.slice(0, 30)}..." — please select True or False`)
+        return
+      }
     }
 
     setLoading(true)
     try {
       const payload = {
-        ...examData,
+        title: examData.title,
+        subject: examData.course,
+        instructions: examData.description,
+        scheduled_time: examData.scheduled_date,
+        passing_marks: examData.passing_score,
+        duration: examData.duration,
+        program: examData.program,
+        exam_type: examData.exam_type,
+        proctoring_level: examData.proctoring_level,
+        shuffle_questions: examData.shuffle_questions,
+        show_results: examData.show_results,
+        difficulty: 'Medium',
         total_questions: questions.length,
-        questions: questions.map(q => ({
-          question_text: q.question,
-          question_type: q.type,
-          options: q.options,
-          correct_answer: q.correct_answer,
-          points: q.points,
-          difficulty: 'medium',
-          explanation: q.explanation
-        }))
+        questions: questions.map(q => {
+          const correctAnswer = q.type === 'mcq'
+            ? q.options.indexOf(q.correct_answer)
+            : q.type === 'multiple_select'
+              ? (q.correct_answer || []).map((a: string) => q.options.indexOf(a))
+              : q.correct_answer
+
+          return {
+            question: q.question,
+            question_type: q.type,
+            options: q.options,
+            correct_answer: correctAnswer,
+            marks: q.points,
+            difficulty: 'Medium',
+            explanation: q.explanation
+          }
+        })
       }
       
       await examAPI.createExam(payload)

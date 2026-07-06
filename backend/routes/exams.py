@@ -9,6 +9,7 @@ POST /api/exams/{examId}/submit
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional, List, Any
 from pydantic import BaseModel
+from fastapi import Body
 from bson import ObjectId
 from datetime import datetime
 
@@ -31,7 +32,7 @@ def serialize(doc):
 class QuestionModel(BaseModel):
     question: str
     options: List[str]
-    correct_answer: int
+    correct_answer: Any = None
     explanation: Optional[str] = None
     marks: int = 1
     difficulty: Optional[str] = "Medium"
@@ -50,6 +51,8 @@ class CreateExamRequest(BaseModel):
     passing_marks: int = 60
     proctoring_level: str = "standard"
     instructions: Optional[str] = None
+    shuffle_questions: bool = True
+    show_results: bool = True
     questions: Optional[List[QuestionModel]] = []
 
 
@@ -76,6 +79,8 @@ async def get_exams(
     # Teachers see their own exams
     elif current_user["role"] == "teacher":
         query = {"created_by": current_user["_id"]}
+        if program:
+            query["program"] = program
 
     cursor = db.exams.find(query).sort("_id", -1).limit(50)
     exams = [serialize(e) async for e in cursor]
@@ -120,6 +125,8 @@ async def create_exam(
         "semester": data.semester,
         "passing_marks": data.passing_marks,
         "proctoring_level": data.proctoring_level,
+        "shuffle_questions": data.shuffle_questions,
+        "show_results": data.show_results,
         "instructions": data.instructions or "Read all questions carefully before answering.",
         "questions": questions,
         "status": "active",
@@ -176,28 +183,46 @@ async def submit_exam(
             data.answers.get(q_idx_str)
         )
 
-        correct_answer_idx = question.get("correct_answer")  # int index into options
+        correct_answer_raw = question.get("correct_answer")
         options = question.get("options", [])
 
-        # Resolve correct answer text from index
+        # Resolve correct answer text from index (for MCQ/multiple_select)
         correct_answer_text = None
-        if isinstance(correct_answer_idx, int) and 0 <= correct_answer_idx < len(options):
-            correct_answer_text = options[correct_answer_idx]
+        correct_answer_idx = None
+        if isinstance(correct_answer_raw, int):
+            correct_answer_idx = correct_answer_raw
+            if 0 <= correct_answer_raw < len(options):
+                correct_answer_text = options[correct_answer_raw]
+        elif isinstance(correct_answer_raw, list):
+            # multiple_select — array of indices
+            correct_answer_idx = correct_answer_raw
+            correct_answer_text = [options[i] for i in correct_answer_raw if isinstance(i, int) and 0 <= i < len(options)]
+        else:
+            # true_false, essay, etc. — store as-is
+            correct_answer_text = correct_answer_raw
+            correct_answer_idx = correct_answer_raw
 
-        # Determine if correct:
-        # 1. Student answered with the option text (frontend sends text)
-        # 2. Student answered with the index (legacy)
+        # Determine if correct
         is_correct = False
         if student_answer is not None:
-            if correct_answer_text is not None:
-                # Compare text answer
+            if isinstance(correct_answer_raw, int):
+                # MCQ — compare against option text (frontend sends text)
+                if correct_answer_text is not None:
+                    is_correct = str(student_answer).strip().lower() == str(correct_answer_text).strip().lower()
+                if not is_correct:
+                    try:
+                        is_correct = int(student_answer) == correct_answer_raw
+                    except (ValueError, TypeError):
+                        pass
+            elif isinstance(correct_answer_raw, list):
+                # multiple_select — compare sorted arrays
+                if isinstance(student_answer, list):
+                    student_sorted = sorted(str(s).strip().lower() for s in student_answer)
+                    correct_sorted = sorted(str(c).strip().lower() for c in correct_answer_text)
+                    is_correct = student_sorted == correct_sorted
+            else:
+                # true_false, essay, short_answer — direct text comparison
                 is_correct = str(student_answer).strip().lower() == str(correct_answer_text).strip().lower()
-            if not is_correct and correct_answer_idx is not None:
-                # Also try index comparison as fallback
-                try:
-                    is_correct = int(student_answer) == int(correct_answer_idx)
-                except (ValueError, TypeError):
-                    pass
 
         if is_correct:
             correct += 1
@@ -205,7 +230,7 @@ async def submit_exam(
         detailed_results.append({
             "question": question.get("question") or question.get("question_text", ""),
             "student_answer": student_answer,
-            "correct_answer": correct_answer_text or correct_answer_idx,
+            "correct_answer": correct_answer_text if correct_answer_text is not None else correct_answer_raw,
             "correct_answer_index": correct_answer_idx,
             "is_correct": is_correct,
             "explanation": question.get("explanation", ""),
@@ -272,7 +297,7 @@ async def get_exam_attempts(
 @router.patch("/{exam_id}")
 async def update_exam(
     exam_id: str,
-    updates: dict,
+    updates: dict = Body(...),
     db=Depends(get_db),
     current_user: dict = Depends(require_teacher_or_admin)
 ):

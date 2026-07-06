@@ -35,13 +35,14 @@ def send_email(
     cc: Optional[List[str]] = None,
 ) -> bool:
     """
-    Send an email using Gmail SMTP over SSL (port 465).
+    Send an email via Gmail SMTP.
+    Tries STARTTLS (port 587) first — works on Vercel and most cloud providers.
+    Falls back to SSL (port 465) if STARTTLS fails.
     Returns True on success, raises Exception on failure.
     """
     smtp_user     = settings.SMTP_USER
     smtp_password = settings.SMTP_PASSWORD
     smtp_host     = settings.SMTP_HOST or "smtp.gmail.com"
-    smtp_port     = 465  # Use SSL directly — more reliable on serverless/Lambda
     from_email    = settings.SMTP_FROM_EMAIL or smtp_user
     from_name     = settings.SMTP_FROM_NAME or "Smart Examination System"
 
@@ -52,33 +53,59 @@ def send_email(
         )
         return False
 
+    # Build the message
+    msg = MIMEMultipart("alternative")
+    msg["From"]    = f"{from_name} <{from_email}>"
+    msg["To"]      = to_email
+    msg["Subject"] = subject
+    if cc:
+        msg["Cc"] = ", ".join(cc)
+
+    msg.attach(MIMEText(body_text, "plain"))
+    if body_html:
+        msg.attach(MIMEText(body_html, "html"))
+
+    recipients = [to_email] + (cc or [])
+    context = ssl.create_default_context()
+    last_error: Optional[Exception] = None
+
+    # ── Attempt 1: STARTTLS on port 587 (works on Vercel / most cloud hosts) ──
     try:
-        msg = MIMEMultipart("alternative")
-        msg["From"]    = f"{from_name} <{from_email}>"
-        msg["To"]      = to_email
-        msg["Subject"] = subject
-        if cc:
-            msg["Cc"] = ", ".join(cc)
-
-        msg.attach(MIMEText(body_text, "plain"))
-        if body_html:
-            msg.attach(MIMEText(body_html, "html"))
-
-        context = ssl.create_default_context()
-
-        # Use SMTP_SSL (port 465) — wraps connection in SSL from the start
-        # Much faster than STARTTLS on port 587; avoids serverless timeout issues
-        with smtplib.SMTP_SSL(smtp_host, smtp_port, context=context, timeout=15) as server:
+        with smtplib.SMTP(smtp_host, 587, timeout=15) as server:
+            server.ehlo()
+            server.starttls(context=context)
+            server.ehlo()
             server.login(smtp_user, smtp_password)
-            recipients = [to_email] + (cc or [])
             server.sendmail(from_email, recipients, msg.as_string())
-
-        logger.info(f"Email sent to {to_email}: {subject}")
+        logger.info(f"Email sent (STARTTLS:587) to {to_email}: {subject}")
         return True
-
     except Exception as e:
-        logger.error(f"SMTP ERROR sending to {to_email}: {type(e).__name__}: {e}")
-        raise  # Re-raise so callers can catch and react
+        last_error = e
+        logger.warning(
+            f"SMTP STARTTLS:587 failed for {to_email} — "
+            f"{type(e).__name__}: {e} — trying SSL:465 fallback"
+        )
+
+    # ── Attempt 2: SSL on port 465 (direct SSL, works locally) ───────────────
+    try:
+        with smtplib.SMTP_SSL(smtp_host, 465, context=context, timeout=15) as server:
+            server.login(smtp_user, smtp_password)
+            server.sendmail(from_email, recipients, msg.as_string())
+        logger.info(f"Email sent (SSL:465) to {to_email}: {subject}")
+        return True
+    except Exception as e:
+        last_error = e
+        logger.error(
+            f"SMTP SSL:465 also failed for {to_email} — "
+            f"{type(e).__name__}: {e}"
+        )
+
+    # Both methods failed
+    logger.error(
+        f"All SMTP methods failed for {to_email}. "
+        f"Last error: {type(last_error).__name__}: {last_error}"
+    )
+    raise last_error  # Re-raise so callers can catch and react
 
 
 async def send_email_async(
