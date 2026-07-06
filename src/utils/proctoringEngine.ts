@@ -163,9 +163,12 @@ class ProctoringEngine {
   }
 
   /**
-   * Initialize camera and microphone streams
+   * Initialize camera and microphone streams.
+   * @param videoElement - The <video> element to attach the stream to
+   * @param existingStream - (optional) Reuse a stream already obtained by PreExamVerification.
+   *                         If not provided, a fresh getUserMedia() call is made.
    */
-  async initialize(videoElement: HTMLVideoElement): Promise<void> {
+  async initialize(videoElement: HTMLVideoElement, existingStream?: MediaStream): Promise<void> {
     this.videoElement = videoElement
 
     console.log('🎥 Initializing proctoring engine...')
@@ -184,23 +187,30 @@ class ProctoringEngine {
         await this.loadModels()
       }
 
-      // Request camera and microphone access
-      console.log('📹 Requesting camera and microphone access...')
-      console.log('Navigator.mediaDevices available:', !!navigator.mediaDevices)
-      
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          facingMode: 'user'
-        },
-        audio: {
-          echoCancellation: false,  // Disable to get raw audio
-          noiseSuppression: false,  // Disable to detect all sounds
-          autoGainControl: false    // Disable to get true volume levels
-        }
-      })
-      console.log('✅ Camera and microphone access granted')
+      if (existingStream && existingStream.active) {
+        // ✅ Reuse the stream from PreExamVerification — no second getUserMedia needed
+        console.log('♻️ Reusing pre-exam stream (no new permission prompt)')
+        this.stream = existingStream
+      } else {
+        // Request camera and microphone access fresh
+        console.log('📹 Requesting camera and microphone access...')
+        console.log('Navigator.mediaDevices available:', !!navigator.mediaDevices)
+        
+        this.stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: 'user'
+          },
+          audio: {
+            echoCancellation: false,  // Disable to get raw audio
+            noiseSuppression: false,  // Disable to detect all sounds
+            autoGainControl: false    // Disable to get true volume levels
+          }
+        })
+        console.log('✅ Camera and microphone access granted')
+      }
+
       console.log('Stream details:', {
         id: this.stream.id,
         active: this.stream.active,
@@ -213,9 +223,11 @@ class ProctoringEngine {
         console.log('📺 Setting video srcObject...')
         
         // Clear any existing srcObject first to prevent AbortError
-        if (this.videoElement.srcObject) {
+        if (this.videoElement.srcObject && this.videoElement.srcObject !== this.stream) {
           const oldStream = this.videoElement.srcObject as MediaStream
-          oldStream.getTracks().forEach(track => track.stop())
+          if (oldStream !== this.stream) {
+            oldStream.getTracks().forEach(track => track.stop())
+          }
           this.videoElement.srcObject = null
         }
         
@@ -223,34 +235,22 @@ class ProctoringEngine {
         this.videoElement.muted = true
         this.videoElement.playsInline = true
         
-        try {
-          console.log('▶️ Playing video...')
-          await this.videoElement.play()
-          
-          console.log('✅ Video element playing')
-          console.log('Video state after play:', {
-            readyState: this.videoElement.readyState,
-            videoWidth: this.videoElement.videoWidth,
-            videoHeight: this.videoElement.videoHeight,
-            paused: this.videoElement.paused
-          })
-        } catch (playError) {
-          console.warn('⚠️ Video play error (may be non-fatal):', playError)
-          // Continue anyway - video might still work
+        try { await this.videoElement.play() } catch { /* non-fatal */ }
+
+        // Short wait for video to stabilize (non-blocking feel — UI already shows camera)
+        await new Promise(resolve => setTimeout(resolve, 300))
+
+        // Only check lighting if this is a fresh stream (not reused from pre-exam)
+        if (!existingStream) {
+          console.log('🔆 Checking lighting...')
+          const brightnessOk = this.performLightingCheck(true)
+          if (!brightnessOk) {
+            throw new Error('INSUFFICIENT_LIGHTING')
+          }
+          console.log('✅ Lighting check passed')
+        } else {
+          console.log('⏭️ Skipping lighting check (pre-exam already verified)')
         }
-        
-        // Wait for video to be ready and check brightness immediately
-        console.log('⏳ Waiting for video to stabilize...')
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        
-        console.log('🔆 Checking lighting...')
-        const brightnessOk = this.performLightingCheck(true) // Initial check with alert
-        
-        // Throw error if lighting is too poor to continue
-        if (!brightnessOk) {
-          throw new Error('INSUFFICIENT_LIGHTING')
-        }
-        console.log('✅ Lighting check passed')
       }
 
       // Setup audio monitoring

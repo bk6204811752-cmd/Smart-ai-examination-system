@@ -1,15 +1,13 @@
 import { useEffect, useState, useRef } from 'react'
-import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { useAuthStore } from '../../store/globalStore'
+import { Link } from 'react-router-dom'
 import { examAPI } from '../../lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  PlusCircle, Users, BarChart3, Monitor, LogOut, BookOpen,
-  TrendingUp, AlertTriangle, Clock, Award, Zap, Eye, Bell,
-  Settings, Calendar, Brain, Sparkles, GraduationCap, Shield,
-  ChevronRight, Play, Pause, MoreVertical, Activity, Target,
-  Home, FileText, CheckCircle, Radio, ArrowUpRight, ArrowRight,
-  UserCheck, Edit, Trash2, Search, Filter, Wifi, WifiOff, X
+  PlusCircle, Users, BarChart3, Monitor, BookOpen,
+  TrendingUp, AlertTriangle, Award, Zap, Eye, Play,
+  Brain, Sparkles, Shield,
+  Activity, FileText, Radio, ArrowUpRight, ArrowRight,
+  Search
 } from 'lucide-react'
 import { WebSocketClient } from '../../lib/websocket'
 
@@ -94,9 +92,6 @@ function SeverityBadge({ severity }: { severity: string }) {
 }
 
 export default function TeacherDashboard() {
-  const { user, logout } = useAuthStore()
-  const navigate = useNavigate()
-  const location = useLocation()
   const [myExams, setMyExams] = useState<ExamData[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -114,11 +109,10 @@ export default function TeacherDashboard() {
 
   // Connect WebSocket for live dashboard data
   useEffect(() => {
-    if (!user) return
     const ws = new WebSocketClient()
     wsRef.current = ws
-    const userId = (user as any)._id || user.email || 'teacher'
-    ws.connect({ userId, role: 'teacher', examId: 'dashboard' })
+    const teacherId = 'teacher'
+    ws.connect({ userId: teacherId, role: 'teacher', examId: 'dashboard' })
     setWsStatus('connecting')
 
     ws.onStatusChange((s) => {
@@ -159,7 +153,7 @@ export default function TeacherDashboard() {
     })
 
     return () => { ws.disconnect(); wsRef.current = null }
-  }, [user])
+  }, [])
 
   const playAlertSound = () => {
     try {
@@ -182,20 +176,13 @@ export default function TeacherDashboard() {
   const loadExams = async () => {
     try {
       const examsData = await examAPI.getExams()
-      const mine = examsData.filter((e: any) =>
-        e.created_by === user?.email ||
-        e.created_by === (user as any)?._id ||
-        e.email === user?.email
-      )
-      setMyExams(mine)
+      setMyExams(examsData)
     } catch (err) {
       console.error(err)
     } finally {
       setLoading(false)
     }
   }
-
-  const handleLogout = () => { logout(); navigate('/login') }
 
   const activeExams   = myExams.filter(e => e.status === 'active').length
   const totalStudents = myExams.reduce((s, e) => s + (e.enrolled_students || 0), 0)
@@ -252,165 +239,30 @@ export default function TeacherDashboard() {
     { title: 'Templates', desc: 'Reusable exam templates', icon: Sparkles, link: '/teacher/templates', from: 'from-amber-500', to: 'to-yellow-400', hot: false },
   ]
 
-  const navItems = [
-    { icon: Home, label: 'Dashboard', to: '/teacher/dashboard' },
-    { icon: BookOpen, label: 'My Exams', to: '/teacher/dashboard' },
-    { icon: Monitor, label: 'Live Monitor', to: '/teacher/live-monitoring', badge: liveStudentCount > 0 ? liveStudentCount : null },
-    { icon: BarChart3, label: 'Analytics', to: '/teacher/analytics' },
-    { icon: Brain, label: 'AI Generator', to: '/teacher/ai-generator' },
-    { icon: FileText, label: 'Question Bank', to: '/teacher/question-bank' },
-    { icon: Shield, label: 'Plagiarism', to: '/teacher/plagiarism' },
-    { icon: Award, label: 'Reports', to: '/teacher/reports' },
-    { icon: Bell, label: 'Notifications', to: '/notifications' },
-    { icon: Settings, label: 'Settings', to: '/settings' },
-  ]
-
   return (
-    <div className="min-h-screen bg-gray-50" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
-
-      {/* ── Sidebar ───────────────────────────────────── */}
-      <aside className="hidden lg:flex fixed left-0 top-0 h-full w-64 bg-white border-r border-gray-100 shadow-sm flex-col z-40">
-        <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-100">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-md">
-            <GraduationCap className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h1 className="font-black text-gray-900 text-base">PCMT</h1>
-            <p className="text-xs text-gray-400">Teacher Portal</p>
-          </div>
-        </div>
-
-        {/* Teacher profile */}
-        <div className="mx-4 mt-4 p-3 rounded-xl bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-100">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-indigo-500 rounded-full flex items-center justify-center text-white font-bold text-sm shadow">
-              {user?.full_name?.charAt(0)?.toUpperCase() || 'T'}
-            </div>
-            <div className="min-w-0">
-              <p className="font-semibold text-gray-900 text-sm truncate">{user?.full_name || 'Teacher'}</p>
-              <p className="text-xs text-gray-500">{(user as any)?.department || 'Faculty'}</p>
-            </div>
-          </div>
-          {/* WS Status */}
-          <div className={`mt-2 flex items-center gap-1.5 text-xs font-medium ${wsStatus === 'connected' ? 'text-green-600' : wsStatus === 'connecting' ? 'text-amber-500' : 'text-gray-400'}`}>
-            {wsStatus === 'connected' ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-            {wsStatus === 'connected' ? 'Live Feed Active' : wsStatus === 'connecting' ? 'Connecting...' : 'Offline'}
-          </div>
-        </div>
-
-        <nav className="flex-1 px-4 mt-4 space-y-1">
-          {navItems.map(item => {
-            const isActive = location.pathname === item.to ||
-              (item.to !== '/teacher/dashboard' && location.pathname.startsWith(item.to))
-            return (
-              <Link
-                key={item.label}
-                to={item.to}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                  isActive
-                    ? 'bg-blue-600 text-white shadow-sm shadow-blue-200'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                }`}
-              >
-                <item.icon className="w-4 h-4 shrink-0" />
-                <span className="flex-1">{item.label}</span>
-                {(item as any).badge && (
-                  <span className="bg-green-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full animate-pulse">
-                    {(item as any).badge}
-                  </span>
-                )}
-              </Link>
-            )
-          })}
-        </nav>
-
-        <div className="p-4 border-t border-gray-100">
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-600 transition-all"
+    <>
+      {/* Live Violation Alert Banner */}
+      <AnimatePresence>
+        {liveAlerts.length > 0 && liveAlerts[0].severity === 'CRITICAL' && (
+          <motion.div
+            key={liveAlerts[0].id}
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="bg-red-600 text-white px-6 py-3 flex items-center gap-3 mb-4 rounded-xl"
           >
-            <LogOut className="w-4 h-4" />
-            Sign Out
-          </button>
-        </div>
-      </aside>
+            <AlertTriangle className="w-4 h-4 shrink-0 animate-pulse" />
+            <p className="text-sm font-semibold flex-1">
+              🚨 CRITICAL: Student <strong>{liveAlerts[0].student_id}</strong> — {liveAlerts[0].message}
+            </p>
+            <Link to="/teacher/live-monitoring" className="text-xs font-bold bg-white/20 hover:bg-white/30 px-3 py-1 rounded-lg transition-all shrink-0">
+              View Now →
+            </Link>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* ── Main ──────────────────────────────────────── */}
-      <div className="lg:ml-64">
-
-        {/* Top bar */}
-        <header className="bg-white border-b border-gray-100 sticky top-0 z-30 shadow-sm">
-          <div className="px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-            <div className="hidden lg:block">
-              <h1 className="font-bold text-gray-900 flex items-center gap-2">
-                Teacher Dashboard
-                {liveStudentCount > 0 && (
-                  <span className="flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-100 px-2.5 py-1 rounded-full">
-                    <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                    {liveStudentCount} students live
-                  </span>
-                )}
-              </h1>
-              <p className="text-sm text-gray-500">{new Date().toLocaleDateString('en-IN', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
-            </div>
-            <div className="lg:hidden flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
-                <GraduationCap className="w-5 h-5 text-white" />
-              </div>
-              <span className="font-black text-gray-900">PCMT</span>
-            </div>
-            <div className="flex items-center gap-3">
-              {liveStudentCount > 0 && (
-                <Link
-                  to="/teacher/live-monitoring"
-                  className="hidden sm:flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 transition-all shadow-sm shadow-green-200"
-                >
-                  <Radio className="w-4 h-4 animate-pulse" />
-                  Live Monitor
-                </Link>
-              )}
-              <Link
-                to="/teacher/create-exam"
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-all shadow-sm shadow-blue-200"
-              >
-                <PlusCircle className="w-4 h-4" />
-                <span className="hidden sm:inline">New Exam</span>
-              </Link>
-              <Link to="/notifications" className="relative p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all">
-                <Bell className="w-5 h-5" />
-                {liveAlerts.some(a => a.severity === 'CRITICAL') && (
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                )}
-              </Link>
-              <button onClick={handleLogout} className="hidden lg:flex p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all">
-                <LogOut className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        </header>
-
-        {/* Live Violation Alert Banner */}
-        <AnimatePresence>
-          {liveAlerts.length > 0 && liveAlerts[0].severity === 'CRITICAL' && (
-            <motion.div
-              key={liveAlerts[0].id}
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="bg-red-600 text-white px-6 py-3 flex items-center gap-3"
-            >
-              <AlertTriangle className="w-4 h-4 shrink-0 animate-pulse" />
-              <p className="text-sm font-semibold flex-1">
-                🚨 CRITICAL: Student <strong>{liveAlerts[0].student_id}</strong> — {liveAlerts[0].message}
-              </p>
-              <Link to="/teacher/live-monitoring" className="text-xs font-bold bg-white/20 hover:bg-white/30 px-3 py-1 rounded-lg transition-all shrink-0">
-                View Now →
-              </Link>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <main className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+      <div className="max-w-7xl mx-auto">
 
           {/* ── STAT CARDS ──────────────────────────────── */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -699,25 +551,7 @@ export default function TeacherDashboard() {
             </div>
           </div>
 
-        </main>
       </div>
-
-      {/* Mobile bottom nav */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 shadow-lg z-40 flex justify-around py-2 px-4">
-        {[
-          { icon: Home, label: 'Home', to: '/teacher/dashboard' },
-          { icon: BookOpen, label: 'Exams', to: '/teacher/dashboard' },
-          { icon: Monitor, label: 'Monitor', to: '/teacher/live-monitoring' },
-          { icon: BarChart3, label: 'Analytics', to: '/teacher/analytics' },
-          { icon: Settings, label: 'Settings', to: '/settings' },
-        ].map(item => (
-          <Link key={item.label} to={item.to} className="flex flex-col items-center gap-0.5 py-1 px-2 text-gray-400 hover:text-blue-600 transition-colors">
-            <item.icon className="w-5 h-5" />
-            <span className="text-xs">{item.label}</span>
-          </Link>
-        ))}
-      </nav>
-
-    </div>
+    </>
   )
 }

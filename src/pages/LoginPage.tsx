@@ -52,8 +52,14 @@ export default function LoginPage() {
         else navigate('/student/dashboard')
       }
     } catch (err: any) {
-      const msg = err?.response?.data?.detail || 'Invalid credentials. Please try again.'
-      toast.error(msg)
+      // Network error (backend not running)
+      if (!err.response) {
+        toast.error('Cannot connect to server. Please ensure the backend is running on port 8000.')
+      } else {
+        // Auth error from backend
+        const msg = err?.response?.data?.detail || err?.message || 'Invalid credentials. Please try again.'
+        toast.error(msg)
+      }
     } finally {
       setLoading(false)
     }

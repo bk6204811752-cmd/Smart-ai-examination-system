@@ -1,6 +1,5 @@
 {
   "version": 2,
-  "name": "pcmt-ai-exam-system",
   "builds": [
     {
       "src": "api/index.py",

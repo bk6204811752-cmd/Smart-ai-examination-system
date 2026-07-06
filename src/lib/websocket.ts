@@ -30,7 +30,7 @@ export class WebSocketClient {
   private userInfo: { userId: string; role: string; examId?: string } | null = null
 
   constructor(options: WebSocketOptions = {}) {
-    const WS_URL = (import.meta as any).env?.VITE_WS_URL || 'ws://localhost:8000'
+    const WS_URL = (import.meta as any).env?.VITE_WS_URL || (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + (window.location.host || 'localhost:8000')
     this.url = options.url || WS_URL
     this.reconnectInterval = options.reconnectInterval || 3000
     this.maxReconnectAttempts = options.maxReconnectAttempts || 10
@@ -51,12 +51,9 @@ export class WebSocketClient {
       return
     }
 
-    // Build WebSocket URL with path parameters to match backend: /ws/{exam_id}/{user_id}/{role}
     const examId = userInfo.examId || 'default'
-    const userId = userInfo.userId
-    const role = userInfo.role
     
-    const wsUrl = `${this.url}/ws/${examId}/${userId}/${role}`
+    const wsUrl = `${this.url}/ws/${examId}?token=${token}`
     console.log('🌐 Connecting to WebSocket:', wsUrl)
 
     try {

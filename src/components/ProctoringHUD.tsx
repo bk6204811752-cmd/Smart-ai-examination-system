@@ -1,9 +1,10 @@
 import { motion } from 'framer-motion'
-import { Camera, Shield, Eye, EyeOff, AlertTriangle, Mic } from 'lucide-react'
+import { Camera, Shield, Eye, EyeOff, AlertTriangle, Mic, Loader2 } from 'lucide-react'
 import type { ProctoringStatus } from '../utils/proctoringEngine'
 
 interface ProctoringHUDProps {
   proctoringActive: boolean
+  cameraReady: boolean          // stream is attached to video element
   proctoringStatus: ProctoringStatus | null
   trustScore: number
   violationCount: number
@@ -15,6 +16,7 @@ interface ProctoringHUDProps {
 
 export default function ProctoringHUD({
   proctoringActive,
+  cameraReady,
   proctoringStatus,
   trustScore,
   violationCount,
@@ -23,7 +25,6 @@ export default function ProctoringHUD({
   examLoaded,
   isLoading,
 }: ProctoringHUDProps) {
-  // SVG gauge parameters
   const radius = 36
   const circumference = 2 * Math.PI * radius
   const offset = circumference - (trustScore / 100) * circumference
@@ -47,7 +48,7 @@ export default function ProctoringHUD({
     },
     {
       label: 'Audio',
-      active: true, // always shown as monitoring
+      active: true,
       icon: Mic,
       okText: 'Monitoring',
       failText: 'Error',
@@ -56,7 +57,7 @@ export default function ProctoringHUD({
 
   return (
     <div className="space-y-4">
-      {/* Camera Preview with trust ring */}
+      {/* Camera Preview */}
       <div>
         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
           <Camera className="w-3.5 h-3.5 text-blue-500" />
@@ -64,6 +65,7 @@ export default function ProctoringHUD({
         </h3>
 
         <div className="relative rounded-xl overflow-hidden bg-gray-900">
+          {/* Video element — always rendered so videoRef is always attached */}
           <video
             ref={videoRef}
             autoPlay
@@ -73,8 +75,8 @@ export default function ProctoringHUD({
             style={{ minHeight: '160px', maxHeight: '180px', objectFit: 'cover' }}
           />
 
-          {/* LIVE badge */}
-          {proctoringActive && (
+          {/* LIVE badge — camera active + AI proctoring running */}
+          {proctoringActive && cameraReady && (
             <div className="absolute top-2 left-2 flex flex-col gap-1">
               <div className="bg-red-600 text-white px-2 py-0.5 rounded-full text-xs font-bold flex items-center gap-1">
                 <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
@@ -89,9 +91,20 @@ export default function ProctoringHUD({
             </div>
           )}
 
-          {/* Start camera overlay */}
-          {!proctoringActive && examLoaded && !isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-xl">
+          {/* Camera ready but AI still loading */}
+          {cameraReady && !proctoringActive && (
+            <div className="absolute top-2 left-2">
+              <div className="bg-blue-700/90 text-white px-2 py-0.5 rounded-full text-xs font-bold flex items-center gap-1.5">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Monitoring...
+              </div>
+            </div>
+          )}
+
+          {/* Start Camera button — ONLY when camera is NOT ready at all */}
+          {!cameraReady && examLoaded && !isLoading && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 rounded-xl gap-3">
+              <Camera className="w-8 h-8 text-gray-400" />
               <button
                 onClick={onStartCamera}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all shadow-lg shadow-blue-500/40"
@@ -102,7 +115,14 @@ export default function ProctoringHUD({
             </div>
           )}
 
-          {/* Face status indicator ring */}
+          {/* Loading state */}
+          {!cameraReady && isLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-xl">
+              <Loader2 className="w-6 h-6 text-blue-400 animate-spin" />
+            </div>
+          )}
+
+          {/* Face status ring */}
           {proctoringActive && proctoringStatus && (
             <div className={`absolute inset-0 rounded-xl pointer-events-none border-2 transition-colors duration-500 ${
               proctoringStatus.faceDetected
@@ -114,7 +134,7 @@ export default function ProctoringHUD({
           )}
         </div>
 
-        {/* Status Items */}
+        {/* AI status items */}
         {proctoringActive && proctoringStatus && (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {statusItems.map(item => (
@@ -133,10 +153,19 @@ export default function ProctoringHUD({
           </div>
         )}
 
-        {!proctoringActive && examLoaded && (
+        {/* Camera required warning */}
+        {!cameraReady && examLoaded && !isLoading && (
           <p className="text-xs text-red-600 mt-2 font-medium flex items-center gap-1">
             <AlertTriangle className="w-3.5 h-3.5" />
             Camera required for this exam
+          </p>
+        )}
+
+        {/* Camera ready, monitoring basic */}
+        {cameraReady && !proctoringActive && (
+          <p className="text-xs text-blue-600 mt-2 font-medium flex items-center gap-1">
+            <Camera className="w-3.5 h-3.5" />
+            Camera active — monitoring
           </p>
         )}
       </div>
@@ -149,17 +178,9 @@ export default function ProctoringHUD({
         </h3>
 
         <div className="flex items-center gap-4">
-          {/* SVG Circular Gauge */}
           <div className="relative shrink-0">
             <svg width="90" height="90" viewBox="0 0 90 90" className="trust-gauge-svg">
-              {/* Background circle */}
-              <circle
-                cx="45" cy="45" r={radius}
-                fill="none"
-                stroke="#e5e7eb"
-                strokeWidth="8"
-              />
-              {/* Trust score circle */}
+              <circle cx="45" cy="45" r={radius} fill="none" stroke="#e5e7eb" strokeWidth="8" />
               <motion.circle
                 cx="45" cy="45" r={radius}
                 fill="none"
@@ -180,10 +201,7 @@ export default function ProctoringHUD({
           </div>
 
           <div className="flex-1">
-            <div
-              className="text-sm font-bold mb-0.5"
-              style={{ color: trustColor }}
-            >
+            <div className="text-sm font-bold mb-0.5" style={{ color: trustColor }}>
               {trustLabel} Trust
             </div>
             <div className="text-xs text-gray-500 leading-relaxed">

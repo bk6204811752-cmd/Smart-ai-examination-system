@@ -138,7 +138,6 @@ interface AuthState {
   user: User | null
   token: string | null
   isAuthenticated: boolean
-  sessionExpiry: Date | null
 }
 
 interface AuthActions {
@@ -159,21 +158,18 @@ export const useAuthStore = create<AuthState & AuthActions>()(
         user: null,
         token: null,
         isAuthenticated: false,
-        sessionExpiry: null,
 
         // Actions
         login: (user, token) => set({
           user,
           token,
           isAuthenticated: true,
-          sessionExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
         }),
 
         logout: () => set({
           user: null,
           token: null,
           isAuthenticated: false,
-          sessionExpiry: null
         }),
 
         updateUser: (updates) => set((state) => ({
@@ -189,15 +185,13 @@ export const useAuthStore = create<AuthState & AuthActions>()(
             : null
         })),
 
-        refreshSession: () => set({
-          sessionExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000)
-        }),
+        // No-op: session refresh is handled by JWT token refresh in api.ts interceptor
+        refreshSession: () => {},
 
         // Compatibility aliases for legacy code
         setUser: (user: User) => set((state) => ({
           user,
           isAuthenticated: true,
-          sessionExpiry: state.sessionExpiry || new Date(Date.now() + 24 * 60 * 60 * 1000)
         })),
         setToken: (token: string) => set({ token })
       })),
@@ -207,13 +201,7 @@ export const useAuthStore = create<AuthState & AuthActions>()(
           user: state.user,
           token: state.token,
           isAuthenticated: state.isAuthenticated,
-          sessionExpiry: state.sessionExpiry ? state.sessionExpiry.toISOString() : null
         }),
-        merge: (persisted: any, current) => ({
-          ...current,
-          ...persisted,
-          sessionExpiry: persisted?.sessionExpiry ? new Date(persisted.sessionExpiry) : null
-        })
       }
     ),
     { name: 'AuthStore' }

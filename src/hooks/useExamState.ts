@@ -5,7 +5,7 @@
 
 import { useReducer, Dispatch } from 'react'
 import { DifficultyLevel } from '../utils/adaptiveExamEngine'
-import { ProctoringStatus, ProctoringViolation } from '../utils/proctoringEngine_v2'
+import { ProctoringStatus, ProctoringViolation } from '../utils/proctoringEngine'
 
 export interface ExamState {
   // Exam Core

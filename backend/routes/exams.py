@@ -149,13 +149,14 @@ async def submit_exam(
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
 
-    # Check if already submitted
+    # Check if already submitted — allow re-submission gracefully (return existing)
     existing = await db.submissions.find_one({
         "exam_id": exam_id,
         "student_id": str(current_user["_id"])
     })
     if existing:
-        raise HTTPException(status_code=400, detail="You have already submitted this exam")
+        existing["_id"] = str(existing["_id"])
+        return existing
 
     # Grade the exam
     questions = exam.get("questions", [])
@@ -164,18 +165,48 @@ async def submit_exam(
     detailed_results = []
 
     for i, question in enumerate(questions):
-        q_key = str(i)
-        student_answer = data.answers.get(q_key)
-        correct_answer = question.get("correct_answer")
-        is_correct = student_answer == correct_answer
+        # Frontend can key answers by: question._id, question.id, or str(i)
+        q_id_str = str(question.get("_id", ""))
+        q_id_alt = str(question.get("id", ""))
+        q_idx_str = str(i)
+
+        student_answer = (
+            data.answers.get(q_id_str) or
+            data.answers.get(q_id_alt) or
+            data.answers.get(q_idx_str)
+        )
+
+        correct_answer_idx = question.get("correct_answer")  # int index into options
+        options = question.get("options", [])
+
+        # Resolve correct answer text from index
+        correct_answer_text = None
+        if isinstance(correct_answer_idx, int) and 0 <= correct_answer_idx < len(options):
+            correct_answer_text = options[correct_answer_idx]
+
+        # Determine if correct:
+        # 1. Student answered with the option text (frontend sends text)
+        # 2. Student answered with the index (legacy)
+        is_correct = False
+        if student_answer is not None:
+            if correct_answer_text is not None:
+                # Compare text answer
+                is_correct = str(student_answer).strip().lower() == str(correct_answer_text).strip().lower()
+            if not is_correct and correct_answer_idx is not None:
+                # Also try index comparison as fallback
+                try:
+                    is_correct = int(student_answer) == int(correct_answer_idx)
+                except (ValueError, TypeError):
+                    pass
 
         if is_correct:
             correct += 1
 
         detailed_results.append({
-            "question": question.get("question"),
+            "question": question.get("question") or question.get("question_text", ""),
             "student_answer": student_answer,
-            "correct_answer": correct_answer,
+            "correct_answer": correct_answer_text or correct_answer_idx,
+            "correct_answer_index": correct_answer_idx,
             "is_correct": is_correct,
             "explanation": question.get("explanation", ""),
             "marks": question.get("marks", 1)
@@ -216,6 +247,7 @@ async def submit_exam(
     )
 
     return submission
+
 
 
 @router.get("/{exam_id}/attempts")

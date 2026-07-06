@@ -4,7 +4,7 @@ import { logger } from './logger'
 import { toast } from 'sonner'
 
 // Use relative URL in production (same domain on Vercel), fallback to localhost in dev
-const API_URL = (import.meta as any).env?.VITE_API_URL || (import.meta as any).env?.DEV ? 'http://localhost:8000' : ''
+const API_URL = (import.meta as any).env?.VITE_API_URL || ((import.meta as any).env?.DEV ? 'http://localhost:8000' : '')
 
 // Offline request queue
 interface QueuedRequest {

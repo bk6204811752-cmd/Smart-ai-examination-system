@@ -706,7 +706,7 @@ export default function LiveMonitoringPage() {
 
                           {/* Metrics */}
                           <div className="flex items-center gap-4 flex-shrink-0">
-                            {/* Audio Level */}
+                           {/* Audio Level */}
                             {session.audio_level !== undefined && (
                               <div className="hidden md:flex items-center gap-1">
                                 <Mic className="w-3.5 h-3.5 text-gray-500" />
@@ -714,10 +714,13 @@ export default function LiveMonitoringPage() {
                                   {[1, 2, 3].map(bar => (
                                     <div
                                       key={bar}
-                                      className="w-1 rounded-sm"
+                                      className="w-1 rounded-sm transition-all"
                                       style={{
                                         height: `${bar * 4}px`,
-                                        backgroundColor: (session.audio_level || 0) > bar * 25 ? '#10b981' : '#374151'
+                                        backgroundColor: (session.audio_level || 0) > 75
+                                          ? '#ef4444' // red — loud/suspicious
+                                          : (session.audio_level || 0) > bar * 25
+                                            ? '#10b981' : '#374151'
                                       }}
                                     />
                                   ))}
@@ -759,6 +762,32 @@ export default function LiveMonitoringPage() {
                                 }
                               </div>
                             )}
+
+                            {/* Quick Action Buttons */}
+                            <div className="hidden xl:flex items-center gap-1 ml-1" onClick={e => e.stopPropagation()}>
+                              <button
+                                onClick={() => handleIntervene(session.student_id, 'warn', 'Please follow exam rules. Official warning.')}
+                                title="Warn student"
+                                className="px-2 py-1 bg-yellow-950/60 border border-yellow-700/50 text-yellow-400 text-[10px] font-bold rounded hover:bg-yellow-900/70 transition"
+                              >
+                                ⚠
+                              </button>
+                              <button
+                                onClick={() => handleIntervene(session.student_id, 'pause', 'Your exam has been paused by the proctor.')}
+                                title="Pause exam"
+                                className="px-2 py-1 bg-orange-950/60 border border-orange-700/50 text-orange-400 text-[10px] font-bold rounded hover:bg-orange-900/70 transition"
+                              >
+                                ⏸
+                              </button>
+                              <button
+                                onClick={() => { setSelectedStudent(session.student_id); setShowStudentModal(true) }}
+                                title="View details"
+                                className="px-2 py-1 bg-blue-950/60 border border-blue-700/50 text-blue-400 text-[10px] font-bold rounded hover:bg-blue-900/70 transition"
+                              >
+                                🔍
+                              </button>
+                            </div>
+
                           </div>
                         </div>
                       </motion.div>

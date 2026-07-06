@@ -34,7 +34,6 @@ export default function ExamResultPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<SubmissionResult | null>(null)
-  const [showAnswers, setShowAnswers] = useState(false)
   const [allResults, setAllResults] = useState<SubmissionResult[]>([])
 
   useEffect(() => {
@@ -330,81 +329,122 @@ export default function ExamResultPage() {
           </motion.div>
         )}
 
-        {/* Question Review */}
+        {/* Question Review - Always Visible */}
         {result.detailed_results && result.detailed_results.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="bg-white rounded-xl shadow-sm p-6 mb-8"
+            className="bg-white rounded-2xl shadow-sm mb-8 overflow-hidden border border-gray-100"
           >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold">Question Review</h3>
-              <button
-                onClick={() => setShowAnswers(!showAnswers)}
-                className="text-blue-600 hover:text-blue-700 font-medium px-4 py-2 border border-blue-200 rounded-lg hover:bg-blue-50 transition"
-              >
-                {showAnswers ? 'Hide' : 'Show'} Answers
-              </button>
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">📋 Question Review</h3>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  {result.detailed_results.filter(q => q.is_correct).length} correct out of {result.detailed_results.length} questions
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 text-xs">
+                  <div className="w-3 h-3 rounded-full bg-green-500" /><span className="text-gray-600 font-medium">Correct</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <div className="w-3 h-3 rounded-full bg-red-500" /><span className="text-gray-600 font-medium">Wrong</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <div className="w-3 h-3 rounded-full bg-gray-300" /><span className="text-gray-600 font-medium">Skipped</span>
+                </div>
+              </div>
             </div>
 
-            {!showAnswers && (
-              <p className="text-gray-500 text-sm italic">Click "Show Answers" to review your answers with explanations.</p>
-            )}
-
-            {showAnswers && (
-              <div className="space-y-4">
-                {result.detailed_results.map((q, index) => (
+            {/* Questions List */}
+            <div className="divide-y divide-gray-50">
+              {result.detailed_results.map((q, index) => {
+                const isSkipped = q.student_answer === null || q.student_answer === undefined || q.student_answer === ''
+                return (
                   <div
                     key={index}
-                    className={`border rounded-xl p-4 ${
-                      q.is_correct ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+                    className={`p-5 sm:p-6 transition-colors ${
+                      isSkipped ? 'bg-gray-50/50' :
+                      q.is_correct ? 'bg-green-50/30' : 'bg-red-50/30'
                     }`}
                   >
-                    <div className="flex items-start gap-3 mb-3">
-                      {q.is_correct ? (
-                        <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                      ) : (
-                        <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                      )}
+                    {/* Question Row Header */}
+                    <div className="flex items-start gap-3 mb-4">
+                      {/* Status Icon */}
+                      <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                        isSkipped ? 'bg-gray-100 text-gray-500' :
+                        q.is_correct ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                      }`}>
+                        {isSkipped ? '—' : q.is_correct ? '✓' : '✗'}
+                      </div>
                       <div className="flex-1">
+                        {/* Q# and marks */}
                         <div className="flex items-center justify-between mb-1">
-                          <span className="font-semibold text-gray-800">Question {index + 1}</span>
-                          <span className="text-sm text-gray-500">
-                            {q.marks || 1} {(q.marks || 1) === 1 ? 'mark' : 'marks'}
+                          <span className={`text-xs font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${
+                            isSkipped ? 'bg-gray-100 text-gray-500' :
+                            q.is_correct ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                          }`}>
+                            Q{index + 1} • {isSkipped ? 'Skipped' : q.is_correct ? 'Correct' : 'Incorrect'}
+                          </span>
+                          <span className="text-xs text-gray-400 font-medium">
+                            {q.is_correct ? (q.marks || 1) : 0}/{q.marks || 1} {(q.marks || 1) === 1 ? 'mark' : 'marks'}
                           </span>
                         </div>
-                        <p className="text-gray-800 mb-3">{q.question}</p>
-                      </div>
-                    </div>
-
-                    <div className="grid md:grid-cols-2 gap-4 mb-3 ml-8">
-                      <div className="bg-white rounded-lg p-3 border">
-                        <p className="text-xs font-medium text-gray-500 mb-1">Your Answer:</p>
-                        <p className={`font-medium ${q.is_correct ? 'text-green-700' : 'text-red-700'}`}>
-                          {q.student_answer !== null && q.student_answer !== undefined
-                            ? String(q.student_answer)
-                            : <span className="italic text-gray-400">Not answered</span>}
+                        {/* Question Text */}
+                        <p className="text-gray-900 text-sm sm:text-base font-medium leading-relaxed">
+                          {q.question || 'Question text unavailable'}
                         </p>
                       </div>
-                      {!q.is_correct && q.correct_answer !== null && (
-                        <div className="bg-white rounded-lg p-3 border border-green-200">
-                          <p className="text-xs font-medium text-gray-500 mb-1">Correct Answer:</p>
-                          <p className="font-medium text-green-700">{String(q.correct_answer)}</p>
-                        </div>
-                      )}
                     </div>
 
+                    {/* Answers grid */}
+                    <div className="ml-11 grid sm:grid-cols-2 gap-3">
+                      {/* Student's Answer */}
+                      <div className={`rounded-xl p-3 border ${
+                        isSkipped ? 'bg-gray-50 border-gray-200' :
+                        q.is_correct ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+                      }`}>
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">
+                          Your Answer
+                        </p>
+                        <p className={`text-sm font-semibold ${
+                          isSkipped ? 'text-gray-400 italic' :
+                          q.is_correct ? 'text-green-800' : 'text-red-800'
+                        }`}>
+                          {isSkipped
+                            ? 'Not answered'
+                            : Array.isArray(q.student_answer)
+                              ? q.student_answer.join(', ')
+                              : String(q.student_answer)}
+                        </p>
+                      </div>
+
+                      {/* Correct Answer — always shown */}
+                      <div className="bg-green-50 border border-green-200 rounded-xl p-3">
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">
+                          Correct Answer
+                        </p>
+                        <p className="text-sm font-semibold text-green-800">
+                          {q.correct_answer !== null && q.correct_answer !== undefined
+                            ? (Array.isArray(q.correct_answer) ? q.correct_answer.join(', ') : String(q.correct_answer))
+                            : <span className="text-gray-400 italic">N/A</span>}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Explanation */}
                     {q.explanation && (
-                      <div className="ml-8 bg-blue-50 rounded-lg p-3 border-l-4 border-blue-400">
-                        <p className="text-xs font-medium text-blue-700 mb-1">💡 Explanation:</p>
-                        <p className="text-sm text-gray-700">{q.explanation}</p>
+                      <div className="ml-11 mt-3 bg-blue-50 border-l-4 border-blue-400 rounded-r-xl p-3">
+                        <p className="text-xs font-bold text-blue-700 mb-1">💡 Explanation</p>
+                        <p className="text-sm text-gray-700 leading-relaxed">{q.explanation}</p>
                       </div>
                     )}
                   </div>
-                ))}
-              </div>
-            )}
+                )
+              })}
+            </div>
           </motion.div>
         )}
 

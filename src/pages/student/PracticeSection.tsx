@@ -348,7 +348,7 @@ export default function PracticeSectionPage() {
                     )}
 
                     <Link
-                      to={`/practice/mock/${test.id}`}
+                      to={`/practice/mock/${test.id}/verify`}
                       className={`flex items-center justify-center space-x-2 w-full py-2 sm:py-3 rounded-lg transition min-h-[44px] touch-manipulation ${
                         test.attempted > 0
                           ? 'bg-green-600 hover:bg-green-700 text-white'

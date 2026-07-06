@@ -175,9 +175,9 @@ function App() {
               {/* ── Generic Dashboard Redirect ────────────────────────── */}
               <Route path="/dashboard" element={<ProtectedRoute>{getDashboardByRole()}</ProtectedRoute>} />
 
-              {/* ── Student Dashboard (with own sidebar) ─────────────── */}
+              {/* ── Student Dashboard ──────────────────────────────── */}
               <Route path="/student/dashboard" element={
-                <ProtectedRoute allowedRoles={['student']}><StudentDashboard /></ProtectedRoute>
+                <SRoute title="Dashboard" subtitle="Student Portal"><StudentDashboard /></SRoute>
               } />
 
               {/* ── Student Inner Pages (with shared layout) ─────────── */}
@@ -190,6 +190,7 @@ function App() {
               <Route path="/student/gamification"   element={<SRoute title="Achievements"><GamificationPage /></SRoute>} />
               <Route path="/student/collaborative"  element={<SRoute title="Collaborative Exam"><CollaborativeExamPage /></SRoute>} />
               <Route path="/practice"               element={<SRoute title="Practice Tests"><PracticeSectionPage /></SRoute>} />
+              <Route path="/practice/mock/:testId/verify" element={<ProtectedRoute allowedRoles={['student']}><PreExamVerificationPage /></ProtectedRoute>} />
               <Route path="/practice/mock/:testId"  element={<ProtectedRoute allowedRoles={['student']}><PracticeMockExam /></ProtectedRoute>} />
               <Route path="/practice/results"       element={<SRoute title="Practice Results"><PracticeResults /></SRoute>} />
 
@@ -197,9 +198,9 @@ function App() {
               <Route path="/exam/:examId/verify" element={<ProtectedRoute allowedRoles={['student']}><PreExamVerificationPage /></ProtectedRoute>} />
               <Route path="/exam/:examId"         element={<ProtectedRoute allowedRoles={['student']}><ExamPage /></ProtectedRoute>} />
 
-              {/* ── Teacher Dashboard (with own sidebar) ─────────────── */}
+              {/* ── Teacher Dashboard ──────────────────────────────── */}
               <Route path="/teacher/dashboard" element={
-                <ProtectedRoute allowedRoles={['teacher', 'admin']}><TeacherDashboard /></ProtectedRoute>
+                <TRoute title="Teacher Dashboard" subtitle="Your teaching control center"><TeacherDashboard /></TRoute>
               } />
 
               {/* ── Teacher Inner Pages (with shared layout) ─────────── */}
@@ -219,9 +220,9 @@ function App() {
               <Route path="/teacher/session-replay/:examId" element={<TRoute title="Session Replay"><ExamSessionReplayPage /></TRoute>} />
               <Route path="/teacher/collaborative-monitoring" element={<TRoute title="Collaborative Monitoring"><CollaborativeMonitoringPage /></TRoute>} />
 
-              {/* ── Admin Dashboard (with own sidebar) ───────────────── */}
+              {/* ── Admin Dashboard ──────────────────────────────────── */}
               <Route path="/admin/dashboard" element={
-                <ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>
+                <ARoute title="Admin Dashboard" subtitle="PCMT Admin Control Center"><AdminDashboard /></ARoute>
               } />
 
               {/* ── Admin Inner Pages (with shared layout) ───────────── */}

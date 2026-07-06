@@ -20,9 +20,13 @@ interface VerificationCheck {
 }
 
 export default function PreExamVerification() {
-  const { examId } = useParams()
+  const params = useParams<{ examId?: string; testId?: string }>()
   const navigate = useNavigate()
   const videoRef = useRef<HTMLVideoElement>(null)
+  const [searchParams] = useState(() => new URLSearchParams(window.location.search))
+  const examId = params.examId || params.testId || ''
+  const mode = searchParams.get('mode') || (params.testId ? 'practice' : 'live')
+  const practiceTestId = params.testId || searchParams.get('testId')
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const audioCtxRef = useRef<AudioContext | null>(null)
   const animFrameRef = useRef<number | null>(null)
@@ -170,7 +174,12 @@ export default function PreExamVerification() {
   }, [stream])
 
   const cleanup = () => {
-    if (stream) {
+    // Do NOT stop the stream tracks here — if the user is navigating to the
+    // exam, we want to preserve the stream for reuse via window.__preExamStream.
+    // The stream will be cleaned up by ExamPage on unmount.
+    //
+    // Only stop if we are NOT handing it off to the exam page.
+    if (stream && !(window as any).__preExamStream) {
       stream.getTracks().forEach(track => track.stop())
     }
     if (audioCtxRef.current) {
@@ -610,7 +619,15 @@ export default function PreExamVerification() {
   const failedCount = checks.filter(c => c.status === 'failed').length
 
   const handleProceed = () => {
-    if (canProceed) navigate(`/exam/${examId}`)
+    if (!canProceed) return
+    if (stream) {
+      ;(window as any).__preExamStream = stream
+    }
+    if (mode === 'practice' && practiceTestId) {
+      navigate(`/practice/mock/${practiceTestId}`)
+    } else {
+      navigate(`/exam/${examId}`)
+    }
   }
 
   const getCategoryColor = (cat: string) => {
@@ -657,9 +674,9 @@ export default function PreExamVerification() {
             </div>
             <div>
               <h1 className="text-3xl font-black bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
-                Pre-Exam Verification
+                {mode === 'practice' ? 'Practice Exam Verification' : 'Pre-Exam Verification'}
               </h1>
-              <p className="text-gray-400 text-sm mt-0.5">Complete all checks before your exam begins</p>
+              <p className="text-gray-400 text-sm mt-0.5">{mode === 'practice' ? 'Verify your setup before starting the practice test' : 'Complete all checks before your exam begins'}</p>
             </div>
           </div>
 
@@ -971,7 +988,7 @@ export default function PreExamVerification() {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-bold text-gray-200 mb-1">
-                    {canProceed ? '✅ Ready to Start Exam' : 'Complete All Requirements'}
+                    {canProceed ? `✅ Ready to Start ${mode === 'practice' ? 'Practice' : 'Exam'}` : 'Complete All Requirements'}
                   </h3>
                   <p className="text-xs text-gray-500">
                     {!allRequiredPassed
@@ -995,7 +1012,7 @@ export default function PreExamVerification() {
                       : 'bg-gray-800 text-gray-500 cursor-not-allowed'
                   }`}
                 >
-                  Start Exam
+                  {mode === 'practice' ? 'Start Practice' : 'Start Exam'}
                   <ChevronRight className="w-4 h-4" />
                 </motion.button>
               </div>

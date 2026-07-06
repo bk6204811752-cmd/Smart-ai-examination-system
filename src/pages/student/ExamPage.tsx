@@ -18,6 +18,7 @@ import ExamTimerWarning from '../../components/ExamTimerWarning'
 import ProctoringHUD from '../../components/ProctoringHUD'
 import ViolationOverlay from '../../components/ViolationOverlay'
 import type { ViolationOverlayType } from '../../components/ViolationOverlay'
+import ProctoringRightPanel from '../../components/ProctoringRightPanel'
 
 export default function ExamPage() {
   const { examId } = useParams()
@@ -44,6 +45,7 @@ export default function ExamPage() {
 
   // Proctoring state
   const [proctoringActive, setProctoringActive] = useState(false)
+  const [cameraReady, setCameraReady] = useState(false)
   const [proctoringStatus, setProctoringStatus] = useState<ProctoringStatus | null>(null)
   const [flags, setFlags] = useState<any[]>([])
   const [tabSwitches, setTabSwitches] = useState(0)
@@ -129,6 +131,12 @@ export default function ExamPage() {
     }
   }
 
+  const startExamFlow = () => {
+    if (examStarted) return
+    setExamStarted(true)
+    requestFullscreen()
+  }
+
   useEffect(() => {
     const handleFullscreenChange = () => {
       const isNowFullscreen = !!document.fullscreenElement
@@ -187,15 +195,17 @@ export default function ExamPage() {
 
   // Start camera when exam loads
   useEffect(() => {
-    if (exam && !loading && videoRef.current && !proctoringActive) {
-      const timer = setTimeout(() => {
-        if (!proctoringEngineRef.current) {
-          startCamera()
-        }
-      }, 500)
-      return () => clearTimeout(timer)
+    if (!exam || loading) return
+
+    const tryStart = () => {
+      if (!proctoringEngineRef.current && !initializingRef.current) {
+        startCamera()
+      }
     }
-  }, [exam, loading, proctoringActive])
+
+    const timer = setTimeout(tryStart, 300)
+    return () => clearTimeout(timer)
+  }, [exam, loading])
 
   // Timer countdown
   useEffect(() => {
@@ -245,37 +255,10 @@ export default function ExamPage() {
         await sessionAPI.startSession(examId!, {})
       } catch { /* non-critical */ }
 
-      // ── Environment Gate: check brightness before starting ────────────
-      // Give camera 2 seconds to warm up, then measure brightness
-      setTimeout(async () => {
-        if (videoRef.current && videoRef.current.readyState >= 2) {
-          const canvas = document.createElement('canvas')
-          canvas.width = 64
-          canvas.height = 48
-          const ctx = canvas.getContext('2d')
-          if (ctx) {
-            ctx.drawImage(videoRef.current, 0, 0, 64, 48)
-            const imgData = ctx.getImageData(0, 0, 64, 48).data
-            let total = 0
-            for (let i = 0; i < imgData.length; i += 4) {
-              total += 0.299 * imgData[i] + 0.587 * imgData[i + 1] + 0.114 * imgData[i + 2]
-            }
-            const brightness = total / (imgData.length / 4)
-            setDarkRoomBrightness(Math.round(brightness))
-            if (brightness < 30) {
-              // BLOCK: Room too dark — do not start exam
-              setDarkRoomBlocked(true)
-              createProctoringFlag('dark_room_start', 'critical', `Exam start blocked: room too dark (${Math.round(brightness)}/255)`)
-              toast.error('⚠️ Room too dark to start exam — turn on lights!', { duration: 0 })
-              return
-            }
-          }
-        }
-        // All checks passed — start the exam
-        setExamStarted(true)
-        requestFullscreen()
-        toast.success('🚀 Exam started — Good luck!', { duration: 3000 })
-      }, 2000)
+      // Exam start is triggered by the proctoring engine success path,
+      // or by the no-camera fallback. Do NOT start here — we wait
+      // for the engine's brightness check to pass first.
+      // (see startExamFlow() called from Phase 2 success or no-camera fallback)
     } catch {
       toast.error('Failed to load exam. Returning to dashboard.')
       navigate('/student/dashboard')
@@ -283,112 +266,161 @@ export default function ExamPage() {
   }
 
   const startCamera = async () => {
-    if (initializingRef.current || !videoRef.current || proctoringEngineRef.current) return
+    if (initializingRef.current) return
+    if (cameraReady && videoRef.current?.srcObject) return
     initializingRef.current = true
 
+    // ── PHASE 1: Attach stream to video element immediately ────────────
     try {
-      const engine = new ProctoringEngine()
-      proctoringEngineRef.current = engine
-      await engine.loadModels()
-      await engine.initialize(videoRef.current)
+      const preExamStream = (window as any).__preExamStream as MediaStream | undefined
+      let stream: MediaStream
 
-      engine.setOnViolation((violation: ProctoringViolation) => {
-        setFlags(prev => [...prev, {
-          exam_id: examId!,
-          flag_type: violation.type,
-          severity: violation.severity,
-          timestamp: violation.timestamp.toISOString(),
-          evidence: violation.message
-        }])
-
-        // Update trust score
-        const penalty = violation.severity === 'CRITICAL' ? 15 : violation.severity === 'HIGH' ? 10 : violation.severity === 'MEDIUM' ? 5 : 2
-        setTrustScore(prev => Math.max(0, prev - penalty))
-
-        // Visual flash
-        setShowViolationFlash(true)
-        setTimeout(() => setShowViolationFlash(false), 500)
-
-        if (violation.severity === 'CRITICAL') {
-          toast.error(violation.message, { duration: 5000 })
-        } else if (violation.severity === 'HIGH') {
-          toast.warning(violation.message, { duration: 4000 })
-        }
-
-        createProctoringFlag(violation.type, violation.severity, violation.message)
-        broadcastViolation(violation)
-      })
-
-      engine.setOnStatusChange((status: ProctoringStatus) => {
-        setProctoringStatus(status)
-        setProctoringActive(status.isActive)
-      })
-
-      engine.setOnPause((reason: string) => {
-        toast.error(`Exam Paused: ${reason}`, { duration: 10000 })
-      })
-
-      // Capture reference face
-      setTimeout(async () => {
-        const captured = await engine.captureReferenceFace()
-        if (captured) {
-          toast.success('✅ Identity verified — monitoring active', { duration: 2000 })
-        } else {
-          toast.warning('Could not verify identity — ensure face is visible', { duration: 4000 })
-        }
-      }, 2000)
-
-      engine.startMonitoring()
-      engine.enableRecording()
-
-      // Resume audio
-      const audioCtx = (engine as any).audioContext
-      if (audioCtx?.state === 'suspended') {
-        document.addEventListener('click', () => audioCtx.resume(), { once: true })
+      if (preExamStream && preExamStream.active) {
+        stream = preExamStream
+        delete (window as any).__preExamStream
+        console.log('[Camera] Reusing pre-exam stream')
+      } else {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+        })
       }
 
+      if (videoRef.current) {
+        if (videoRef.current.srcObject && videoRef.current.srcObject !== stream) {
+          (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop())
+        }
+        videoRef.current.srcObject = stream
+        videoRef.current.muted = true
+        videoRef.current.playsInline = true
+        videoRef.current.play().catch(e => console.warn('[Camera] play():', e))
+      }
+
+      // Store stream reference for cleanup
+      ;(proctoringEngineRef as any).current = {
+        _stream: stream,
+        _cleanup: () => stream.getTracks().forEach(t => t.stop())
+      }
+
+      setCameraReady(true)
       setProctoringActive(true)
+      initializingRef.current = false
+
+      // WebSocket for live frame streaming
       initializeWebSocket()
-
-      setTimeout(() => {
-        if (wsClientRef.current) startVideoStreaming()
-        else setTimeout(() => { if (wsClientRef.current) startVideoStreaming() }, 2000)
-      }, 1000)
-
-      initializingRef.current = false
-    } catch (error) {
-      initializingRef.current = false
-      const msg = error instanceof Error ? error.message : String(error)
-
+    } catch (streamErr) {
+      const msg = streamErr instanceof Error ? streamErr.message : String(streamErr)
       if (msg.includes('NotAllowedError') || msg.includes('Permission')) {
         toast.error('Camera permission denied. Please allow camera access and refresh.', { duration: 8000 })
       } else if (msg.includes('NotFoundError')) {
-        toast.error('No camera found. Please connect a camera and try again.', { duration: 8000 })
-      } else if (msg.includes('lighting') || msg.includes('INSUFFICIENT_LIGHTING') || msg.includes('too dark') || msg.includes('Too dark')) {
-        // Dark room detected \u2014 show the block overlay
-        setDarkRoomBlocked(true)
-        const brightness = videoRef.current ? (() => {
-          try {
-            const c = document.createElement('canvas'); c.width = 64; c.height = 48
-            const x = c.getContext('2d')
-            if (!x || !videoRef.current) return 0
-            x.drawImage(videoRef.current, 0, 0, 64, 48)
-            const d = x.getImageData(0, 0, 64, 48).data
-            let t = 0; for (let i = 0; i < d.length; i += 4) t += 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2]
-            return Math.round(t / (d.length / 4))
-          } catch { return 0 }
-        })() : 0
-        setDarkRoomBrightness(brightness)
-        createProctoringFlag('dark_room_blocked', 'critical', `Proctoring blocked: insufficient lighting (${brightness}/255)`)
+        toast.error('No camera found. Please connect a camera.', { duration: 8000 })
+        console.warn('[Camera] No camera, continuing:', msg)
+        setProctoringActive(true)
+        initializeWebSocket()
       } else {
-        toast.error('Failed to initialize proctoring. Check camera settings.', { duration: 5000 })
+        toast.error('Failed to access camera. Check camera settings.', { duration: 5000 })
       }
 
-      if (proctoringEngineRef.current) {
-        proctoringEngineRef.current.cleanup()
-        proctoringEngineRef.current = null
-      }
+      // No-camera fallback: start exam flow anyway after a short delay
+      setTimeout(() => {
+        if (!examStarted) {
+          startExamFlow()
+        }
+      }, 1500)
+      return
     }
+
+    // ── PHASE 2: Initialize AI engine with the already-playing stream ──
+    setTimeout(async () => {
+      const stream = videoRef.current?.srcObject as MediaStream | null
+      if (!stream || !stream.active || !videoRef.current) return
+
+      try {
+        const engine = new ProctoringEngine()
+        ;(proctoringEngineRef as any).current = engine
+
+        await engine.loadModels()
+
+        // Initialize engine with the already-playing stream
+        await engine.initialize(videoRef.current!, stream)
+
+        engine.setOnViolation((violation: ProctoringViolation) => {
+          setFlags(prev => [...prev, {
+            exam_id: examId!,
+            flag_type: violation.type,
+            severity: violation.severity,
+            timestamp: violation.timestamp.toISOString(),
+            evidence: violation.message
+          }])
+
+          const penalty = violation.severity === 'CRITICAL' ? 15
+            : violation.severity === 'HIGH' ? 10
+            : violation.severity === 'MEDIUM' ? 5 : 2
+          setTrustScore(prev => Math.max(0, prev - penalty))
+
+          setShowViolationFlash(true)
+          setTimeout(() => setShowViolationFlash(false), 500)
+
+          if (violation.severity === 'CRITICAL') toast.error(violation.message, { duration: 5000 })
+          else if (violation.severity === 'HIGH') toast.warning(violation.message, { duration: 4000 })
+
+          createProctoringFlag(violation.type, violation.severity, violation.message)
+          broadcastViolation(violation)
+        })
+
+        engine.setOnStatusChange((status: ProctoringStatus) => {
+          setProctoringStatus(status)
+        })
+
+        engine.setOnPause((reason: string) => {
+          toast.error(`Exam Paused: ${reason}`, { duration: 10000 })
+        })
+
+        // Capture reference face after 3s
+        setTimeout(async () => {
+          const captured = await engine.captureReferenceFace()
+          if (captured) {
+            toast.success('Identity verified - monitoring active', { duration: 2000 })
+          } else {
+            toast.warning('Could not verify identity - ensure face is visible', { duration: 4000 })
+          }
+        }, 3000)
+
+        engine.startMonitoring()
+        engine.enableRecording()
+        startExamFlow()
+
+        const audioCtx = (engine as any).audioContext
+        if (audioCtx?.state === 'suspended') {
+          document.addEventListener('click', () => audioCtx.resume(), { once: true })
+        }
+      } catch (engineErr) {
+        const msg = engineErr instanceof Error ? engineErr.message : String(engineErr)
+        if (msg.includes('lighting') || msg.includes('INSUFFICIENT_LIGHTING') || msg.includes('too dark') || msg.includes('Too dark')) {
+          setDarkRoomBlocked(true)
+          const brightness = (() => {
+            try {
+              const c = document.createElement('canvas'); c.width = 64; c.height = 48
+              const x = c.getContext('2d')
+              if (!x || !videoRef.current) return 0
+              x.drawImage(videoRef.current, 0, 0, 64, 48)
+              const d = x.getImageData(0, 0, 64, 48).data
+              let t = 0; for (let i = 0; i < d.length; i += 4) t += 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2]
+              return Math.round(t / (d.length/4))
+            } catch { return 0 }
+          })()
+          setDarkRoomBrightness(brightness)
+          createProctoringFlag('dark_room', 'critical', `Room too dark (brightness: ${brightness}/255)`)
+        } else {
+          console.warn('[Proctoring] AI engine failed, basic monitoring continues:', msg)
+          const currentStream = videoRef.current?.srcObject as MediaStream
+          ;(proctoringEngineRef as any).current = {
+            _stream: currentStream,
+            _cleanup: () => currentStream?.getTracks().forEach(t => t.stop())
+          }
+        }
+      }
+    }, 500)
   }
 
   const initializeWebSocket = () => {
@@ -565,15 +597,49 @@ export default function ExamPage() {
       clearInterval(videoStreamIntervalRef.current)
       videoStreamIntervalRef.current = null
     }
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current)
+      heartbeatRef.current = null
+    }
+    if (trustSyncRef.current) {
+      clearInterval(trustSyncRef.current)
+      trustSyncRef.current = null
+    }
+    if (brightnessCheckRef.current) {
+      clearInterval(brightnessCheckRef.current)
+      brightnessCheckRef.current = null
+    }
+    if (screenShareCheckRef.current) {
+      clearInterval(screenShareCheckRef.current)
+      screenShareCheckRef.current = null
+    }
+    if (windowSizeCheckRef.current) {
+      clearInterval(windowSizeCheckRef.current)
+      windowSizeCheckRef.current = null
+    }
+    if (fullscreenCountdownRef.current) {
+      clearInterval(fullscreenCountdownRef.current)
+      fullscreenCountdownRef.current = null
+    }
     if (wsClientRef.current) {
       wsClientRef.current.disconnect()
       wsClientRef.current = null
     }
     if (proctoringEngineRef.current) {
-      proctoringEngineRef.current.cleanup()
+      const ref = proctoringEngineRef.current as any
+      if (typeof ref.cleanup === 'function') {
+        ref.cleanup()
+      } else if (typeof ref._cleanup === 'function') {
+        ref._cleanup()
+      }
       proctoringEngineRef.current = null
     }
+    if (videoRef.current?.srcObject) {
+      (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop())
+      videoRef.current.srcObject = null
+    }
     setProctoringActive(false)
+    setCameraReady(false)
   }
 
   const showViolationAlert = useCallback((type: ViolationOverlayType, message: string, severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' = 'HIGH') => {
@@ -789,25 +855,53 @@ export default function ExamPage() {
 
     stopCamera()
 
-    try {
-      const submission = {
-        exam_id: examId!,
-        answers,
-        time_taken: timeTaken,
-        proctoring_flags: flags
+    // Build submission payload
+    const submission = {
+      exam_id: examId!,
+      answers,
+      time_taken: timeTaken,
+      proctoring_data: {
+        violations: flags.length,
+        trust_score: trustScore,
+        tab_switches: tabSwitches,
+        flags: flags
       }
-      const result = await examAPI.submitExam(examId!, submission)
-      toast.success('✅ Exam submitted successfully!')
-
-      setTimeout(() => {
-        if (result?._id) navigate(`/student/results/${result._id}`)
-        else navigate('/student/results')
-      }, 500)
-    } catch {
-      toast.error('Failed to submit exam. Please try again.')
-      setSubmitting(false)
-      startCamera()
     }
+
+    // Save locally as backup before submitting
+    try {
+      localStorage.setItem(`exam_backup_${examId}`, JSON.stringify({ ...submission, savedAt: new Date().toISOString() }))
+    } catch { /* ignore storage errors */ }
+
+    // Retry submit up to 3 times
+    let lastError: any = null
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const result = await examAPI.submitExam(examId!, submission)
+        try { localStorage.removeItem(`exam_backup_${examId}`) } catch { /* ignore */ }
+        toast.success('Exam submitted successfully!')
+        setTimeout(() => {
+          if (result?._id) navigate(`/student/results/${result._id}`)
+          else navigate('/student/results')
+        }, 500)
+        return
+      } catch (err) {
+        lastError = err
+        console.error(`Submit attempt ${attempt} failed:`, err)
+        if (attempt < 3) {
+          await new Promise(r => setTimeout(r, 1500 * attempt))
+        }
+      }
+    }
+
+    // All attempts failed
+    console.error('All submit attempts failed:', lastError)
+    toast.error(
+      'Exam submission failed. Your answers are saved locally. Please contact your teacher and try again.',
+      { duration: 10000 }
+    )
+    setSubmitting(false)
+    startCamera()
   }
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -1398,11 +1492,83 @@ export default function ExamPage() {
       </div>
 
       {/* ─── Main Content ─────────────────────────────────────────────── */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
-        <div className="grid lg:grid-cols-4 gap-4 sm:gap-6">
+      <div className="max-w-screen-2xl mx-auto px-3 sm:px-4 py-4 sm:py-5">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+          {/* ─── Left Navigation Panel ─────────────────────────────────── */}
+          <div className={`lg:col-span-2 ${(isMobile || isTablet) && !showMobileMenu ? 'hidden' : 'block lg:block'} ${(isMobile || isTablet) ? 'fixed inset-0 bg-black/50 z-40' : ''}`}
+            onClick={() => setShowMobileMenu(false)}
+          >
+            <div
+              className={`bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sticky top-20 space-y-4 ${
+                (isMobile || isTablet) ? 'absolute left-0 top-0 h-full w-72 max-w-[90vw] overflow-y-auto rounded-none shadow-2xl' : ''
+              }`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Navigator</h3>
+                <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-semibold border border-blue-100">
+                  {answeredCount}/{exam?.questions.length}
+                </span>
+              </div>
+              <div className="grid grid-cols-4 lg:grid-cols-3 gap-1.5">
+                {exam?.questions.map((q: any, idx: number) => {
+                  const qId = q._id || q.id || idx.toString()
+                  const state = getQuestionState(qId, idx)
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => { setCurrentQuestionIndex(idx); setShowMobileMenu(false) }}
+                      className={`w-full aspect-square rounded-lg font-bold text-xs transition-all touch-manipulation relative ${getBadgeClasses(state)}`}
+                      title={`Question ${idx + 1}${flaggedQuestions.has(qId) ? ' (Flagged)' : ''}`}
+                    >
+                      {idx + 1}
+                      {flaggedQuestions.has(qId) && (
+                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-amber-400 rounded-full border border-white" />
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+
+              <div className="space-y-1.5 text-xs text-gray-500 border-t border-gray-100 pt-3">
+                {[
+                  { color: 'bg-blue-600', label: 'Current' },
+                  { color: 'bg-green-100 border border-green-300', label: `Answered (${answeredCount})` },
+                  { color: 'bg-amber-100 border border-amber-300', label: `Flagged (${flaggedCount})` },
+                  { color: 'bg-gray-100 border border-gray-300', label: `Remaining (${(exam?.questions.length || 0) - answeredCount - flaggedCount})` },
+                ].map(({ color, label }) => (
+                  <div key={label} className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded shrink-0 ${color}`} />
+                    <span>{label}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="border-t border-gray-100 pt-3">
+                <button
+                  onClick={handleSubmitClick}
+                  disabled={submitting}
+                  className="w-full py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-bold text-sm hover:from-green-600 hover:to-emerald-700 transition-all disabled:opacity-60 shadow-lg shadow-green-500/20"
+                >
+                  {submitting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    'Submit Exam'
+                  )}
+                </button>
+                <p className="text-center text-xs text-gray-400 mt-2">
+                  {(exam?.questions.length || 0) - answeredCount} questions unanswered
+                </p>
+              </div>
+            </div>
+          </div>
 
           {/* ─── Question Area ─────────────────────────────────────────── */}
-          <div className="lg:col-span-3 space-y-4">
+          <div className="lg:col-span-7 space-y-4">
 
             {/* Progress */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 premium-card">
@@ -1552,97 +1718,25 @@ export default function ExamPage() {
             </div>
           </div>
 
-          {/* ─── Sidebar ───────────────────────────────────────────────── */}
-          <div className={`lg:col-span-1 ${(isMobile || isTablet) && !showMobileMenu ? 'hidden' : 'block'} ${(isMobile || isTablet) ? 'fixed inset-0 bg-black/50 z-40' : ''}`}
-            onClick={() => setShowMobileMenu(false)}
-          >
-            <div
-              className={`bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5 sticky top-20 space-y-5 premium-card ${
-                (isMobile || isTablet) ? 'absolute right-0 top-0 h-full w-80 max-w-[88vw] overflow-y-auto rounded-none' : ''
-              }`}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Proctoring HUD */}
-              <ProctoringHUD
-                proctoringActive={proctoringActive}
-                proctoringStatus={proctoringStatus}
-                trustScore={trustScore}
-                violationCount={violationCount}
-                videoRef={videoRef}
-                onStartCamera={startCamera}
-                examLoaded={!!exam}
-                isLoading={loading}
-              />
-
-              {/* Question Navigator */}
-              <div>
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                  Question Navigator
-                </h3>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {exam?.questions.map((q: any, idx: number) => {
-                    const qId = q._id || q.id || idx.toString()
-                    const state = getQuestionState(qId, idx)
-                    return (
-                      <button
-                        key={idx}
-                        onClick={() => {
-                          setCurrentQuestionIndex(idx)
-                          setShowMobileMenu(false)
-                        }}
-                        className={`w-full aspect-square rounded-lg font-semibold text-xs transition-all touch-manipulation ${getBadgeClasses(state)}`}
-                      >
-                        {idx + 1}
-                      </button>
-                    )
-                  })}
-                </div>
-
-                {/* Legend */}
-                <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-500">
-                  <span className="flex items-center gap-1">
-                    <div className="w-2.5 h-2.5 rounded bg-blue-600" /> Current
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <div className="w-2.5 h-2.5 rounded bg-green-100 border border-green-200" /> Done
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <div className="w-2.5 h-2.5 rounded bg-amber-100 border border-amber-300" /> Flagged
-                  </span>
-                </div>
-              </div>
-
-              {/* Violations History */}
-              {flags.length > 0 && (
-                <div className="bg-red-50 border border-red-100 rounded-xl p-3">
-                  <h3 className="text-xs font-semibold text-red-700 mb-2 flex items-center gap-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                    Violations ({flags.length})
-                  </h3>
-                  <ul className="space-y-1.5 max-h-40 overflow-y-auto">
-                    {flags.slice(-5).reverse().map((flag, idx) => (
-                      <li key={idx} className="text-xs text-red-600 flex items-start gap-1.5">
-                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 mt-1 ${
-                          flag.severity === 'critical' ? 'bg-red-600' :
-                          flag.severity === 'high' ? 'bg-orange-500' :
-                          flag.severity === 'medium' ? 'bg-yellow-500' : 'bg-gray-400'
-                        }`} />
-                        {flag.evidence}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Quick submit on last question from sidebar */}
-              <button
-                onClick={handleSubmitClick}
-                disabled={submitting}
-                className="w-full py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-semibold text-sm hover:from-green-600 hover:to-emerald-700 transition-all shadow-lg shadow-green-500/20 disabled:opacity-60"
-              >
-                Submit Exam
-              </button>
-            </div>
+          {/* ─── Proctoring Right Panel ────────────────────────────────── */}
+          <div className="hidden lg:block lg:col-span-3 overflow-y-auto max-h-[calc(100vh-5rem)]">
+            <ProctoringRightPanel
+              videoRef={videoRef}
+              proctoringActive={proctoringActive}
+              cameraReady={cameraReady}
+              trustScore={trustScore}
+              proctoringStatus={proctoringStatus ? {
+                faceDetected: proctoringStatus.faceDetected,
+                lookingAtScreen: proctoringStatus.lookingAtScreen,
+                faceCount: proctoringStatus.faceCount,
+                audioLevel: proctoringStatus.audioLevel,
+                isActive: proctoringStatus.isActive,
+                integrityScore: proctoringStatus.integrityScore,
+              } : null}
+              tabSwitches={tabSwitches}
+              flags={flags}
+              mode="live"
+            />
           </div>
         </div>
       </div>

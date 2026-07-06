@@ -1,18 +1,17 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/globalStore'
-import { analyticsAPI, userAPI, communicationAPI } from '../../lib/api'
+import { analyticsAPI, userAPI } from '../../lib/api'
 import Toast from '../../components/Toast'
 import { 
-  Users, BookOpen, FileText, Activity, LogOut, Shield, 
+  Users, BookOpen, FileText, Activity, Shield, 
   TrendingUp, AlertTriangle, CheckCircle, Clock, Server,
-  Database, Cpu, HardDrive, Wifi, Bell, Settings,
-  BarChart3, PieChart, LineChart, Download, RefreshCw,
-  Eye, Lock, UserCheck, Zap, Target, Award, Calendar,
+  Database, Cpu, HardDrive, Wifi, Bell,
+  BarChart3, LineChart, Download, RefreshCw,
+  Eye, UserCheck, Zap, Award,
   MapPin, Globe, Smartphone, Monitor, Send, Mail, 
-  MessageSquare, Filter, Search, ArrowUp, ArrowDown, 
-  Minus, ChevronRight, Trash2, Edit, MoreVertical, 
-  PlayCircle, PauseCircle, XCircle, Cloud, CloudOff
+  MessageSquare, Search, ChevronRight, Trash2, Edit,
+  MoreVertical, XCircle, PauseCircle, PlayCircle
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -309,47 +308,7 @@ export default function AdminDashboard() {
   })
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                PCMT Admin Control Center
-              </h1>
-              <p className="text-sm text-gray-600">System Administration & Monitoring</p>
-            </div>
-            <div className="flex items-center space-x-4">
-              <Link to="/notifications" className="relative p-2 text-gray-600 hover:text-blue-600 transition" aria-label="Notifications">
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-              </Link>
-              <button 
-                onClick={() => navigate('/settings')}
-                className="p-2 text-gray-600 hover:text-blue-600 transition"
-                title="Settings"
-              >
-                <Settings className="w-5 h-5" />
-              </button>
-              <div className="h-8 w-px bg-gray-300"></div>
-              <div className="flex items-center space-x-3">
-                <div className="text-right">
-                  <p className="text-sm font-medium text-gray-900">{user?.full_name}</p>
-                  <p className="text-xs text-gray-500">Administrator</p>
-                </div>
-                <button 
-                  onClick={handleLogout} 
-                  className="p-2 text-gray-600 hover:text-red-600 transition"
-                  title="Logout"
-                >
-                  <LogOut className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
+    <>
 
       {loading ? (
         <div className="flex items-center justify-center min-h-screen">
@@ -1280,6 +1239,6 @@ export default function AdminDashboard() {
         isVisible={toast.isVisible}
         onClose={hideToast}
       />
-    </div>
+    </>
   )
 }

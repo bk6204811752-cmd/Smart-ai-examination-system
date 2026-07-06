@@ -1,6 +1,8 @@
 /**
- * Enhanced AI Proctoring Engine V3 - Ultra Advanced
- * Cutting-edge AI detection with behavioral analysis and pattern recognition
+ * @deprecated Use proctoringEngine.ts (V1) instead. V3 has a different
+ * initialization API (creates its own MediaStream) and is NOT compatible
+ * with the ExamPage flow. It is kept for reference only. All production
+ * usage should target proctoringEngine.ts (V1).
  */
 
 import * as faceapi from 'face-api.js'

@@ -1,6 +1,8 @@
 /**
- * Enhanced Proctoring Engine V2 - Completely Revised
- * Rock-solid implementation with proper cleanup and monitoring
+ * @deprecated Use proctoringEngine.ts (V1) instead. V2 has audio thresholds
+ * that are too high (RMS > 85) making audio detection effectively broken,
+ * and it is only used in legacy practice exam pages. All new development
+ * should target proctoringEngine.ts.
  */
 
 import * as faceapi from 'face-api.js'

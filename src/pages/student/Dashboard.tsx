@@ -1,15 +1,14 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAuthStore } from '../../store/globalStore'
 import { examAPI, resultsAPI } from '../../lib/api'
 import { motion } from 'framer-motion'
 import {
-  BookOpen, Calendar, Award, TrendingUp, Clock, LogOut,
-  Bot, Bell, Sparkles, GraduationCap, Target,
-  Activity, CheckCircle, BarChart3, Zap,
-  Trophy, Star, TrendingDown, ArrowRight, Play,
-  BookMarked, Shield, ChevronUp, ChevronDown, Minus,
-  User, Settings, Home
+  BookOpen, Calendar, Award, TrendingUp, Clock,
+  Bot, Sparkles, Target,
+  BarChart3, Zap,
+  Trophy, ArrowRight, Play,
+  BookMarked, Shield, ChevronUp, ChevronDown, Minus
 } from 'lucide-react'
 
 interface ExamResult {
@@ -104,8 +103,7 @@ function ProgressRing({ value, size = 56, stroke = 5, color = '#3b82f6' }: {
 }
 
 export default function StudentDashboard() {
-  const { user, logout } = useAuthStore()
-  const navigate = useNavigate()
+  const { user } = useAuthStore()
   const [exams, setExams] = useState<UpcomingExam[]>([])
   const [results, setResults] = useState<ExamResult[]>([])
   const [loading, setLoading] = useState(true)
@@ -127,8 +125,6 @@ export default function StudentDashboard() {
       setLoading(false)
     }
   }
-
-  const handleLogout = () => { logout(); navigate('/login') }
 
   // Computed stats
   const avgScore = results.length > 0
@@ -197,109 +193,8 @@ export default function StudentDashboard() {
   ]
 
   return (
-    <div className="min-h-screen bg-gray-50" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
-      {/* ── Sidebar (desktop) ──────────────────────────── */}
-      <aside className="hidden lg:flex fixed left-0 top-0 h-full w-64 bg-white border-r border-gray-100 shadow-sm flex-col z-40">
-        {/* Logo */}
-        <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-100">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-md">
-            <GraduationCap className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h1 className="font-black text-gray-900 text-base">PCMT</h1>
-            <p className="text-xs text-gray-400">Student Portal</p>
-          </div>
-        </div>
-
-        {/* User card */}
-        <div className="mx-4 mt-4 p-3 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-full flex items-center justify-center text-white font-bold text-sm shadow">
-              {user?.full_name?.charAt(0)?.toUpperCase() || 'S'}
-            </div>
-            <div className="min-w-0">
-              <p className="font-semibold text-gray-900 text-sm truncate">{user?.full_name}</p>
-              <p className="text-xs text-gray-500">{user?.program} · Sem {user?.semester}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Nav */}
-        <nav className="flex-1 px-4 mt-4 space-y-1">
-          {[
-            { icon: Home, label: 'Dashboard', active: true },
-            { icon: BookOpen, label: 'Upcoming Exams', to: '#exams' },
-            { icon: BarChart3, label: 'My Results', to: '/student/results' },
-            { icon: Bot, label: 'AI Tutor', to: '/student/ai-tutor' },
-            { icon: BookMarked, label: 'Study Materials', to: '/student/materials' },
-            { icon: Trophy, label: 'Achievements', to: '/student/gamification' },
-            { icon: Bell, label: 'Notifications', to: '/notifications' },
-            { icon: Settings, label: 'Settings', to: '/settings' },
-          ].map(item => (
-            <Link
-              key={item.label}
-              to={item.to || '#'}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                item.active
-                  ? 'bg-blue-600 text-white shadow-sm shadow-blue-200'
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-              }`}
-            >
-              <item.icon className="w-4 h-4 shrink-0" />
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-
-        <div className="p-4 border-t border-gray-100">
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-600 transition-all"
-          >
-            <LogOut className="w-4 h-4" />
-            Sign Out
-          </button>
-        </div>
-      </aside>
-
-      {/* ── Main content ───────────────────────────────── */}
-      <div className="lg:ml-64">
-        {/* Top header */}
-        <header className="bg-white border-b border-gray-100 sticky top-0 z-30 shadow-sm">
-          <div className="px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-            {/* Mobile logo */}
-            <div className="flex lg:hidden items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
-                <GraduationCap className="w-5 h-5 text-white" />
-              </div>
-              <span className="font-black text-gray-900">PCMT</span>
-            </div>
-
-            {/* Desktop greeting */}
-            <div className="hidden lg:block">
-              <h1 className="font-bold text-gray-900">
-                Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {user?.full_name?.split(' ')[0]}! 👋
-              </h1>
-              <p className="text-sm text-gray-500">{new Date().toLocaleDateString('en-IN', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <Link to="/notifications" className="relative p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all">
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-              </Link>
-              <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-full flex items-center justify-center text-white font-bold text-sm lg:hidden">
-                {user?.full_name?.charAt(0)?.toUpperCase() || 'S'}
-              </div>
-              <button onClick={handleLogout} className="hidden lg:flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-600 transition-colors px-3 py-2 rounded-xl hover:bg-red-50">
-                <LogOut className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </header>
-
-        {/* Content */}
-        <main className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+    <>
+      <div className="max-w-7xl mx-auto">
 
           {/* ── STAT CARDS ────────────────────────────────── */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -577,25 +472,7 @@ export default function StudentDashboard() {
             </div>
           </div>
 
-        </main>
       </div>
-
-      {/* Mobile bottom nav */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 shadow-lg z-40 flex justify-around py-2 px-4">
-        {[
-          { icon: Home, label: 'Home', to: '/student/dashboard' },
-          { icon: BookOpen, label: 'Exams', to: '/student/dashboard' },
-          { icon: BarChart3, label: 'Results', to: '/student/results' },
-          { icon: Bot, label: 'AI Tutor', to: '/student/ai-tutor' },
-          { icon: User, label: 'Profile', to: '/settings' },
-        ].map(item => (
-          <Link key={item.label} to={item.to} className="flex flex-col items-center gap-0.5 py-1 px-3 text-gray-400 hover:text-blue-600 transition-colors">
-            <item.icon className="w-5 h-5" />
-            <span className="text-xs">{item.label}</span>
-          </Link>
-        ))}
-      </nav>
-
-    </div>
+    </>
   )
 }

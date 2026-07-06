@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo, useCallback } from 'react'
+import { useEffect, useRef, useMemo, useCallback, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Camera, Mic, Monitor, AlertTriangle, CheckCircle, XCircle,
@@ -11,9 +11,13 @@ import { useExamState } from '../../hooks/useExamState'
 import { logger } from '../../lib/logger'
 import { getQuestionsByCategory, getQuestionsByDifficulty, Question as QuestionType } from '../../data/questionBank'
 import AdaptiveExamEngine, { DifficultyLevel } from '../../utils/adaptiveExamEngine'
-import ProctoringEngineV2, { ProctoringViolation, ProctoringStatus } from '../../utils/proctoringEngine_v2'
+import ProctoringEngine from '../../utils/proctoringEngine'
+import type { ProctoringViolation, ProctoringStatus } from '../../utils/proctoringEngine'
 import ViolationWarning, { ProctoringStatusBar, ViolationSummary } from '../../components/ViolationWarning'
+import ProctoringRightPanel from '../../components/ProctoringRightPanel'
 import { AnimatePresence, motion } from 'framer-motion'
+import { WebSocketClient } from '../../lib/websocket'
+import { useAuthStore } from '../../store/globalStore'
 
 interface Question {
   id: number
@@ -41,6 +45,10 @@ export default function PracticeMockExam() {
   const { isMobile, isTablet } = useMobileDetect()
   const videoRef = useRef<HTMLVideoElement>(null)
   const sidebarVideoRef = useRef<HTMLVideoElement>(null)
+  const wsClientRef = useRef<WebSocketClient | null>(null)
+  const user = useAuthStore(state => state.user)
+  const heartbeatRef = useRef<number | null>(null)
+  const trustSyncRef = useRef<number | null>(null)
 
   // Mock test data based on testId
   const mockTestData: MockTestData = getMockTestData(testId || '')
@@ -48,8 +56,11 @@ export default function PracticeMockExam() {
   // Centralized state management with useExamState hook (replaces 20+ useState)
   const [examState, dispatch] = useExamState(mockTestData.duration)
 
-  // Proctoring Engine V2
-  const proctoringEngine = useMemo(() => new ProctoringEngineV2(), [])
+  // Local state
+  const [examPaused, setExamPaused] = useState(false)
+
+  // Proctoring Engine V1 (same as live exams)
+  const proctoringEngine = useMemo(() => new ProctoringEngine(), [])
 
   // Adaptive Exam Engine
   const adaptiveEngine = useMemo(() => new AdaptiveExamEngine('Medium'), [])
@@ -73,6 +84,20 @@ export default function PracticeMockExam() {
     try {
       logger.info('Stopping camera and proctoring')
       
+      // Stop WebSocket
+      if (wsClientRef.current) {
+        wsClientRef.current.disconnect()
+        wsClientRef.current = null
+      }
+      if (heartbeatRef.current) {
+        clearInterval(heartbeatRef.current)
+        heartbeatRef.current = null
+      }
+      if (trustSyncRef.current) {
+        clearInterval(trustSyncRef.current)
+        trustSyncRef.current = null
+      }
+      
       // Stop monitoring first
       if (proctoringEngine) {
         proctoringEngine.stopMonitoring()
@@ -95,15 +120,6 @@ export default function PracticeMockExam() {
       if (proctoringEngine) {
         await proctoringEngine.cleanup()
       }
-      
-      // Nuclear: stop ALL video elements on page
-      document.querySelectorAll('video').forEach(video => {
-        if (video.srcObject) {
-          const stream = video.srcObject as MediaStream
-          stream.getTracks().forEach(track => track.stop())
-          video.srcObject = null
-        }
-      })
       
       // Reset state using dispatch
       dispatch({ type: 'ENABLE_CAMERA', payload: false })
@@ -159,10 +175,10 @@ export default function PracticeMockExam() {
     }
   }, [examState.timeRemaining, examState.examStarted, examState.examEnded, examState.isSubmitting])
 
-  // Initialize Proctoring Engine when camera is enabled
+  // Start camera when camera not yet enabled
   useEffect(() => {
-    if (examState.cameraEnabled && videoRef.current && !examState.proctoringStatus?.isActive) {
-      initializeProctoring()
+    if (!examState.cameraEnabled && !examState.isInitializingCamera) {
+      startCamera()
     }
   }, [examState.cameraEnabled])
 
@@ -273,94 +289,6 @@ export default function PracticeMockExam() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [stopCamera, examState.examStarted, examState.examEnded])
 
-  // Initialize proctoring
-  const initializeProctoring = async () => {
-    if (!videoRef.current) {
-      const error = new Error('Video element not available. This should not happen - please report this bug.')
-      console.error('❌ CRITICAL ERROR:', error)
-      throw error
-    }
-
-    console.log('🚀 Initializing proctoring engine...')
-    console.log('Video element state:', {
-      readyState: videoRef.current.readyState,
-      videoWidth: videoRef.current.videoWidth,
-      videoHeight: videoRef.current.videoHeight,
-      paused: videoRef.current.paused
-    })
-
-    try {
-      console.log('📹 Loading face detection models...')
-      await proctoringEngine.loadModels()
-      console.log('✅ Models loaded')
-      
-      logger.info('Initializing camera and microphone')
-      await proctoringEngine.initialize(videoRef.current)
-      logger.info('Camera and microphone initialized')
-      
-      // Set up callbacks
-      proctoringEngine.setOnViolation((violation) => {
-        logger.warn('Violation detected', violation)
-        // Add to active examState.violations for display
-        dispatch({ type: 'ADD_ACTIVE_VIOLATION', payload: violation })
-        
-        // Auto-dismiss after 5 seconds
-        setTimeout(() => {
-          dispatch({ type: 'REMOVE_ACTIVE_VIOLATION', payload: violation })
-        }, 5000)
-
-        // Add to examState.violations list
-        dispatch({ type: 'ADD_VIOLATION', payload: violation.message })
-      })
-
-      proctoringEngine.setOnStatusChange((status) => {
-        dispatch({ type: 'SET_PROCTORING_STATUS', payload: status })
-        dispatch({ type: 'SET_TAB_SWITCHES', payload: status.tabSwitchCount })
-      })
-
-      // Set up auto-pause callback
-      proctoringEngine.setOnPause((reason) => {
-        alert(`⚠️ EXAM PAUSED\n\n${reason}\n\nPlease contact the proctor to resume.`)
-      })
-
-      console.log('⏳ Waiting for video to stabilize...')
-      // Capture reference face for identity verification
-      await new Promise(resolve => setTimeout(resolve, 2000)) // Wait longer for video to stabilize
-      
-      console.log('📸 Capturing reference face...')
-      const faceCapture = await proctoringEngine.captureReferenceFace()
-      if (faceCapture) {
-        console.log('✅ Reference face captured for identity verification')
-      } else {
-        console.warn('⚠️ Reference face capture failed - continuing without identity verification')
-      }
-
-      // Enable session recording for audit trail
-      console.log('🎬 Enabling session recording...')
-      proctoringEngine.enableRecording()
-
-      dispatch({ type: 'ENABLE_CAMERA', payload: true })
-      dispatch({ type: 'ENABLE_MIC', payload: true })
-      
-      // Start monitoring immediately for camera preview (even before exam starts)
-      console.log('🔍 Starting monitoring for camera preview...')
-      proctoringEngine.startMonitoring()
-      
-      console.log('✅ Proctoring initialization complete!')
-      console.log('Face detection is now active - you should see console logs every 2 seconds')
-      console.log('Audio detection is now active - you should see console logs every 100ms')
-    } catch (error) {
-      console.error('❌ Proctoring initialization failed:', error)
-      
-      // Clean up on error
-      dispatch({ type: 'ENABLE_MIC', payload: false })
-      dispatch({ type: 'ENABLE_MIC', payload: false })
-      
-      // Re-throw to let startCamera handle the error display
-      throw error
-    }
-  }
-
   // Enter fullscreen
   const enterFullscreen = async () => {
     try {
@@ -372,118 +300,139 @@ export default function PracticeMockExam() {
   }
 
   const startCamera = async () => {
-    console.log('🎥 Starting camera...')
-    console.log('Video ref exists:', !!videoRef.current)
-    
+    dispatch({ type: 'SET_INITIALIZING_CAMERA', payload: true })
+
+    // ── PHASE 1: Attach stream to video element immediately ────────────
     try {
-      // Show loading state immediately
-      dispatch({ type: 'SET_INITIALIZING_CAMERA', payload: true })
-      
-      // Video element should always be available now (rendered with sr-only when hidden)
-      if (videoRef.current) {
-        console.log('✅ Video element found:', {
-          tagName: videoRef.current.tagName,
-          isConnected: videoRef.current.isConnected,
-          parentElement: !!videoRef.current.parentElement
-        })
+      const preExamStream = (window as any).__preExamStream as MediaStream | undefined
+      let stream: MediaStream
+
+      if (preExamStream && preExamStream.active) {
+        stream = preExamStream
+        delete (window as any).__preExamStream
+        console.log('[Camera] Reusing pre-exam stream')
       } else {
-        console.error('❌ Video ref is null - this should not happen!')
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+        })
       }
-      
-      // Initialize proctoring
-      console.log('🚀 Starting proctoring initialization...')
-      await initializeProctoring()
-      
-      console.log('✅ Camera started successfully')
+
+      if (videoRef.current) {
+        if (videoRef.current.srcObject && videoRef.current.srcObject !== stream) {
+          (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop())
+        }
+        videoRef.current.srcObject = stream
+        videoRef.current.muted = true
+        videoRef.current.playsInline = true
+        videoRef.current.play().catch(e => console.warn('[Camera] play():', e))
+      }
+
+      dispatch({ type: 'ENABLE_CAMERA', payload: true })
+      dispatch({ type: 'ENABLE_MIC', payload: true })
       dispatch({ type: 'SET_INITIALIZING_CAMERA', payload: false })
-    } catch (error) {
-      console.error('❌ Error starting camera:', error)
-      console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error)
-      console.error('Error message:', error instanceof Error ? error.message : String(error))
-      
-      dispatch({ type: 'SET_INITIALIZING_CAMERA', payload: false })
+
+      // Initialize WebSocket for teacher monitoring
+      if (user) {
+        try {
+          const testIdValue = testId || 'practice'
+          const wsClient = new WebSocketClient()
+          wsClientRef.current = wsClient
+          const userId = user._id || user.email || 'unknown'
+          wsClient.connect({ userId, role: 'student', examId: testIdValue })
+
+          // Heartbeat
+          heartbeatRef.current = window.setInterval(() => {
+            if (wsClient.isConnected()) {
+              wsClient.send({
+                type: 'heartbeat',
+                exam_id: testIdValue,
+                student_id: userId,
+                timestamp: new Date().toISOString(),
+              })
+            }
+          }, 10000)
+
+          // Trust score sync
+          trustSyncRef.current = window.setInterval(() => {
+            if (wsClient.isConnected()) {
+              wsClient.send({
+                type: 'proctoring_status',
+                exam_id: testIdValue,
+                student_id: userId,
+                trust_score: 100,
+                status: { isActive: true }
+              })
+            }
+          }, 30000)
+
+          wsClient.on('intervention', (data: any) => {
+            const action = data.action as string
+            if (action === 'pause') {
+              alert('Exam paused by teacher. Please wait.')
+              setExamPaused(true)
+            } else if (action === 'resume') {
+              setExamPaused(false)
+            }
+          })
+        } catch (wsErr) {
+          console.warn('[WebSocket] Connection failed:', wsErr)
+        }
+      }
+    } catch (streamErr) {
+      const msg = streamErr instanceof Error ? streamErr.message : String(streamErr)
+      if (msg.includes('NotAllowedError') || msg.includes('Permission')) {
+        alert('Camera permission denied. Please allow camera access and refresh.')
+      } else if (msg.includes('NotFoundError')) {
+        alert('No camera found. Please connect a camera.')
+      }
       dispatch({ type: 'ENABLE_CAMERA', payload: false })
       dispatch({ type: 'ENABLE_MIC', payload: false })
-      
-      // Show specific error messages based on error type
-      if (error instanceof Error) {
-        const errorMsg = error.message.toLowerCase()
-        const errorName = error.constructor.name.toLowerCase()
-        
-        console.log('🔍 Analyzing error - Name:', errorName, 'Message:', errorMsg)
-        
-        if (errorMsg.includes('lighting') || errorMsg.includes('insufficient')) {
-          alert(
-            '🚨 INSUFFICIENT LIGHTING!\n\n' +
-            'Your room is too dark for face detection to work.\n\n' +
-            '✅ Turn on lights\n' +
-            '✅ Sit near a window or lamp\n' +
-            '✅ Ensure your face is well-lit\n\n' +
-            'Minimum examState.brightness required: 50/255\n\n' +
-            'Please improve lighting and try again.'
-          )
-        } else if (errorName.includes('notallowed') || errorMsg.includes('permission') || errorMsg.includes('denied')) {
-          alert(
-            '🚨 CAMERA PERMISSION DENIED!\n\n' +
-            'Please allow camera and microphone access.\n\n' +
-            'Steps to fix:\n' +
-            '✅ Click the camera icon in your address bar\n' +
-            '✅ Select "Allow" for camera and microphone\n' +
-            '✅ Refresh the page and try again\n\n' +
-            'Or check your browser settings to enable permissions.'
-          )
-        } else if (errorName.includes('notfound') || errorMsg.includes('not found') || errorMsg.includes('no device')) {
-          alert(
-            '🚨 NO CAMERA FOUND!\n\n' +
-            'No camera device detected on your computer.\n\n' +
-            'Steps to fix:\n' +
-            '✅ Connect a webcam to your computer\n' +
-            '✅ Make sure camera drivers are installed\n' +
-            '✅ Check if camera works in other apps\n' +
-            '✅ Restart your browser and try again'
-          )
-        } else if (errorName.includes('notreadable') || errorMsg.includes('in use') || errorMsg.includes('already')) {
-          alert(
-            '🚨 CAMERA IS BUSY!\n\n' +
-            'Another application is using your camera.\n\n' +
-            'Steps to fix:\n' +
-            '✅ Close other apps that might use the camera (Zoom, Teams, Skype, etc.)\n' +
-            '✅ Close other browser tabs using the camera\n' +
-            '✅ Restart your browser\n' +
-            '✅ Try again'
-          )
-        } else if (errorMsg.includes('video element') || errorMsg.includes('not ready')) {
-          alert(
-            '🚨 VIDEO ELEMENT NOT READY!\n\n' +
-            'The camera preview area is not loaded yet.\n\n' +
-            'Steps to fix:\n' +
-            '✅ Scroll down to see the "Camera Preview" section\n' +
-            '✅ Wait 1-2 seconds for the page to fully load\n' +
-            '✅ Click "Enable Camera" again\n\n' +
-            'If problem persists, refresh the page.'
-          )
-        } else {
-          alert(
-            '❌ Camera Initialization Failed\n\n' +
-            `Error Type: ${error.constructor.name}\n` +
-            `Error: ${error.message}\n\n` +
-            'Possible solutions:\n' +
-            '✅ Scroll down to see the camera preview section\n' +
-            '✅ Allow camera/microphone permissions\n' +
-            '✅ Close other apps using the camera\n' +
-            '✅ Refresh the page and try again\n' +
-            '✅ Try a different browser (Chrome recommended)'
-          )
-        }
-      } else {
-        alert(
-          '❌ Unknown Error\n\n' +
-          'An unexpected error occurred.\n\n' +
-          'Please refresh the page and try again.\n' +
-          'If the problem persists, try a different browser.'
-        )
-      }
+      dispatch({ type: 'SET_INITIALIZING_CAMERA', payload: false })
+      return
     }
+
+    // ── PHASE 2: Initialize AI engine with the already-playing stream ──
+    setTimeout(async () => {
+      const stream = videoRef.current?.srcObject as MediaStream | null
+      if (!stream || !stream.active || !videoRef.current) return
+
+      try {
+        await proctoringEngine.loadModels()
+        await proctoringEngine.initialize(videoRef.current!, stream)
+
+        proctoringEngine.setOnViolation((violation) => {
+          dispatch({ type: 'ADD_ACTIVE_VIOLATION', payload: violation })
+          setTimeout(() => {
+            dispatch({ type: 'REMOVE_ACTIVE_VIOLATION', payload: violation })
+          }, 5000)
+          dispatch({ type: 'ADD_VIOLATION', payload: violation.message })
+        })
+
+        proctoringEngine.setOnStatusChange((status) => {
+          dispatch({ type: 'SET_PROCTORING_STATUS', payload: status })
+          dispatch({ type: 'SET_TAB_SWITCHES', payload: status.tabSwitchCount })
+        })
+
+        proctoringEngine.setOnPause((reason) => {
+          alert('Exam paused: ' + reason)
+        })
+
+        setTimeout(async () => {
+          const faceCapture = await proctoringEngine.captureReferenceFace()
+          if (faceCapture) {
+            console.log('Reference face captured for identity verification')
+          } else {
+            console.warn('Reference face capture failed - continuing')
+          }
+        }, 3000)
+
+        proctoringEngine.enableRecording()
+        proctoringEngine.startMonitoring()
+      } catch (engineErr) {
+        console.warn('[Proctoring] AI engine initialization failed:', engineErr)
+      }
+    }, 500)
   }
 
   const handleStartExam = async () => {
@@ -1366,113 +1315,26 @@ export default function PracticeMockExam() {
           </div>
         </div>
 
-        {/* Proctoring Panel - Desktop Only */}
-        {!isMobile && !isTablet && (
-          <div className="hidden xl:block w-80 bg-white border-l overflow-y-auto">
-            <div className="p-4">
-              <h3 className="font-bold text-lg mb-4 flex items-center">
-                <Eye className="w-5 h-5 mr-2 text-blue-600" />
-                AI Proctoring
-              </h3>
-
-              {/* Camera Feed */}
-              <div className="mb-4">
-                <p className="text-sm font-semibold mb-2">Live Camera</p>
-                <div className={`relative bg-black rounded-lg overflow-hidden aspect-video ${
-                  !(examState.cameraEnabled && examState.proctoringStatus?.isActive) ? 'opacity-0 h-0 overflow-hidden' : ''
-                }`}>
-                  <video
-                    ref={sidebarVideoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-cover"
-                  />
-                  {examState.cameraEnabled && examState.proctoringStatus?.isActive && (
-                    <div className="absolute top-2 right-2 bg-red-600 text-white px-2 py-1 rounded-full text-xs flex items-center">
-                      <div className="w-2 h-2 bg-white rounded-full mr-1 animate-pulse" />
-                      REC
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Status Indicators */}
-              <div className="space-y-3">
-                <div className={`flex items-center justify-between p-3 rounded-lg ${
-                  examState.proctoringStatus?.faceDetected && examState.proctoringStatus?.faceCount === 1 ? 'bg-green-50' : 'bg-red-50'
-                }`}>
-                  <span className="text-sm font-medium">Face Detection</span>
-                  {examState.proctoringStatus?.faceDetected && examState.proctoringStatus?.faceCount === 1 ? (
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-green-600" />
-                      <span className="text-xs text-green-700">1 Face ✓</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <XCircle className="w-5 h-5 text-red-600" />
-                      <span className="text-xs text-red-700">
-                        {examState.proctoringStatus?.faceCount === 0 && 'No Face'}
-                        {examState.proctoringStatus && examState.proctoringStatus.faceCount > 1 && `${examState.proctoringStatus.faceCount} Faces!`}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                <div className={`flex items-center justify-between p-3 rounded-lg ${
-                  examState.proctoringStatus?.lookingAtScreen ? 'bg-green-50' : 'bg-yellow-50'
-                }`}>
-                  <span className="text-sm font-medium">Eye Tracking</span>
-                  {examState.proctoringStatus?.lookingAtScreen ? (
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                  ) : (
-                    <AlertTriangle className="w-5 h-5 text-yellow-600" />
-                  )}
-                </div>
-
-                <div className={`flex items-center justify-between p-3 rounded-lg ${
-                  examState.tabSwitches === 0 ? 'bg-green-50' : 'bg-yellow-50'
-                }`}>
-                  <span className="text-sm font-medium">Tab Switches</span>
-                  <span className="font-bold">{examState.tabSwitches}</span>
-                </div>
-
-                <div className={`flex items-center justify-between p-3 rounded-lg ${
-                  (examState.proctoringStatus?.audioLevel || 0) < 40 ? 'bg-green-50' : 'bg-yellow-50'
-                }`}>
-                  <span className="text-sm font-medium">Audio Level</span>
-                  <div className="flex items-center gap-2">
-                    <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full transition-all ${(examState.proctoringStatus?.audioLevel || 0) > 40 ? 'bg-yellow-500' : 'bg-green-500'}`}
-                        style={{ width: `${Math.min((examState.proctoringStatus?.audioLevel || 0) * 2, 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between p-3 rounded-lg bg-blue-50">
-                  <span className="text-sm font-medium">Total examState.violations</span>
-                  <span className="font-bold">{examState.violations.length}</span>
-                </div>
-              </div>
-
-              {/* Violation Log */}
-              {examState.violations.length > 0 && (
-                <div className="mt-4">
-                  <p className="text-sm font-semibold mb-2">Violation Log</p>
-                  <div className="bg-red-50 rounded-lg p-3 max-h-40 overflow-y-auto">
-                    {examState.violations.map((violation, index) => (
-                      <p key={index} className="text-xs text-red-800 mb-1">
-                        ⚠️ {violation}
-                      </p>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        {/* Proctoring Right Panel */}
+        <div className="hidden xl:block w-80 overflow-y-auto max-h-[calc(100vh-5rem)]">
+          <ProctoringRightPanel
+            videoRef={videoRef}
+            proctoringActive={examState.cameraEnabled && !!examState.proctoringStatus?.isActive}
+            cameraReady={examState.cameraEnabled}
+            trustScore={examState.proctoringStatus?.integrityScore ?? 100}
+            proctoringStatus={examState.proctoringStatus ? {
+              faceDetected: examState.proctoringStatus.faceDetected,
+              lookingAtScreen: examState.proctoringStatus.lookingAtScreen,
+              faceCount: examState.proctoringStatus.faceCount,
+              audioLevel: examState.proctoringStatus.audioLevel,
+              isActive: examState.proctoringStatus.isActive,
+              integrityScore: examState.proctoringStatus.integrityScore,
+            } : null}
+            tabSwitches={examState.tabSwitches}
+            flags={examState.violations.map((v: any) => typeof v === 'string' ? { evidence: v, severity: 'medium' } : v)}
+            mode="practice"
+          />
+        </div>
       </div>
     </div>
   )

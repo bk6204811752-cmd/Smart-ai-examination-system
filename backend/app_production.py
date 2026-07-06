@@ -46,6 +46,7 @@ from routes.sessions import router as sessions_router
 from routes.communication import router as communication_router
 from routes.webhooks import router as webhooks_router
 from routes.websocket_routes import router as websocket_router
+from routes.advanced_features import router as advanced_router
 
 from utils.seeder import seed_database
 
@@ -116,7 +117,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Not "*"
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],  # Not "*"
     allow_headers=["Content-Type", "Authorization"],  # Not "*"
     max_age=3600,  # Cache preflight 1 hour
 )
@@ -178,6 +179,7 @@ app.include_router(sessions_router)
 app.include_router(communication_router)
 app.include_router(webhooks_router)
 app.include_router(websocket_router)  # Real-time WebSocket monitoring
+app.include_router(advanced_router)   # Advanced/stub feature routes
 
 
 # ── Extra Utility Routes ──────────────────────────────────────────────────────

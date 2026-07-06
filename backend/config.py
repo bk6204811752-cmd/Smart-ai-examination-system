@@ -83,23 +83,38 @@ class Settings(BaseSettings):
 
     @property
     def is_production(self) -> bool:
-        env = (os.getenv("VERCEL_ENV") or self.ENVIRONMENT or "").lower()
-        return env == "production" or bool(os.getenv("VERCEL"))
+        # Use VERCEL_ENV (set by Vercel: 'production', 'preview', 'development')
+        # or explicit ENVIRONMENT setting. Do NOT use raw VERCEL var (always set on all Vercel envs)
+        vercel_env = os.getenv("VERCEL_ENV", "").lower()
+        if vercel_env == "production":
+            return True
+        return (self.ENVIRONMENT or "").lower() in ["production", "prod"]
 
     def validate_runtime(self):
         default_secret = "pcmt-super-secret-key-change-in-production-min-32-characters-required"
-        if self.is_production and self.SECRET_KEY == default_secret:
-            raise RuntimeError(
-                "🔴 SECURITY: Set a strong SECRET_KEY (32+ chars) in production environment variables. "
-                "Never use default development key in production!"
-            )
+        import logging
+        _log = logging.getLogger(__name__)
+        
         if len(self.SECRET_KEY) < 32:
             raise RuntimeError("SECRET_KEY must be at least 32 characters long")
-        if self.is_production:
-            if self.DEBUG:
+        
+        if self.is_production and self.SECRET_KEY == default_secret:
+            if not self.ALLOW_IN_MEMORY_DB:
+                raise RuntimeError(
+                    "SECURITY: Set a strong SECRET_KEY (32+ chars) in production. "
+                    "Never use default development key in production!"
+                )
+            else:
+                _log.warning("Using default SECRET_KEY in production with in-memory DB — demo mode only")
+        
+        if self.is_production and self.DEBUG:
+            if not self.ALLOW_IN_MEMORY_DB:
                 raise RuntimeError("DEBUG mode cannot be enabled in production")
-            if self.ENVIRONMENT not in ["production", "prod"]:
-                raise RuntimeError(f"Invalid ENVIRONMENT for production: {self.ENVIRONMENT}")
+            else:
+                _log.warning("DEBUG=True in production — allowed for demo/development Vercel deployment")
+        
+        if self.is_production and self.ENVIRONMENT not in ["production", "prod"] and not self.ALLOW_IN_MEMORY_DB:
+            raise RuntimeError(f"Invalid ENVIRONMENT for production: {self.ENVIRONMENT}")
 
 
 settings = Settings()

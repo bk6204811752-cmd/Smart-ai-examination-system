@@ -226,14 +226,19 @@ class InMemoryDB:
 
 async def _try_motor():
     from motor.motor_asyncio import AsyncIOMotorClient
-    c = AsyncIOMotorClient(
-        settings.MONGODB_URI,
-        serverSelectionTimeoutMS=5000,
-    )
-    d = c[settings.DATABASE_NAME]
-    # Trigger actual connection
-    await d.list_collection_names()
-    return c, d
+    try:
+        c = AsyncIOMotorClient(
+            settings.MONGODB_URI,
+            serverSelectionTimeoutMS=5000,
+            connectTimeoutMS=5000,
+        )
+        d = c[settings.DATABASE_NAME]
+        # Trigger actual connection (will raise if MongoDB is unreachable)
+        await d.list_collection_names()
+        return c, d
+    except Exception as e:
+        # Re-raise with a cleaner message
+        raise ConnectionError(f"MongoDB connection failed: {type(e).__name__}: {str(e)}") from e
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -246,28 +251,31 @@ async def connect_db():
         logger.info(f"✅ Connected to MongoDB Atlas: {settings.DATABASE_NAME}")
         print(f"[OK] Connected to MongoDB Atlas: {settings.DATABASE_NAME}")
     except Exception as e:
-        error_msg = f"🔴 MongoDB connection failed: {type(e).__name__}: {str(e)}"
-        logger.error(error_msg)
-        
-        # FAIL HARD in production
+        error_msg = f"MongoDB connection failed: {str(e)}"
+
+        # If in-memory DB is explicitly allowed, always use it as fallback
+        # regardless of environment (supports demo deployments on Vercel with broken Atlas)
+        if settings.ALLOW_IN_MEMORY_DB:
+            print(f"[WARN] {error_msg}")
+            print(f"[INFO] Falling back to in-memory database (data resets on restart)")
+            logger.warning(f"Falling back to in-memory database. Reason: {str(e)}")
+            db = InMemoryDB()
+            _using_memory = True
+            return
+
+        # FAIL HARD in production when in-memory DB is NOT allowed
         if settings.is_production:
             raise RuntimeError(
                 f"Database connection failed in production. "
-                f"Check MONGODB_URI environment variable. Error: {str(e)}"
+                f"Set ALLOW_IN_MEMORY_DB=true for demo mode, or fix MONGODB_URI. "
+                f"Error: {str(e)}"
             ) from e
-        
-        # In development, allow in-memory DB only if explicitly enabled
-        if settings.ALLOW_IN_MEMORY_DB:
-            logger.warning(f"Falling back to in-memory database (data resets on restart)")
-            print(f"[WARN] {error_msg}")
-            print(f"[INFO] Using in-memory database (development only)")
-            db = InMemoryDB()
-            _using_memory = True
-        else:
-            raise RuntimeError(
-                f"Database connection failed and in-memory DB not enabled. "
-                f"Set ALLOW_IN_MEMORY_DB=true or fix the database connection."
-            ) from e
+
+        raise RuntimeError(
+            f"Database connection failed. "
+            f"Set ALLOW_IN_MEMORY_DB=true in .env or fix the database connection. "
+            f"Error: {str(e)}"
+        ) from e
 
 
 async def disconnect_db():
