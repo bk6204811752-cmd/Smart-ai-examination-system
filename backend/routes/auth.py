@@ -142,17 +142,20 @@ async def login(request: Request, login_data: LoginRequest, db=Depends(get_db)):
         })
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    if user.get("status") == "pending":
-        if not user.get("email_verified", False):
-            if _email_configured():
-                raise HTTPException(
-                    status_code=403,
-                    detail="Please verify your email first. Check your inbox for the OTP."
-                )
+    # Handle unverified status (user registered but hasn't verified email yet)
+    if user.get("status") == "unverified" or not user.get("email_verified", False):
+        if _email_configured():
             raise HTTPException(
                 status_code=403,
-                detail="Your account requires admin approval. You will be notified by email once approved."
+                detail="Please verify your email first. Check your inbox for the OTP."
             )
+        raise HTTPException(
+            status_code=403,
+            detail="Your account requires email verification. Please contact admin."
+        )
+    
+    # Handle pending status (user verified email but awaiting admin approval)
+    if user.get("status") == "pending":
         raise HTTPException(
             status_code=403,
             detail="Your account is pending admin approval. You will be notified by email once approved."
@@ -198,16 +201,18 @@ async def register(request: Request, reg_data: RegisterRequest, db=Depends(get_d
     if role not in ["student", "teacher", "admin"]:
         raise HTTPException(status_code=400, detail="Invalid role")
 
-    status = "approved" if role == "admin" else "pending"
+    # CRITICAL FIX: Only set status to "pending" AFTER email is verified
+    # Initially set status to "unverified" to prevent admin approval before OTP verification
+    status = "approved" if role == "admin" else "unverified"
 
     user_doc = {
         "email": reg_data.email.lower(),
         "password": hash_password(reg_data.password),
         "full_name": reg_data.full_name,
         "role": role,
-        "status": status,
-        "is_active": (status == "approved"),
-        "email_verified": (role == "admin"),
+        "status": status,  # unverified until email is verified
+        "is_active": (role == "admin"),  # Only admin is active immediately
+        "email_verified": (role == "admin"),  # Only admin email is pre-verified,
         "program": reg_data.program,
         "semester": reg_data.semester,
         "department": reg_data.department,
@@ -316,13 +321,18 @@ async def verify_otp_endpoint(req: VerifyOTPRequest, db=Depends(get_db)):
     if not success:
         raise HTTPException(status_code=400, detail=msg)
 
-    # Mark email as verified
+    # CRITICAL FIX: Mark email as verified AND change status from "unverified" to "pending"
+    # This ensures users only appear in admin approval list AFTER email verification
     await db.users.update_one(
         {"email": req.email.lower()},
-        {"$set": {"email_verified": True}}
+        {"$set": {
+            "email_verified": True,
+            "status": "pending",  # Now ready for admin approval
+            "is_active": False     # Still inactive until admin approves
+        }}
     )
 
-    logger.info(f"Email verified for {req.email}")
+    logger.info(f"Email verified for {req.email}, status changed to pending")
 
     # Send pending approval email to user + notify admin (errors suppressed)
     if _email_configured():
