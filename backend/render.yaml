@@ -1,0 +1,69 @@
+services:
+  - type: web
+    name: pcmt-ai-exam-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -w 4 -k uvicorn.workers.UvicornWorker app_production:app --bind 0.0.0.0:$PORT --timeout 120 --keep-alive 5 --log-level info
+    healthCheckPath: /api/health
+    autoDeploy: true
+    plan: free
+
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: ALLOW_IN_MEMORY_DB
+        value: "false"
+      - key: SEED_DEMO_DATA
+        value: "true"
+      - key: APP_NAME
+        value: "PCMT Smart AI Exam System"
+      - key: APP_VERSION
+        value: "1.0.0"
+      - key: ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "1440"
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        value: "7"
+      - key: UPLOAD_DIR
+        value: /tmp/uploads
+      - key: MAX_FILE_SIZE
+        value: "10485760"
+      - key: PROCTORING_ENABLED
+        value: "true"
+      - key: FACE_DETECTION_INTERVAL
+        value: "2"
+      - key: MIN_TRUST_SCORE
+        value: "60"
+      - key: COLLEGE_NAME
+        value: "Pailan College of Management and Technology"
+      - key: COLLEGE_CODE
+        value: PCMT
+      - key: TOTAL_STUDENTS
+        value: "6000"
+      - key: TOTAL_TEACHERS
+        value: "250"
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USE_TLS
+        value: "true"
+      - key: OTP_EXPIRE_MINUTES
+        value: "10"
+      - key: OTP_LENGTH
+        value: "6"
+      # ── SECRETS — Set these in Render Dashboard manually ──
+      # MONGODB_URI      → mongodb+srv://...
+      # DATABASE_NAME    → pcmt_exam
+      # SECRET_KEY       → (strong 32+ char random key)
+      # CORS_ORIGINS     → https://pcmt-ai-exam-system.vercel.app
+      # SMTP_USER        → bk6204811752@gmail.com
+      # SMTP_PASSWORD    → (gmail app password)
+      # SMTP_FROM_EMAIL  → bk6204811752@gmail.com
+      # ADMIN_EMAIL      → bk6204811752@gmail.com

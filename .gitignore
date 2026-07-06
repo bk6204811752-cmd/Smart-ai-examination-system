@@ -1,1 +1,45 @@
-Nothing should be ignored in this case, as only a Python source file (`backend/utils/database_indexes.py`) was modified, and no build artifacts, dependencies, or temporary files were present in the changes.
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.local
+# .env.production is committed intentionally (contains VITE_ build-time vars)
+# Secrets (MONGODB_URI, SECRET_KEY) are set in Render/Vercel dashboards
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build outputs
+dist/
+build/
+target/
+coverage/
+htmlcov/
+
+# Logs
+*.log
+
+# IDE specific
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated
+.DS_Store
+Thumbs.db
+
+# Temp files
+*.tmp
+
+# Backend specific
+backend/__pycache__/
+backend/*.pyc
+
+# Test files
+test_*.py
+*_test.py

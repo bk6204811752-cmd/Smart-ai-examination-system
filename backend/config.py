@@ -14,6 +14,9 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 
 class Settings(BaseSettings):
+    # Server
+    PORT: int = 8000  # Render injects $PORT automatically
+
     # MongoDB
     MONGODB_URI: str = "mongodb://localhost:27017"
     DATABASE_NAME: str = "pcmt_exam"
@@ -33,7 +36,7 @@ class Settings(BaseSettings):
     SEED_DEMO_DATA: bool = False
     ALLOW_IN_MEMORY_DB: bool = False
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000,https://pcmt-ai-exam-system.vercel.app"
-    # Note: CORS regex restricted to specific subdomain to prevent *.vercel.app abuse
+    # Note: In production set CORS_ORIGINS env var to your exact Vercel URL
     CORS_ORIGIN_REGEX: str = r"https://pcmt-ai-exam-system\.vercel\.app"
     
     # Security & Rate Limiting
@@ -100,10 +103,11 @@ class Settings(BaseSettings):
 
     @property
     def is_production(self) -> bool:
-        # Use VERCEL_ENV (set by Vercel: 'production', 'preview', 'development')
-        # or explicit ENVIRONMENT setting. Do NOT use raw VERCEL var (always set on all Vercel envs)
+        # On Render: ENVIRONMENT=production is set as env var
+        # On Vercel (legacy): VERCEL_ENV=production was used
         vercel_env = os.getenv("VERCEL_ENV", "").lower()
-        if vercel_env == "production":
+        render_env = os.getenv("RENDER", "").lower()  # Render sets RENDER=true automatically
+        if vercel_env == "production" or render_env == "true":
             return True
         return (self.ENVIRONMENT or "").lower() in ["production", "prod"]
 

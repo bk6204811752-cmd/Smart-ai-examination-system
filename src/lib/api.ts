@@ -3,8 +3,13 @@ import { useAuthStore } from '../store/globalStore'
 import { logger } from './logger'
 import { toast } from 'sonner'
 
-// Use relative URL in production (same domain on Vercel), fallback to localhost in dev
-const API_URL = (import.meta as any).env?.VITE_API_URL || ((import.meta as any).env?.DEV ? 'http://localhost:8000' : '')
+// Backend URL:
+//   Production → VITE_API_URL env var (set in Vercel Dashboard → points to Render)
+//   Development → http://localhost:8000 (local FastAPI server)
+const API_URL =
+  (import.meta as any).env?.VITE_API_URL ||
+  ((import.meta as any).env?.DEV ? 'http://localhost:8000' : '')
+
 
 // Offline request queue
 interface QueuedRequest {
@@ -173,9 +178,8 @@ api.interceptors.response.use(
           break
           
         case 404:
-          // Not found
+          // Not found - only log, don't show toast (too noisy for dashboard API calls)
           logger.error('Resource not found', { url: originalRequest?.url })
-          toast.error('Requested resource not found')
           break
           
         case 429:
@@ -195,13 +199,13 @@ api.interceptors.response.use(
         case 502:
         case 503:
         case 504:
-          // Server errors - retry with exponential backoff
-          const maxRetries = 3
+          // Server errors - retry once with short delay (max 1 retry, 2s cap)
+          const maxRetries = 1
           originalRequest._retryCount = originalRequest._retryCount || 0
           
           if (originalRequest._retryCount < maxRetries) {
             originalRequest._retryCount++
-            const delay = Math.min(1000 * Math.pow(2, originalRequest._retryCount), 10000)
+            const delay = Math.min(1000 * originalRequest._retryCount, 2000)
             
             logger.warn(`Server error ${status} - retrying (${originalRequest._retryCount}/${maxRetries})`, {
               url: originalRequest?.url,
@@ -212,7 +216,10 @@ api.interceptors.response.use(
             return api.request(originalRequest)
           } else {
             logger.error('Server error - max retries exceeded', { status, url: originalRequest?.url })
-            toast.error('Server is experiencing issues. Please try again later.')
+            // Don't show toast for analytics/dashboard calls to avoid notification spam
+            if (!originalRequest?.url?.includes('/analytics/') && !originalRequest?.url?.includes('/security/')) {
+              toast.error('Server is experiencing issues. Please try again later.')
+            }
           }
           break
           

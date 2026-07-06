@@ -130,7 +130,15 @@ app.add_middleware(
 if settings.is_production:
     app.add_middleware(
         TrustedHostMiddleware,
-        allowed_hosts=["pcmt-ai-exam-system.vercel.app", "localhost", "127.0.0.1"],
+        allowed_hosts=[
+            # Render backend domains
+            "*.onrender.com",
+            # Vercel frontend (making requests to backend)
+            "pcmt-ai-exam-system.vercel.app",
+            # Local dev
+            "localhost",
+            "127.0.0.1",
+        ],
     )
 
 # Add custom security middleware
