@@ -9,7 +9,6 @@ POST /api/exams/{examId}/submit
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional, List, Any
 from pydantic import BaseModel
-from fastapi import Body
 from bson import ObjectId
 from datetime import datetime
 
@@ -138,6 +137,14 @@ async def get_exam(
     exam = await db.exams.find_one({"_id": oid})
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
+
+    # Students can only see active exams
+    if current_user["role"] == "student" and exam.get("status") != "active":
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Teachers can only see their own exams
+    if current_user["role"] == "teacher" and exam.get("created_by") != current_user["_id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     return serialize(exam)
 
@@ -332,10 +339,28 @@ async def get_exam_attempts(
     return attempts
 
 
+class UpdateExamRequest(BaseModel):
+    title: Optional[str] = None
+    subject: Optional[str] = None
+    difficulty: Optional[str] = None
+    duration: Optional[int] = None
+    total_questions: Optional[int] = None
+    exam_type: Optional[str] = None
+    scheduled_time: Optional[str] = None
+    program: Optional[str] = None
+    semester: Optional[int] = None
+    passing_marks: Optional[int] = None
+    proctoring_level: Optional[str] = None
+    instructions: Optional[str] = None
+    shuffle_questions: Optional[bool] = None
+    show_results: Optional[bool] = None
+    status: Optional[str] = None
+
+
 @router.patch("/{exam_id}")
 async def update_exam(
     exam_id: str,
-    updates: dict = Body(...),
+    updates: UpdateExamRequest,
     db=Depends(get_db),
     current_user: dict = Depends(require_teacher_or_admin)
 ):
@@ -345,12 +370,20 @@ async def update_exam(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid exam ID")
 
-    # Remove protected fields
-    updates.pop("_id", None)
-    updates.pop("created_by", None)
-    updates.pop("created_at", None)
+    # Only allow fields that were explicitly provided
+    update_dict = {k: v for k, v in updates.dict().items() if v is not None}
+    if not update_dict:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
 
-    result = await db.exams.update_one({"_id": oid}, {"$set": updates})
+    # Teachers can only update their own exams
+    if current_user["role"] == "teacher":
+        exam = await db.exams.find_one({"_id": oid})
+        if not exam:
+            raise HTTPException(status_code=404, detail="Exam not found")
+        if exam.get("created_by") != current_user["_id"]:
+            raise HTTPException(status_code=403, detail="Not authorized to update this exam")
+
+    result = await db.exams.update_one({"_id": oid}, {"$set": update_dict})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Exam not found")
 
@@ -371,10 +404,15 @@ async def delete_exam(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid exam ID")
 
-    result = await db.exams.delete_one({"_id": oid})
-    if result.deleted_count == 0:
+    exam = await db.exams.find_one({"_id": oid})
+    if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
 
+    # Teachers can only delete their own exams
+    if current_user["role"] == "teacher" and exam.get("created_by") != current_user["_id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this exam")
+
+    await db.exams.delete_one({"_id": oid})
     cache.clear()
     return {"message": "Exam deleted successfully"}
 

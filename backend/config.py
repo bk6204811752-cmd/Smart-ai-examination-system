@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     
     # Security & Rate Limiting
     RATE_LIMIT_ENABLED: bool = True
-    RATE_LIMIT_LOGIN: str = "15/minute"
+    RATE_LIMIT_LOGIN: str = "5/minute"
     RATE_LIMIT_REGISTER: str = "60/hour"
     RATE_LIMIT_GENERAL: str = "300/minute"
     RATE_LIMIT_OTP: str = "30/minute"
@@ -52,8 +52,8 @@ class Settings(BaseSettings):
 
     # File Upload
     MAX_FILE_SIZE: int = 10485760
-    UPLOAD_DIR: str = "./uploads"
-    ALLOWED_UPLOAD_TYPES: list = ["image/jpeg", "image/png", "application/pdf"]
+    UPLOAD_DIR: str = "/tmp/uploads" if os.getenv("VERCEL") == "1" else "./uploads"
+    ALLOWED_UPLOAD_TYPES: list = ["image/jpeg", "image/png", "application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
 
     # Admin email for notifications
     ADMIN_EMAIL: str = ""

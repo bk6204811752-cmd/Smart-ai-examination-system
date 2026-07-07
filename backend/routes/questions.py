@@ -85,10 +85,11 @@ async def get_questions(
     if tag:
         query["tags"] = tag
     if search:
+        escaped_search = re.escape(search)
         query["$or"] = [
-            {"text": {"$regex": search, "$options": "i"}},
-            {"topic": {"$regex": search, "$options": "i"}},
-            {"tags": {"$regex": search, "$options": "i"}},
+            {"text": {"$regex": escaped_search, "$options": "i"}},
+            {"topic": {"$regex": escaped_search, "$options": "i"}},
+            {"tags": {"$regex": escaped_search, "$options": "i"}},
         ]
 
     sort_field = {

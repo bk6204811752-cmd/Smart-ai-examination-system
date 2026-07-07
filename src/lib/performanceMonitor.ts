@@ -31,20 +31,20 @@ class PerformanceMonitor {
   init() {
     // Monitor Core Web Vitals
     this.observeCoreWebVitals()
-    
+
     // Monitor user interactions
     this.trackInteractions()
-    
+
     // Monitor resource loading
     this.observeResourceTiming()
-    
+
     // Monitor FPS
     this.trackFPS()
-    
+
     // Disabled: Verbose initialization log
     // console.log('✅ Performance monitoring initialized')
   }
-  
+
   /**
    * Track FPS for smooth experience monitoring
    */
@@ -53,12 +53,12 @@ class PerformanceMonitor {
       if (this.lastFrameTime) {
         const fps = 1000 / (timestamp - this.lastFrameTime)
         this.fpsHistory.push(fps)
-        
+
         // Keep only last 60 frames
         if (this.fpsHistory.length > 60) {
           this.fpsHistory.shift()
         }
-        
+
         // Disabled: FPS logging (too verbose)
         // if (fps < 10 && fps > 0) {
         //   console.warn('⚠️ Critical FPS drop:', fps.toFixed(1))
@@ -67,10 +67,10 @@ class PerformanceMonitor {
       this.lastFrameTime = timestamp
       requestAnimationFrame(measureFPS)
     }
-    
+
     requestAnimationFrame(measureFPS)
   }
-  
+
   /**
    * Get average FPS
    */
@@ -115,7 +115,7 @@ class PerformanceMonitor {
    */
   private observeMetric(type: string, callback: (entry: any) => void) {
     try {
-      const observer = new PerformanceObserver((list) => {
+      const observer = new PerformanceObserver(list => {
         for (const entry of list.getEntries()) {
           callback(entry)
         }
@@ -131,12 +131,12 @@ class PerformanceMonitor {
    */
   private trackInteractions() {
     // Track clicks
-    document.addEventListener('click', (e) => {
-      const target = (e.target as HTMLElement)
+    document.addEventListener('click', e => {
+      const target = e.target as HTMLElement
       this.interactions.push({
         type: 'click',
         target: target.tagName + (target.id ? `#${target.id}` : ''),
-        timestamp: Date.now()
+        timestamp: Date.now(),
       })
     })
 
@@ -147,7 +147,7 @@ class PerformanceMonitor {
       scrollTimeout = window.setTimeout(() => {
         this.interactions.push({
           type: 'scroll',
-          timestamp: Date.now()
+          timestamp: Date.now(),
         })
       }, 100)
     })
@@ -157,9 +157,7 @@ class PerformanceMonitor {
    * Observe resource loading times
    */
   private observeResourceTiming() {
-    this.observeMetric('resource', (entry: PerformanceResourceTiming) => {
-      const duration = entry.responseEnd - entry.startTime
-      
+    this.observeMetric('resource', () => {
       // Disabled: Slow resource warnings (too verbose for development)
       // Only enable if debugging performance issues
       // if (duration > 10000) {
@@ -176,11 +174,11 @@ class PerformanceMonitor {
       name,
       value,
       rating,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     }
-    
+
     this.metrics.push(metric)
-    
+
     // Disabled: Metric logging (too verbose)
     // Uncomment only when debugging performance issues
     // if (rating === 'poor' && value > 0.5) {
@@ -220,7 +218,7 @@ class PerformanceMonitor {
    */
   getSummary() {
     const summary: Record<string, any> = {}
-    
+
     this.metrics.forEach(metric => {
       if (!summary[metric.name] || summary[metric.name].timestamp < metric.timestamp) {
         summary[metric.name] = metric
@@ -236,12 +234,12 @@ class PerformanceMonitor {
   getInteractionAnalytics() {
     const clickCount = this.interactions.filter(i => i.type === 'click').length
     const scrollCount = this.interactions.filter(i => i.type === 'scroll').length
-    
+
     return {
       totalInteractions: this.interactions.length,
       clicks: clickCount,
       scrolls: scrollCount,
-      engagementScore: Math.min(100, (clickCount + scrollCount) * 2)
+      engagementScore: Math.min(100, (clickCount + scrollCount) * 2),
     }
   }
 
@@ -250,25 +248,14 @@ class PerformanceMonitor {
    */
   async measureOperation<T>(name: string, operation: () => Promise<T>): Promise<T> {
     const start = performance.now()
-    try {
-      const result = await operation()
-      const duration = performance.now() - start
-      
-      // Disabled: Operation timing logs (too verbose)
-      // console.log(`⏱️ ${name}: ${duration.toFixed(2)}ms`)
-      
-      // Record if slow (>100ms)
-      if (duration > 100) {
-        this.recordMetric(name, duration, duration > 500 ? 'poor' : 'needs-improvement')
-      }
-      
-      return result
-    } catch (error) {
-      const duration = performance.now() - start
-      // Disabled: Only log critical async errors in production
-      // console.error(`❌ ${name} failed after ${duration.toFixed(2)}ms:`, error)
-      throw error
+    const result = await operation()
+    const duration = performance.now() - start
+
+    if (duration > 100) {
+      this.recordMetric(name, duration, duration > 500 ? 'poor' : 'needs-improvement')
     }
+
+    return result
   }
 
   /**
@@ -281,7 +268,7 @@ class PerformanceMonitor {
         usedJSHeapSize: memory.usedJSHeapSize,
         totalJSHeapSize: memory.totalJSHeapSize,
         jsHeapSizeLimit: memory.jsHeapSizeLimit,
-        percentUsed: ((memory.usedJSHeapSize / memory.jsHeapSizeLimit) * 100).toFixed(2)
+        percentUsed: ((memory.usedJSHeapSize / memory.jsHeapSizeLimit) * 100).toFixed(2),
       }
     }
     return null
@@ -295,7 +282,7 @@ class PerformanceMonitor {
       vitals: this.getSummary(),
       interactions: this.getInteractionAnalytics(),
       memory: this.getMemoryUsage(),
-      timestamp: Date.now()
+      timestamp: Date.now(),
     }
   }
 

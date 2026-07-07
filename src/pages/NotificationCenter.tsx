@@ -2,15 +2,35 @@ import { useState, useEffect } from 'react'
 import { useAuthStore } from '../store/globalStore'
 import { notificationsAPI } from '../lib/api'
 import { toast } from 'sonner'
-import { 
-  Bell, CheckCircle, AlertTriangle, Info, Calendar,
-  Trophy, X, Filter, Settings, MessageSquare,
-  Clock, Trash2, Eye, Send, RefreshCw
+import {
+  Bell,
+  CheckCircle,
+  AlertTriangle,
+  Calendar,
+  Trophy,
+  X,
+  Filter,
+  Settings,
+  MessageSquare,
+  Clock,
+  Trash2,
+  Eye,
+  Send,
 } from 'lucide-react'
 
 interface Notification {
   _id: string
-  type: 'exam' | 'grade' | 'security' | 'announcement' | 'achievement' | 'reminder' | 'info' | 'success' | 'warning' | 'error'
+  type:
+    | 'exam'
+    | 'grade'
+    | 'security'
+    | 'announcement'
+    | 'achievement'
+    | 'reminder'
+    | 'info'
+    | 'success'
+    | 'warning'
+    | 'error'
   title: string
   message: string
   priority: 'low' | 'normal' | 'medium' | 'high' | 'urgent'
@@ -28,8 +48,15 @@ export default function NotificationCenterPage() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [filteredNotifications, setFilteredNotifications] = useState<Notification[]>([])
   const [filter, setFilter] = useState<'all' | 'unread' | 'exam' | 'grade' | 'security'>('all')
-  const [loading, setLoading] = useState(true)
-  const [stats, setStats] = useState({ total: 0, unread: 0, today: 0, exams: 0, grades: 0, security: 0 })
+  const [, setLoading] = useState(true)
+  const [stats, setStats] = useState({
+    total: 0,
+    unread: 0,
+    today: 0,
+    exams: 0,
+    grades: 0,
+    security: 0,
+  })
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newNotification, setNewNotification] = useState({
     type: 'announcement',
@@ -37,37 +64,38 @@ export default function NotificationCenterPage() {
     message: '',
     priority: 'medium',
     targetRole: 'all',
-    targetUsers: []
+    targetUsers: [],
   })
 
   useEffect(() => {
     loadNotifications()
     loadStats()
-    
+
     // Auto-refresh every 30 seconds
     const interval = setInterval(() => {
       loadNotifications(true)
     }, 30000)
-    
+
     return () => clearInterval(interval)
   }, [])
 
   useEffect(() => {
     filterNotifications()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter, notifications])
 
   const loadNotifications = async (silent = false) => {
     try {
       if (!silent) setLoading(true)
       const data = await notificationsAPI.getNotifications(false, 100)
-      
+
       // Transform backend format to frontend format
       const transformedNotifications = data.map((n: any) => ({
         ...n,
         timestamp: new Date(n.created_at),
         actionUrl: n.action_url,
       }))
-      
+
       setNotifications(transformedNotifications)
       setFilteredNotifications(transformedNotifications)
     } catch (error) {
@@ -102,9 +130,7 @@ export default function NotificationCenterPage() {
   const markAsRead = async (id: string) => {
     try {
       await notificationsAPI.markAsRead([id])
-      setNotifications(notifications.map(n => 
-        n._id === id ? { ...n, read: true } : n
-      ))
+      setNotifications(notifications.map(n => (n._id === id ? { ...n, read: true } : n)))
       setStats(prev => ({ ...prev, unread: Math.max(0, prev.unread - 1) }))
     } catch (error) {
       toast.error('Failed to mark as read')
@@ -126,10 +152,10 @@ export default function NotificationCenterPage() {
     try {
       await notificationsAPI.deleteNotification(id)
       setNotifications(notifications.filter(n => n._id !== id))
-      setStats(prev => ({ 
-        ...prev, 
+      setStats(prev => ({
+        ...prev,
         total: Math.max(0, prev.total - 1),
-        unread: prev.unread - (notifications.find(n => n._id === id)?.read ? 0 : 1)
+        unread: prev.unread - (notifications.find(n => n._id === id)?.read ? 0 : 1),
       }))
       toast.success('Notification deleted')
     } catch (error) {
@@ -139,18 +165,23 @@ export default function NotificationCenterPage() {
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
-      case 'exam': return <Calendar className="w-5 h-5" />
-      case 'violation': return <AlertTriangle className="w-5 h-5" />
-      case 'system': return <Settings className="w-5 h-5" />
-      case 'message': return <MessageSquare className="w-5 h-5" />
-      default: return <Bell className="w-5 h-5" />
+      case 'exam':
+        return <Calendar className="w-5 h-5" />
+      case 'violation':
+        return <AlertTriangle className="w-5 h-5" />
+      case 'system':
+        return <Settings className="w-5 h-5" />
+      case 'message':
+        return <MessageSquare className="w-5 h-5" />
+      default:
+        return <Bell className="w-5 h-5" />
     }
   }
 
   const formatDate = (date: Date | string) => {
     const dateObj = typeof date === 'string' ? new Date(date) : date
     const seconds = Math.floor((Date.now() - dateObj.getTime()) / 1000)
-    
+
     if (seconds < 60) return 'Just now'
     if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`
     if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`
@@ -160,26 +191,23 @@ export default function NotificationCenterPage() {
 
   const getNotificationColor = (type: string, priority: string) => {
     if (priority === 'high') return 'bg-red-100 text-red-600 border-red-200'
-    
-    switch (type) {
-      case 'exam': return 'bg-blue-100 text-blue-600 border-blue-200'
-      case 'grade': return 'bg-green-100 text-green-600 border-green-200'
-      case 'security': return 'bg-orange-100 text-orange-600 border-orange-200'
-      case 'announcement': return 'bg-purple-100 text-purple-600 border-purple-200'
-      case 'achievement': return 'bg-yellow-100 text-yellow-600 border-yellow-200'
-      case 'reminder': return 'bg-cyan-100 text-cyan-600 border-cyan-200'
-      default: return 'bg-gray-100 text-gray-600 border-gray-200'
-    }
-  }
 
-  const getTimeAgo = (date: Date) => {
-    const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
-    
-    if (seconds < 60) return 'Just now'
-    if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`
-    if (seconds < 604800) return `${Math.floor(seconds / 86400)} days ago`
-    return date.toLocaleDateString()
+    switch (type) {
+      case 'exam':
+        return 'bg-blue-100 text-blue-600 border-blue-200'
+      case 'grade':
+        return 'bg-green-100 text-green-600 border-green-200'
+      case 'security':
+        return 'bg-orange-100 text-orange-600 border-orange-200'
+      case 'announcement':
+        return 'bg-purple-100 text-purple-600 border-purple-200'
+      case 'achievement':
+        return 'bg-yellow-100 text-yellow-600 border-yellow-200'
+      case 'reminder':
+        return 'bg-cyan-100 text-cyan-600 border-cyan-200'
+      default:
+        return 'bg-gray-100 text-gray-600 border-gray-200'
+    }
   }
 
   const handleSendNotification = async () => {
@@ -192,7 +220,7 @@ export default function NotificationCenterPage() {
       message: '',
       priority: 'medium',
       targetRole: 'all',
-      targetUsers: []
+      targetUsers: [],
     })
   }
 
@@ -209,7 +237,7 @@ export default function NotificationCenterPage() {
       }).length,
       exams: notifications.filter(n => n.type === 'exam').length,
       grades: notifications.filter(n => n.type === 'grade').length,
-      security: notifications.filter(n => n.type === 'security' && !n.read).length
+      security: notifications.filter(n => n.type === 'security' && !n.read).length,
     })
   }, [notifications])
 
@@ -289,7 +317,7 @@ export default function NotificationCenterPage() {
         <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
           <div className="flex items-center space-x-2 overflow-x-auto">
             <Filter className="w-5 h-5 text-gray-400 flex-shrink-0" />
-            {(['all', 'unread', 'exam', 'grade', 'security'] as const).map((f) => (
+            {(['all', 'unread', 'exam', 'grade', 'security'] as const).map(f => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
@@ -314,7 +342,7 @@ export default function NotificationCenterPage() {
               <p className="text-gray-600">You're all caught up!</p>
             </div>
           ) : (
-            filteredNotifications.map((notification) => (
+            filteredNotifications.map(notification => (
               <div
                 key={notification._id}
                 className={`bg-white rounded-xl shadow-sm p-5 transition-all ${
@@ -323,9 +351,12 @@ export default function NotificationCenterPage() {
               >
                 <div className="flex items-start space-x-4">
                   {/* Icon */}
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 border ${
-                    getNotificationColor(notification.type, notification.priority)
-                  }`}>
+                  <div
+                    className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 border ${getNotificationColor(
+                      notification.type,
+                      notification.priority
+                    )}`}
+                  >
                     {getNotificationIcon(notification.type)}
                   </div>
 
@@ -349,7 +380,9 @@ export default function NotificationCenterPage() {
                           {notification.timestamp ? formatDate(notification.timestamp) : 'Unknown'}
                         </span>
                         {notification.priority === 'high' && (
-                          <span className="px-2 py-1 bg-red-100 text-red-600 rounded">High Priority</span>
+                          <span className="px-2 py-1 bg-red-100 text-red-600 rounded">
+                            High Priority
+                          </span>
                         )}
                       </div>
 
@@ -406,7 +439,9 @@ export default function NotificationCenterPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
                     <select
                       value={newNotification.type}
-                      onChange={(e) => setNewNotification({ ...newNotification, type: e.target.value })}
+                      onChange={e =>
+                        setNewNotification({ ...newNotification, type: e.target.value })
+                      }
                       className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="announcement">Announcement</option>
@@ -420,7 +455,9 @@ export default function NotificationCenterPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
                     <select
                       value={newNotification.priority}
-                      onChange={(e) => setNewNotification({ ...newNotification, priority: e.target.value })}
+                      onChange={e =>
+                        setNewNotification({ ...newNotification, priority: e.target.value })
+                      }
                       className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="low">Low</option>
@@ -431,10 +468,14 @@ export default function NotificationCenterPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Target Audience</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Target Audience
+                  </label>
                   <select
                     value={newNotification.targetRole}
-                    onChange={(e) => setNewNotification({ ...newNotification, targetRole: e.target.value })}
+                    onChange={e =>
+                      setNewNotification({ ...newNotification, targetRole: e.target.value })
+                    }
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="all">All Users</option>
@@ -448,7 +489,9 @@ export default function NotificationCenterPage() {
                   <input
                     type="text"
                     value={newNotification.title}
-                    onChange={(e) => setNewNotification({ ...newNotification, title: e.target.value })}
+                    onChange={e =>
+                      setNewNotification({ ...newNotification, title: e.target.value })
+                    }
                     placeholder="Notification title..."
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
@@ -458,7 +501,9 @@ export default function NotificationCenterPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Message</label>
                   <textarea
                     value={newNotification.message}
-                    onChange={(e) => setNewNotification({ ...newNotification, message: e.target.value })}
+                    onChange={e =>
+                      setNewNotification({ ...newNotification, message: e.target.value })
+                    }
                     placeholder="Notification message..."
                     rows={4}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"

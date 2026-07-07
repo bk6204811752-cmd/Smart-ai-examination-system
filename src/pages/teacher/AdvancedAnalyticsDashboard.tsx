@@ -1,10 +1,6 @@
 import { useState, useEffect } from 'react'
 import { analyticsAPI } from '../../lib/api'
-import { smartExamAPI } from '../../lib/advancedAPIs'
-import { 
-  TrendingUp, Users, AlertTriangle, Target, Brain, BarChart3, 
-  PieChart, Activity, Award, Clock, Eye, Zap 
-} from 'lucide-react'
+import { TrendingUp, Users, AlertTriangle, Brain, BarChart3, Award, Eye, Zap } from 'lucide-react'
 
 interface AdvancedMetrics {
   overview: {
@@ -82,7 +78,7 @@ export default function AdvancedAnalyticsDashboard() {
               </p>
             </div>
             <div className="flex gap-2">
-              {['7d', '30d', '90d'].map((range) => (
+              {['7d', '30d', '90d'].map(range => (
                 <button
                   key={range}
                   onClick={() => setTimeRange(range as any)}
@@ -123,7 +119,9 @@ export default function AdvancedAnalyticsDashboard() {
               <span className="text-sm text-green-600 font-medium">+8.3%</span>
             </div>
             <h3 className="text-gray-600 text-sm font-medium mb-1">Active Students</h3>
-            <p className="text-3xl font-bold text-gray-900">{metrics.overview.total_students.toLocaleString()}</p>
+            <p className="text-3xl font-bold text-gray-900">
+              {metrics.overview.total_students.toLocaleString()}
+            </p>
             <p className="text-xs text-gray-500 mt-2">Monitored sessions</p>
           </div>
 
@@ -137,7 +135,9 @@ export default function AdvancedAnalyticsDashboard() {
             </div>
             <h3 className="text-gray-600 text-sm font-medium mb-1">Average Pass Rate</h3>
             <p className="text-3xl font-bold text-gray-900">{metrics.overview.avg_pass_rate}%</p>
-            <p className="text-xs text-gray-500 mt-2">Prediction accuracy: {metrics.performance.prediction_accuracy}%</p>
+            <p className="text-xs text-gray-500 mt-2">
+              Prediction accuracy: {metrics.performance.prediction_accuracy}%
+            </p>
           </div>
 
           {/* Violations */}
@@ -150,7 +150,9 @@ export default function AdvancedAnalyticsDashboard() {
             </div>
             <h3 className="text-gray-600 text-sm font-medium mb-1">Total Violations</h3>
             <p className="text-3xl font-bold text-gray-900">{metrics.overview.total_violations}</p>
-            <p className="text-xs text-gray-500 mt-2">High-risk sessions: {metrics.overview.high_risk_sessions}</p>
+            <p className="text-xs text-gray-500 mt-2">
+              High-risk sessions: {metrics.overview.high_risk_sessions}
+            </p>
           </div>
         </div>
 
@@ -166,10 +168,12 @@ export default function AdvancedAnalyticsDashboard() {
               <div>
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm text-gray-600">Exam Difficulty Accuracy</span>
-                  <span className="text-sm font-bold text-gray-900">{metrics.performance.exam_difficulty_accuracy}%</span>
+                  <span className="text-sm font-bold text-gray-900">
+                    {metrics.performance.exam_difficulty_accuracy}%
+                  </span>
                 </div>
                 <div className="bg-gray-200 rounded-full h-3">
-                  <div 
+                  <div
                     className="bg-gradient-to-r from-green-500 to-emerald-600 h-full rounded-full transition-all"
                     style={{ width: `${metrics.performance.exam_difficulty_accuracy}%` }}
                   />
@@ -178,10 +182,12 @@ export default function AdvancedAnalyticsDashboard() {
               <div>
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm text-gray-600">Question Quality Average</span>
-                  <span className="text-sm font-bold text-gray-900">{metrics.performance.question_quality_avg}%</span>
+                  <span className="text-sm font-bold text-gray-900">
+                    {metrics.performance.question_quality_avg}%
+                  </span>
                 </div>
                 <div className="bg-gray-200 rounded-full h-3">
-                  <div 
+                  <div
                     className="bg-gradient-to-r from-blue-500 to-blue-600 h-full rounded-full transition-all"
                     style={{ width: `${metrics.performance.question_quality_avg}%` }}
                   />
@@ -190,10 +196,12 @@ export default function AdvancedAnalyticsDashboard() {
               <div>
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm text-gray-600">Discrimination Index</span>
-                  <span className="text-sm font-bold text-gray-900">{metrics.performance.discrimination_index_avg}</span>
+                  <span className="text-sm font-bold text-gray-900">
+                    {metrics.performance.discrimination_index_avg}
+                  </span>
                 </div>
                 <div className="bg-gray-200 rounded-full h-3">
-                  <div 
+                  <div
                     className="bg-gradient-to-r from-purple-500 to-purple-600 h-full rounded-full transition-all"
                     style={{ width: `${metrics.performance.discrimination_index_avg * 100}%` }}
                   />
@@ -202,10 +210,12 @@ export default function AdvancedAnalyticsDashboard() {
               <div>
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm text-gray-600">Pass Rate Prediction</span>
-                  <span className="text-sm font-bold text-gray-900">{metrics.performance.prediction_accuracy}%</span>
+                  <span className="text-sm font-bold text-gray-900">
+                    {metrics.performance.prediction_accuracy}%
+                  </span>
                 </div>
                 <div className="bg-gray-200 rounded-full h-3">
-                  <div 
+                  <div
                     className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-full rounded-full transition-all"
                     style={{ width: `${metrics.performance.prediction_accuracy}%` }}
                   />
@@ -222,27 +232,39 @@ export default function AdvancedAnalyticsDashboard() {
             </h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-blue-50 rounded-lg p-4">
-                <p className="text-2xl font-bold text-blue-600">{metrics.proctoring.sessions_monitored}</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  {metrics.proctoring.sessions_monitored}
+                </p>
                 <p className="text-xs text-gray-600 mt-1">Sessions Monitored</p>
               </div>
               <div className="bg-red-50 rounded-lg p-4">
-                <p className="text-2xl font-bold text-red-600">{metrics.proctoring.violations_detected}</p>
+                <p className="text-2xl font-bold text-red-600">
+                  {metrics.proctoring.violations_detected}
+                </p>
                 <p className="text-xs text-gray-600 mt-1">Violations Detected</p>
               </div>
               <div className="bg-green-50 rounded-lg p-4">
-                <p className="text-2xl font-bold text-green-600">{metrics.proctoring.false_positive_rate}%</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {metrics.proctoring.false_positive_rate}%
+                </p>
                 <p className="text-xs text-gray-600 mt-1">False Positive Rate</p>
               </div>
               <div className="bg-purple-50 rounded-lg p-4">
-                <p className="text-2xl font-bold text-purple-600">{metrics.proctoring.avg_risk_score}</p>
+                <p className="text-2xl font-bold text-purple-600">
+                  {metrics.proctoring.avg_risk_score}
+                </p>
                 <p className="text-xs text-gray-600 mt-1">Avg Risk Score</p>
               </div>
               <div className="bg-orange-50 rounded-lg p-4">
-                <p className="text-2xl font-bold text-orange-600">{metrics.proctoring.auto_interventions}</p>
+                <p className="text-2xl font-bold text-orange-600">
+                  {metrics.proctoring.auto_interventions}
+                </p>
                 <p className="text-xs text-gray-600 mt-1">Auto Interventions</p>
               </div>
               <div className="bg-indigo-50 rounded-lg p-4">
-                <p className="text-2xl font-bold text-indigo-600">{metrics.proctoring.manual_interventions}</p>
+                <p className="text-2xl font-bold text-indigo-600">
+                  {metrics.proctoring.manual_interventions}
+                </p>
                 <p className="text-xs text-gray-600 mt-1">Manual Interventions</p>
               </div>
             </div>
@@ -260,22 +282,28 @@ export default function AdvancedAnalyticsDashboard() {
             <div className="space-y-3">
               {metrics.trends.violation_types.map((violation, index) => (
                 <div key={index} className="flex items-center gap-3">
-                  <div className={`w-2 h-2 rounded-full ${
-                    violation.severity === 'critical' ? 'bg-red-500' :
-                    violation.severity === 'high' ? 'bg-orange-500' :
-                    'bg-yellow-500'
-                  }`} />
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      violation.severity === 'critical'
+                        ? 'bg-red-500'
+                        : violation.severity === 'high'
+                          ? 'bg-orange-500'
+                          : 'bg-yellow-500'
+                    }`}
+                  />
                   <div className="flex-1">
                     <div className="flex justify-between items-center mb-1">
                       <span className="text-sm text-gray-700">{violation.type}</span>
                       <span className="text-sm font-bold text-gray-900">{violation.count}</span>
                     </div>
                     <div className="bg-gray-200 rounded-full h-2">
-                      <div 
+                      <div
                         className={`h-full rounded-full ${
-                          violation.severity === 'critical' ? 'bg-red-500' :
-                          violation.severity === 'high' ? 'bg-orange-500' :
-                          'bg-yellow-500'
+                          violation.severity === 'critical'
+                            ? 'bg-red-500'
+                            : violation.severity === 'high'
+                              ? 'bg-orange-500'
+                              : 'bg-yellow-500'
                         }`}
                         style={{ width: `${(violation.count / 342) * 100}%` }}
                       />
@@ -298,17 +326,22 @@ export default function AdvancedAnalyticsDashboard() {
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-sm text-gray-700 flex items-center gap-2">
                       <span className="text-xl">
-                        {emotion.emotion === 'Focused' ? '🎯' :
-                         emotion.emotion === 'Neutral' ? '😐' :
-                         emotion.emotion === 'Confused' ? '😕' :
-                         emotion.emotion === 'Stressed' ? '😰' : '🤨'}
+                        {emotion.emotion === 'Focused'
+                          ? '🎯'
+                          : emotion.emotion === 'Neutral'
+                            ? '😐'
+                            : emotion.emotion === 'Confused'
+                              ? '😕'
+                              : emotion.emotion === 'Stressed'
+                                ? '😰'
+                                : '🤨'}
                       </span>
                       {emotion.emotion}
                     </span>
                     <span className="text-sm font-bold text-gray-900">{emotion.percentage}%</span>
                   </div>
                   <div className="bg-gray-200 rounded-full h-3">
-                    <div 
+                    <div
                       className="bg-gradient-to-r from-purple-500 to-blue-500 h-full rounded-full transition-all"
                       style={{ width: `${emotion.percentage}%` }}
                     />
@@ -329,12 +362,12 @@ export default function AdvancedAnalyticsDashboard() {
             {metrics.trends.daily_exams.map((day, index) => (
               <div key={index} className="flex-1 flex flex-col items-center gap-2">
                 <div className="w-full flex flex-col gap-1">
-                  <div 
+                  <div
                     className="bg-gradient-to-t from-blue-500 to-blue-400 rounded-t transition-all hover:opacity-80"
                     style={{ height: `${(day.count / 40) * 200}px` }}
                     title={`${day.count} exams`}
                   />
-                  <div 
+                  <div
                     className="bg-gradient-to-t from-red-500 to-red-400 rounded-t transition-all hover:opacity-80"
                     style={{ height: `${(day.violations / 10) * 40}px` }}
                     title={`${day.violations} violations`}
@@ -365,15 +398,22 @@ export default function AdvancedAnalyticsDashboard() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
               <p className="text-sm mb-2">📈 Trend Analysis</p>
-              <p className="text-xs opacity-90">Exam participation increased by 12.5% this week. AI predicts continued growth.</p>
+              <p className="text-xs opacity-90">
+                Exam participation increased by 12.5% this week. AI predicts continued growth.
+              </p>
             </div>
             <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
               <p className="text-sm mb-2">🎯 Quality Improvement</p>
-              <p className="text-xs opacity-90">Question discrimination index improved. Consider using AI-generated exams more frequently.</p>
+              <p className="text-xs opacity-90">
+                Question discrimination index improved. Consider using AI-generated exams more
+                frequently.
+              </p>
             </div>
             <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
               <p className="text-sm mb-2">🔒 Security Alert</p>
-              <p className="text-xs opacity-90">Violation rate decreased by 5.7%. Enhanced proctoring is working effectively.</p>
+              <p className="text-xs opacity-90">
+                Violation rate decreased by 5.7%. Enhanced proctoring is working effectively.
+              </p>
             </div>
           </div>
         </div>

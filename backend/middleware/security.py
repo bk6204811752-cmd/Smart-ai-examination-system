@@ -162,7 +162,8 @@ async def add_security_headers(request: Request, call_next):
 def _add_cors_headers(request: Request, response: JSONResponse) -> JSONResponse:
     """Manually add CORS headers to direct JSON responses (bypassing normal CORSMiddleware)"""
     origin = request.headers.get("origin")
-    if origin:
+    allowed_origins = settings.get_cors_origins()
+    if origin and origin in allowed_origins:
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"

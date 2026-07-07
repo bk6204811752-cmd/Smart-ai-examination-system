@@ -14,7 +14,6 @@ from typing import Optional, List, Any
 from pydantic import BaseModel
 from bson import ObjectId
 from datetime import datetime, timedelta
-import random
 
 from database import get_db
 from middleware.auth import get_current_user, require_teacher_or_admin
@@ -117,7 +116,7 @@ async def get_student_history(
     submissions = await db.submissions.find({
         "student_id": student_id,
         "date": {"$gte": cutoff}
-    }).sort("date", 1).to_list(None)
+    }).sort("date", 1).to_list(1000)
 
     history = []
     for s in submissions:
@@ -141,8 +140,8 @@ async def get_comparative_analytics(
     if current_user["role"] == "student" and str(current_user["_id"]) != student_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    student_subs = await db.submissions.find({"student_id": student_id}).to_list(None)
-    all_subs = await db.submissions.find({}).to_list(None)
+    student_subs = await db.submissions.find({"student_id": student_id}).to_list(1000)
+    all_subs = await db.submissions.find({}).to_list(5000)
 
     student_avg = round(sum(s["percentage"] for s in student_subs) / len(student_subs), 1) if student_subs else 0
     global_avg = round(sum(s["percentage"] for s in all_subs) / len(all_subs), 1) if all_subs else 0
@@ -282,7 +281,7 @@ async def get_teacher_analytics(
 
     # Admins see all, teachers see their own
     exam_query = {} if role == "admin" else {"created_by": current_user["_id"]}
-    exams = await db.exams.find(exam_query).to_list(None)
+    exams = await db.exams.find(exam_query).to_list(1000)
     exam_ids = [str(e["_id"]) for e in exams]
 
     total_submissions = await db.submissions.count_documents(
@@ -322,7 +321,7 @@ async def get_analytics_trends(
 ):
     """Time-series trend data for analytics charts"""
     cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
-    submissions = await db.submissions.find({"date": {"$gte": cutoff}}).sort("date", 1).to_list(None)
+    submissions = await db.submissions.find({"date": {"$gte": cutoff}}).sort("date", 1).to_list(10000)
 
     # Group by day
     from collections import defaultdict
@@ -359,9 +358,9 @@ async def get_exam_analytics_enhanced(
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
 
-    submissions = await db.submissions.find({"exam_id": exam_id}).to_list(None)
-    count = len(submissions)
-    scores = [s["percentage"] for s in submissions] if submissions else []
+    submissions2 = await db.submissions.find({"exam_id": exam_id}).to_list(5000)
+    count = len(submissions2)
+    scores = [s["percentage"] for s in submissions2] if submissions2 else []
     avg = round(sum(scores) / count, 1) if count else 0
     passed = sum(1 for s in scores if s >= exam.get("passing_marks", 60))
     pass_rate = round(passed / count * 100, 1) if count else 0
@@ -383,7 +382,7 @@ async def get_exam_analytics_enhanced(
         },
         "recent_submissions": [
             {"student_name": s.get("student_name"), "score": s.get("percentage"), "date": s.get("date")}
-            for s in submissions[-5:]
+            for s in submissions2[-5:]
         ]
     }
 

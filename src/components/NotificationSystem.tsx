@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { X, AlertTriangle, Info, CheckCircle, AlertCircle, Bell } from 'lucide-react'
+import { X, AlertTriangle, Info, CheckCircle, AlertCircle } from 'lucide-react'
 
+/* eslint-disable react-refresh/only-export-components */
 export type NotificationType = 'success' | 'error' | 'warning' | 'info' | 'violation'
 
 export interface Notification {
@@ -42,7 +43,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       ...notification,
       id: `notification-${Date.now()}-${Math.random()}`,
       timestamp: Date.now(),
-      duration: notification.duration || 5000
+      duration: notification.duration || 5000,
     }
 
     setNotifications(prev => [newNotification, ...prev])
@@ -74,7 +75,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     try {
       const audio = new Audio()
       if (type === 'violation') {
-        audio.src = 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZTR' // Truncated for brevity
+        audio.src =
+          'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZTR' // Truncated for brevity
       }
       audio.volume = 0.3
       audio.play().catch(() => {}) // Ignore errors if autoplay blocked
@@ -84,40 +86,38 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }
 
   return (
-    <NotificationContext.Provider value={{ notifications, addNotification, removeNotification, clearAll }}>
+    <NotificationContext.Provider
+      value={{ notifications, addNotification, removeNotification, clearAll }}
+    >
       {children}
       <NotificationContainer notifications={notifications} onRemove={removeNotification} />
     </NotificationContext.Provider>
   )
 }
 
-function NotificationContainer({ 
-  notifications, 
-  onRemove 
-}: { 
+function NotificationContainer({
+  notifications,
+  onRemove,
+}: {
   notifications: Notification[]
-  onRemove: (id: string) => void 
+  onRemove: (id: string) => void
 }) {
   return createPortal(
     <div className="fixed top-4 right-4 z-50 space-y-2 max-w-md">
       {notifications.map(notification => (
-        <NotificationCard
-          key={notification.id}
-          notification={notification}
-          onRemove={onRemove}
-        />
+        <NotificationCard key={notification.id} notification={notification} onRemove={onRemove} />
       ))}
     </div>,
     document.body
   )
 }
 
-function NotificationCard({ 
-  notification, 
-  onRemove 
-}: { 
+function NotificationCard({
+  notification,
+  onRemove,
+}: {
   notification: Notification
-  onRemove: (id: string) => void 
+  onRemove: (id: string) => void
 }) {
   const [isExiting, setIsExiting] = useState(false)
 
@@ -176,10 +176,7 @@ function NotificationCard({
             </button>
           )}
         </div>
-        <button
-          onClick={handleRemove}
-          className="text-gray-400 hover:text-gray-600 transition"
-        >
+        <button onClick={handleRemove} className="text-gray-400 hover:text-gray-600 transition">
           <X className="w-4 h-4" />
         </button>
       </div>
@@ -199,7 +196,7 @@ export function useViolationNotifications(examId?: string) {
     const wsUrl = `ws://localhost:8000/ws/violations/${examId}`
     const ws = new WebSocket(wsUrl)
 
-    ws.onmessage = (event) => {
+    ws.onmessage = event => {
       try {
         const data = JSON.parse(event.data)
         if (data.type === 'violation') {
@@ -213,8 +210,8 @@ export function useViolationNotifications(examId?: string) {
               onClick: () => {
                 // Navigate to student details or open modal
                 console.log('View violation details:', data)
-              }
-            }
+              },
+            },
           })
         }
       } catch (error) {
@@ -222,7 +219,7 @@ export function useViolationNotifications(examId?: string) {
       }
     }
 
-    ws.onerror = (error) => {
+    ws.onerror = error => {
       console.error('WebSocket error:', error)
     }
 

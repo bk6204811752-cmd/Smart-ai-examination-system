@@ -1,19 +1,31 @@
-import { useEffect, useRef, useMemo, useCallback, useState } from 'react'
+﻿import { useEffect, useRef, useMemo, useCallback, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  Camera, Mic, Monitor, AlertTriangle, CheckCircle, XCircle,
-  Eye, Clock, Flag, ChevronLeft, ChevronRight, Menu, X,
-  Brain, Trophy, Target, ArrowRight, TrendingUp, Maximize
+  AlertTriangle,
+  Eye,
+  Clock,
+  Flag,
+  ChevronLeft,
+  ChevronRight,
+  Menu,
+  X,
+  Brain,
+  Trophy,
+  TrendingUp,
+  Maximize,
 } from 'lucide-react'
 import { useSwipe } from '../../hooks/useSwipe'
 import { useMobileDetect } from '../../hooks/useMobileDetect'
 import { useExamState } from '../../hooks/useExamState'
 import { logger } from '../../lib/logger'
-import { getQuestionsByCategory, getQuestionsByDifficulty, Question as QuestionType } from '../../data/questionBank'
+import { getQuestionsByCategory } from '../../data/questionBank'
 import AdaptiveExamEngine, { DifficultyLevel } from '../../utils/adaptiveExamEngine'
 import ProctoringEngine from '../../utils/proctoringEngine'
-import type { ProctoringViolation, ProctoringStatus } from '../../utils/proctoringEngine'
-import ViolationWarning, { ProctoringStatusBar, ViolationSummary } from '../../components/ViolationWarning'
+import type { ProctoringStatus } from '../../utils/proctoringEngine'
+import ViolationWarning, {
+  ProctoringStatusBar,
+  ViolationSummary,
+} from '../../components/ViolationWarning'
 import ProctoringRightPanel from '../../components/ProctoringRightPanel'
 import { AnimatePresence, motion } from 'framer-motion'
 import { WebSocketClient } from '../../lib/websocket'
@@ -57,9 +69,9 @@ export default function PracticeMockExam() {
   const [examState, dispatch] = useExamState(mockTestData.duration)
 
   // Local state
-  const [examPaused, setExamPaused] = useState(false)
   const [initMessage, setInitMessage] = useState('Preparing your exam...')
   const [audioWaveData, setAudioWaveData] = useState<number[]>([])
+  const [showTimesUp, setShowTimesUp] = useState(false)
 
   // Proctoring Engine V1 (same as live exams)
   const proctoringEngine = useMemo(() => new ProctoringEngine(), [])
@@ -78,14 +90,14 @@ export default function PracticeMockExam() {
       if (examState.currentQuestion > 0) {
         dispatch({ type: 'SET_CURRENT_QUESTION', payload: examState.currentQuestion - 1 })
       }
-    }
+    },
   })
 
   // Simple, reliable camera shutdown with logger
   const stopCamera = useCallback(async () => {
     try {
       logger.info('Stopping camera and proctoring')
-      
+
       // Stop WebSocket
       if (wsClientRef.current) {
         wsClientRef.current.disconnect()
@@ -99,7 +111,7 @@ export default function PracticeMockExam() {
         clearInterval(trustSyncRef.current)
         trustSyncRef.current = null
       }
-      
+
       // Get all tracks and stop them
       const stopAllTracks = (videoEl: HTMLVideoElement | null) => {
         if (videoEl?.srcObject) {
@@ -109,24 +121,24 @@ export default function PracticeMockExam() {
           videoEl.pause()
         }
       }
-      
+
       stopAllTracks(videoRef.current)
       stopAllTracks(sidebarVideoRef.current)
-      
+
       // Engine cleanup
       if (proctoringEngine) {
         await proctoringEngine.cleanup()
       }
-      
+
       // Reset state using dispatch
       dispatch({ type: 'ENABLE_CAMERA', payload: false })
       dispatch({ type: 'ENABLE_MIC', payload: false })
       dispatch({ type: 'SET_PROCTORING_STATUS', payload: null })
       dispatch({ type: 'SET_ACTIVE_VIOLATIONS', payload: [] })
-      
+
       // Wait for hardware release
       await new Promise(resolve => setTimeout(resolve, 1000))
-      
+
       logger.info('Camera stopped successfully')
     } catch (error) {
       logger.error('Camera shutdown error', error)
@@ -139,7 +151,7 @@ export default function PracticeMockExam() {
       if (proctoringEngine) {
         proctoringEngine.cleanup()
       }
-      
+
       const cleanupVideo = (ref: React.RefObject<HTMLVideoElement>) => {
         if (ref.current?.srcObject) {
           const stream = ref.current.srcObject as MediaStream
@@ -147,7 +159,7 @@ export default function PracticeMockExam() {
           ref.current.srcObject = null
         }
       }
-      
+
       cleanupVideo(videoRef)
       cleanupVideo(sidebarVideoRef)
     }
@@ -162,26 +174,49 @@ export default function PracticeMockExam() {
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [examState.examStarted, examState.examEnded, examState.isSubmitting])
+  }, [examState.examStarted, examState.examEnded, examState.isSubmitting, dispatch])
 
   // Auto-start exam when camera + proctoring are ready
   useEffect(() => {
-    if (examState.cameraEnabled && examState.proctoringStatus?.isActive && !examState.examStarted && !examState.isSubmitting) {
+    if (
+      examState.cameraEnabled &&
+      examState.proctoringStatus?.isActive &&
+      !examState.examStarted &&
+      !examState.isSubmitting
+    ) {
       setInitMessage('Starting exam...')
       const timer = setTimeout(() => {
         handleStartExam(true)
       }, 800)
       return () => clearTimeout(timer)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [examState.cameraEnabled, examState.proctoringStatus?.isActive])
 
   // Auto-submit when time expires (separate effect)
   useEffect(() => {
-    if (examState.examStarted && !examState.examEnded && !examState.isSubmitting && examState.timeRemaining === 0) {
-      console.log('⏰ Time expired - auto-submitting exam')
-      handleSubmitExam()
+    if (
+      examState.examStarted &&
+      !examState.examEnded &&
+      !examState.isSubmitting &&
+      examState.timeRemaining === 0 &&
+      !showTimesUp
+    ) {
+      console.log('â° Time expired - showing times up notification')
+      setShowTimesUp(true)
+      setTimeout(() => {
+        setShowTimesUp(false)
+        handleSubmitExam()
+      }, 3000)
     }
-  }, [examState.timeRemaining, examState.examStarted, examState.examEnded, examState.isSubmitting])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    examState.timeRemaining,
+    examState.examStarted,
+    examState.examEnded,
+    examState.isSubmitting,
+    showTimesUp,
+  ])
 
   // Real-time audio wave polling during exam
   useEffect(() => {
@@ -200,6 +235,7 @@ export default function PracticeMockExam() {
     if (!examState.cameraEnabled && !examState.isInitializingCamera) {
       startCamera()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [examState.cameraEnabled])
 
   // Update sidebar video stream when exam starts
@@ -209,7 +245,7 @@ export default function PracticeMockExam() {
         const stream = proctoringEngine.getStream()
         if (stream) {
           logger.debug('Connecting sidebar video stream')
-          
+
           // Attach to sidebar video (small camera preview in UI)
           if (sidebarVideoRef.current) {
             sidebarVideoRef.current.srcObject = stream
@@ -217,13 +253,13 @@ export default function PracticeMockExam() {
               await sidebarVideoRef.current.play()
               logger.debug('Sidebar video playing', {
                 width: sidebarVideoRef.current.videoWidth,
-                height: sidebarVideoRef.current.videoHeight
+                height: sidebarVideoRef.current.videoHeight,
               })
             } catch (error) {
               logger.error('Failed to play sidebar video', error)
             }
           }
-          
+
           // Also re-attach to main videoRef (ProctoringRightPanel's video)
           // This handles the case where the loading screen's <video> unmounted
           // and the ProctoringRightPanel's <video> just mounted with no srcObject
@@ -240,16 +276,19 @@ export default function PracticeMockExam() {
         }
       }
     }
-    
+
     connectSidebarVideo()
-    
+
+    const sidebarVideo = sidebarVideoRef.current
+
     // Cleanup sidebar video when exam ends
     return () => {
-      if (sidebarVideoRef.current && !examState.examStarted) {
-        sidebarVideoRef.current.srcObject = null
+      if (sidebarVideo && !examState.examStarted) {
+        sidebarVideo.srcObject = null
         logger.debug('Sidebar video cleared')
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [examState.proctoringStatus?.isActive, examState.examStarted])
 
   // Start monitoring when exam starts
@@ -266,23 +305,43 @@ export default function PracticeMockExam() {
     }
   }, [examState.examStarted, examState.proctoringStatus?.isActive, proctoringEngine])
 
-  // Tab switch detection — PAUSE exam immediately
+  // Tab switch detection â€” PAUSE exam immediately
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.hidden && examState.examStarted && !examState.examEnded && !examState.isSubmitting && !examState.proctoringStatus?.isPaused) {
+      if (
+        document.hidden &&
+        examState.examStarted &&
+        !examState.examEnded &&
+        !examState.isSubmitting &&
+        !examState.proctoringStatus?.isPaused
+      ) {
         proctoringEngine.recordTabSwitch()
-        proctoringEngine.pauseExam('Tab/Window switch detected. Return to the exam window to resume.')
+        proctoringEngine.pauseExam(
+          'Tab/Window switch detected. Return to the exam window to resume.'
+        )
       }
     }
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [examState.examStarted, examState.examEnded, examState.isSubmitting, examState.proctoringStatus?.isPaused])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    examState.examStarted,
+    examState.examEnded,
+    examState.isSubmitting,
+    examState.proctoringStatus?.isPaused,
+    proctoringEngine,
+  ])
 
-  // Window blur detection — PAUSE exam immediately
+  // Window blur detection â€” PAUSE exam immediately
   useEffect(() => {
     const handleWindowBlur = () => {
-      if (examState.examStarted && !examState.examEnded && !examState.isSubmitting && !examState.proctoringStatus?.isPaused) {
+      if (
+        examState.examStarted &&
+        !examState.examEnded &&
+        !examState.isSubmitting &&
+        !examState.proctoringStatus?.isPaused
+      ) {
         proctoringEngine.recordWindowBlur()
         proctoringEngine.pauseExam('Application switch detected. Return to the exam to resume.')
       }
@@ -290,29 +349,64 @@ export default function PracticeMockExam() {
 
     window.addEventListener('blur', handleWindowBlur)
     return () => window.removeEventListener('blur', handleWindowBlur)
-  }, [examState.examStarted, examState.examEnded, examState.isSubmitting, examState.proctoringStatus?.isPaused])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    examState.examStarted,
+    examState.examEnded,
+    examState.isSubmitting,
+    examState.proctoringStatus?.isPaused,
+    proctoringEngine,
+  ])
 
-  // Fullscreen enforcement — PAUSE exam on exit
+  // Fullscreen enforcement â€” PAUSE exam on exit
   useEffect(() => {
     const handleFullscreenChange = () => {
       const isNowFullscreen = !!document.fullscreenElement
       dispatch({ type: 'SET_FULLSCREEN', payload: isNowFullscreen })
 
-      if (!isNowFullscreen && examState.examStarted && !examState.examEnded && !examState.isSubmitting && !examState.proctoringStatus?.isPaused) {
+      if (
+        !isNowFullscreen &&
+        examState.examStarted &&
+        !examState.examEnded &&
+        !examState.isSubmitting &&
+        !examState.proctoringStatus?.isPaused
+      ) {
         proctoringEngine.recordFullscreenExit()
-        proctoringEngine.pauseExam('Fullscreen mode was exited. Return to fullscreen to resume the exam.')
+        proctoringEngine.pauseExam(
+          'Fullscreen mode was exited. Return to fullscreen to resume the exam.'
+        )
       }
     }
 
     document.addEventListener('fullscreenchange', handleFullscreenChange)
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
-  }, [examState.examStarted, examState.examEnded, examState.isSubmitting, examState.proctoringStatus?.isPaused])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    examState.examStarted,
+    examState.examEnded,
+    examState.isSubmitting,
+    examState.proctoringStatus?.isPaused,
+    dispatch,
+    proctoringEngine,
+  ])
 
   // Keyboard blocking (Alt+Tab, Meta/Windows, Escape, PrintScreen, Ctrl+P)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!examState.examStarted || examState.examEnded || examState.isSubmitting || examState.proctoringStatus?.isPaused) return
+      if (
+        !examState.examStarted ||
+        examState.examEnded ||
+        examState.isSubmitting ||
+        examState.proctoringStatus?.isPaused
+      )
+        return
       if ((e.ctrlKey && e.key === 'p') || e.key === 'PrintScreen') {
+        e.preventDefault()
+      }
+      if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && ['I', 'J', 'C'].includes(e.key))) {
+        e.preventDefault()
+      }
+      if (e.ctrlKey && ['c', 'v', 'x', 's'].includes(e.key.toLowerCase())) {
         e.preventDefault()
       }
       if (e.altKey && e.key === 'Tab') {
@@ -331,20 +425,79 @@ export default function PracticeMockExam() {
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [examState.examStarted, examState.examEnded, examState.isSubmitting, examState.proctoringStatus?.isPaused])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    examState.examStarted,
+    examState.examEnded,
+    examState.isSubmitting,
+    examState.proctoringStatus?.isPaused,
+    proctoringEngine,
+  ])
 
-  // Window size / taskbar detection — PAUSE if minimized
+  // Copy-Paste-Cut Blocking
+  useEffect(() => {
+    const handleClipboard = (e: ClipboardEvent) => {
+      if (!examState.examStarted || examState.examEnded || examState.isSubmitting) return
+      e.preventDefault()
+    }
+    document.addEventListener('copy', handleClipboard)
+    document.addEventListener('paste', handleClipboard)
+    document.addEventListener('cut', handleClipboard)
+    return () => {
+      document.removeEventListener('copy', handleClipboard)
+      document.removeEventListener('paste', handleClipboard)
+      document.removeEventListener('cut', handleClipboard)
+    }
+  }, [examState.examStarted, examState.examEnded, examState.isSubmitting])
+
+  // Right-Click / Context Menu Blocking
+  useEffect(() => {
+    const handleContextMenu = (e: MouseEvent) => {
+      if (!examState.examStarted || examState.examEnded || examState.isSubmitting) return
+      e.preventDefault()
+    }
+    document.addEventListener('contextmenu', handleContextMenu)
+    return () => document.removeEventListener('contextmenu', handleContextMenu)
+  }, [examState.examStarted, examState.examEnded, examState.isSubmitting])
+
+  // Text Selection Prevention
+  useEffect(() => {
+    const handleSelectStart = (e: Event) => {
+      if (!examState.examStarted || examState.examEnded || examState.isSubmitting) return
+      e.preventDefault()
+    }
+    document.addEventListener('selectstart', handleSelectStart)
+    return () => document.removeEventListener('selectstart', handleSelectStart)
+  }, [examState.examStarted, examState.examEnded, examState.isSubmitting])
+
+  // Window size / taskbar detection â€” PAUSE if minimized
   useEffect(() => {
     const checkWindowSize = () => {
-      if (!examState.examStarted || !document.fullscreenElement || examState.examEnded || examState.isSubmitting || examState.proctoringStatus?.isPaused) return
+      if (
+        !examState.examStarted ||
+        !document.fullscreenElement ||
+        examState.examEnded ||
+        examState.isSubmitting ||
+        examState.proctoringStatus?.isPaused
+      )
+        return
       const ratio = window.outerHeight / window.screen.height
       if (ratio < 0.95) {
-        proctoringEngine.pauseExam('Window was minimized or resized. Return to fullscreen to resume.')
+        proctoringEngine.pauseExam(
+          'Window was minimized or resized. Return to fullscreen to resume.'
+        )
       }
     }
     const interval = setInterval(checkWindowSize, 2000)
     return () => clearInterval(interval)
-  }, [examState.examStarted, examState.examEnded, examState.isSubmitting, examState.proctoringStatus?.isPaused])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    examState.examStarted,
+    examState.examEnded,
+    examState.isSubmitting,
+    examState.proctoringStatus?.isPaused,
+    proctoringEngine,
+  ])
 
   // Safety net: Stop camera on page unload + warn user
   useEffect(() => {
@@ -362,6 +515,10 @@ export default function PracticeMockExam() {
 
   // Enter fullscreen
   const enterFullscreen = async () => {
+    if (document.fullscreenElement) {
+      dispatch({ type: 'SET_FULLSCREEN', payload: true })
+      return
+    }
     try {
       const target = document.documentElement as HTMLElement & {
         webkitRequestFullscreen?: () => Promise<void>
@@ -384,7 +541,7 @@ export default function PracticeMockExam() {
     dispatch({ type: 'SET_INITIALIZING_CAMERA', payload: true })
     setInitMessage('Initializing camera...')
 
-    // ── PHASE 1: Attach stream to video element immediately ────────────
+    // â”€â”€ PHASE 1: Attach stream to video element immediately â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     try {
       const preExamStream = (window as any).__preExamStream as MediaStream | undefined
       let stream: MediaStream
@@ -396,7 +553,7 @@ export default function PracticeMockExam() {
       } else {
         stream = await navigator.mediaDevices.getUserMedia({
           video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
-          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
         })
       }
 
@@ -443,7 +600,7 @@ export default function PracticeMockExam() {
                 exam_id: testIdValue,
                 student_id: userId,
                 trust_score: 100,
-                status: { isActive: true }
+                status: { isActive: true },
               })
             }
           }, 30000)
@@ -451,10 +608,17 @@ export default function PracticeMockExam() {
           wsClient.on('intervention', (data: any) => {
             const action = data.action as string
             if (action === 'pause') {
-              alert('Exam paused by teacher. Please wait.')
               setExamPaused(true)
+              proctoringEngine.pauseExam('Exam paused by teacher. Please wait.')
             } else if (action === 'resume') {
               setExamPaused(false)
+              proctoringEngine.resumeExam()
+              if (examState.proctoringStatus) {
+                dispatch({
+                  type: 'SET_PROCTORING_STATUS',
+                  payload: { ...examState.proctoringStatus, isPaused: false } as ProctoringStatus,
+                })
+              }
             }
           })
         } catch (wsErr) {
@@ -474,7 +638,7 @@ export default function PracticeMockExam() {
       return
     }
 
-    // ── PHASE 2: Initialize AI engine with the already-playing stream ──
+    // â”€â”€ PHASE 2: Initialize AI engine with the already-playing stream â”€â”€
     setInitMessage('Loading AI proctoring engine...')
     setTimeout(async () => {
       const stream = videoRef.current?.srcObject as MediaStream | null
@@ -484,7 +648,7 @@ export default function PracticeMockExam() {
         await proctoringEngine.loadModels()
         await proctoringEngine.initialize(videoRef.current!, stream)
 
-        proctoringEngine.setOnViolation((violation) => {
+        proctoringEngine.setOnViolation(violation => {
           dispatch({ type: 'ADD_ACTIVE_VIOLATION', payload: violation })
           setTimeout(() => {
             dispatch({ type: 'REMOVE_ACTIVE_VIOLATION', payload: violation })
@@ -492,20 +656,24 @@ export default function PracticeMockExam() {
           dispatch({ type: 'ADD_VIOLATION', payload: violation.message })
           // Show toast for audio and other violations
           if (violation.type === 'AUDIO_DETECTED') {
-            alert(`🔊 Audio Warning: ${violation.message}\n\nPlease ensure a quiet environment for the exam.`)
+            alert(
+              `ðŸ”Š Audio Warning: ${violation.message}\n\nPlease ensure a quiet environment for the exam.`
+            )
           } else if (violation.type === 'HEADPHONE_DETECTED') {
-            alert(`🎧 Headphone Warning: ${violation.message}\n\nPlease remove headphones during the exam.`)
+            alert(
+              `Headphone Warning: ${violation.message}\n\nPlease remove headphones during the exam.`
+            )
           } else if (violation.severity === 'HIGH' || violation.severity === 'CRITICAL') {
-            alert(`⚠️ ${violation.message}`)
+            alert(`${violation.message}`)
           }
         })
 
-        proctoringEngine.setOnStatusChange((status) => {
+        proctoringEngine.setOnStatusChange(status => {
           dispatch({ type: 'SET_PROCTORING_STATUS', payload: status })
           dispatch({ type: 'SET_TAB_SWITCHES', payload: status.tabSwitchCount })
         })
 
-        proctoringEngine.setOnPause((reason) => {
+        proctoringEngine.setOnPause(reason => {
           alert('Exam paused: ' + reason)
         })
 
@@ -533,58 +701,67 @@ export default function PracticeMockExam() {
         return
       }
       alert(
-        '⚠️ CAMERA AND MICROPHONE REQUIRED\n\n' +
-        'You must enable camera and microphone before starting the exam.\n\n' +
-        'If camera failed to enable, it may be due to:\n' +
-        '✅ Insufficient lighting - Turn on lights\n' +
-        '✅ No camera permission - Allow camera access\n' +
-        '✅ Camera already in use - Close other apps\n\n' +
-        'Please fix the issue and click "Enable Camera" again.'
+        'âš ï¸ CAMERA AND MICROPHONE REQUIRED\n\n' +
+          'You must enable camera and microphone before starting the exam.\n\n' +
+          'If camera failed to enable, it may be due to:\n' +
+          'âœ… Insufficient lighting - Turn on lights\n' +
+          'âœ… No camera permission - Allow camera access\n' +
+          'âœ… Camera already in use - Close other apps\n\n' +
+          'Please fix the issue and click "Enable Camera" again.'
       )
       return
     }
-    
+
     // Brightness check: warn during auto-start, block during manual
     const currentBrightness = proctoringEngine.getBrightness()
     if (currentBrightness < 50) {
       if (isAutoStart) {
-        console.warn(`[AutoStart] Low brightness (${Math.round(currentBrightness)}/255), starting anyway`)
+        console.warn(
+          `[AutoStart] Low brightness (${Math.round(currentBrightness)}/255), starting anyway`
+        )
       } else {
         alert(
-          `🚨 CANNOT START EXAM\n\n` +
-          `Room lighting is too low: ${Math.round(currentBrightness)}/255\n` +
-          `Minimum required: 50/255\n\n` +
-          `✅ Turn on lights immediately\n` +
-          `✅ Ensure your face is well-lit\n` +
-          `✅ Sit near a window or lamp\n\n` +
-          `Exam cannot start until lighting improves.\n` +
-          `This is mandatory to prevent cheating.`
+          `ðŸš¨ CANNOT START EXAM\n\n` +
+            `Room lighting is too low: ${Math.round(currentBrightness)}/255\n` +
+            `Minimum required: 50/255\n\n` +
+            `âœ… Turn on lights immediately\n` +
+            `âœ… Ensure your face is well-lit\n` +
+            `âœ… Sit near a window or lamp\n\n` +
+            `Exam cannot start until lighting improves.\n` +
+            `This is mandatory to prevent cheating.`
         )
         return
       }
     }
 
-    // Enter fullscreen mode
-    await enterFullscreen()
-    
+    // For auto-start: fullscreen should already be set from pre-verification
+    // For manual start: user gesture is available, so fullscreen will work
+    if (!isAutoStart) {
+      await enterFullscreen()
+    } else if (!document.fullscreenElement) {
+      // Auto-start but not in fullscreen â€” don't proceed
+      console.warn('[AutoStart] Not in fullscreen, deferring to manual start')
+      return
+    }
+
     dispatch({ type: 'START_EXAM' })
   }
 
   const handleAnswerChange = (questionId: number, answer: any) => {
     const previousAnswer = examState.answers[questionId]
     const isChangingAnswer = previousAnswer !== undefined
-    
+
     // Update answer in state
     dispatch({ type: 'SET_ANSWER', payload: { questionId, answer } })
-    
+
     // Only process for adaptive logic if this is the first time answering (not changing answer)
     if (!isChangingAnswer) {
       const question = mockTestData.questions[questionId]
       const isCorrect = checkAnswer(question, answer)
-      
+
       // Update adaptive engine
       adaptiveEngine.processAnswer(isCorrect, question.difficulty as DifficultyLevel)
-      
+
       // Update current difficulty
       const newDifficulty = adaptiveEngine.getCurrentDifficulty()
       if (newDifficulty !== examState.currentDifficulty) {
@@ -597,18 +774,24 @@ export default function PracticeMockExam() {
   // Helper function to check if answer is correct
   const checkAnswer = (question: Question, userAnswer: any): boolean => {
     if (!userAnswer) return false
-    
+
     if (question.type === 'multiple-answer') {
       if (!Array.isArray(userAnswer) || !Array.isArray(question.correctAnswer)) return false
       if (userAnswer.length !== question.correctAnswer.length) return false
-      return JSON.stringify([...userAnswer].sort()) === JSON.stringify([...question.correctAnswer].sort())
+      return (
+        JSON.stringify([...userAnswer].sort()) ===
+        JSON.stringify([...question.correctAnswer].sort())
+      )
     }
-    
+
     // Handle string comparison (case-insensitive for short-answer)
     if (question.type === 'short-answer') {
-      return String(userAnswer).trim().toLowerCase() === String(question.correctAnswer).trim().toLowerCase()
+      return (
+        String(userAnswer).trim().toLowerCase() ===
+        String(question.correctAnswer).trim().toLowerCase()
+      )
     }
-    
+
     return userAnswer === question.correctAnswer
   }
 
@@ -619,22 +802,22 @@ export default function PracticeMockExam() {
   const handleSubmitExam = async () => {
     // Prevent duplicate submissions
     if (examState.isSubmitting || examState.examEnded) {
-      console.log('⚠️ Already submitting or exam ended, ignoring...')
+      console.log('âš ï¸ Already submitting or exam ended, ignoring...')
       return
     }
 
     // Set submitting flag BEFORE any dialogs or actions
     dispatch({ type: 'SET_SUBMITTING', payload: true })
-    
+
     // Small delay to let state update propagate
     await new Promise(resolve => setTimeout(resolve, 100))
-    
+
     // Check if auto-submit (time expired) or manual submit
     const isAutoSubmit = examState.timeRemaining === 0
     const shouldSubmit = isAutoSubmit || window.confirm('Are you sure you want to submit the exam?')
-    
+
     if (shouldSubmit) {
-      console.log('🛑 Stopping camera and monitoring before submission...')
+      console.log('ðŸ›‘ Stopping camera and monitoring before submission...')
       await stopCamera()
       dispatch({ type: 'END_EXAM' })
       calculateResults()
@@ -651,18 +834,18 @@ export default function PracticeMockExam() {
 
     // Prepare data for weak area analysis
     const answerData: Array<{
-      category: string;
-      difficulty: DifficultyLevel;
-      isCorrect: boolean;
+      category: string
+      difficulty: DifficultyLevel
+      isCorrect: boolean
     }> = []
 
     mockTestData.questions.forEach((question, index) => {
       totalPoints += question.points
       const userAnswer = examState.answers[index]
       let isCorrect = false
-      
+
       if (question.type === 'multiple-answer') {
-        isCorrect = Array.isArray(question.correctAnswer) 
+        isCorrect = Array.isArray(question.correctAnswer)
           ? JSON.stringify(userAnswer?.sort()) === JSON.stringify(question.correctAnswer.sort())
           : false
         if (isCorrect) {
@@ -681,20 +864,20 @@ export default function PracticeMockExam() {
       answerData.push({
         category: mockTestData.category,
         difficulty: question.difficulty as DifficultyLevel,
-        isCorrect
+        isCorrect,
       })
     })
 
     const percentage = Math.round((earnedPoints / totalPoints) * 100)
-    
+
     // Analyze weak areas and generate learning path
     const weakAreas = adaptiveEngine.analyzeWeakAreas(answerData)
     const learningPath = adaptiveEngine.generateLearningPath(weakAreas)
     const performanceMetrics = adaptiveEngine.getMetrics()
     const performanceTrend = adaptiveEngine.getPerformanceTrend()
-    
-    console.log('🚀 Step 5: Navigating to results (camera confirmed stopped)...')
-    
+
+    console.log('ðŸš€ Step 5: Navigating to results (camera confirmed stopped)...')
+
     // NOW navigate - camera is guaranteed stopped
     navigate('/practice/results', {
       state: {
@@ -702,23 +885,24 @@ export default function PracticeMockExam() {
         testTitle: mockTestData.title,
         totalQuestions: mockTestData.questions.length,
         correctAnswers,
-        percentage, violations: examState.violations, tabSwitches: examState.tabSwitches,
+        percentage,
+        violations: examState.violations,
+        tabSwitches: examState.tabSwitches,
         timeTaken: mockTestData.duration * 60 - examState.timeRemaining,
         // Adaptive exam data
         weakAreas,
         learningPath,
         performanceMetrics,
-        performanceTrend, difficultyHistory: examState.difficultyHistory,
+        performanceTrend,
+        difficultyHistory: examState.difficultyHistory,
         // Question review data
         questions: mockTestData.questions,
-        userAnswers: examState.answers
-      }
+        userAnswers: examState.answers,
+      },
     })
-    
-    console.log('✅ ========== EXAM SUBMISSION COMPLETE ==========')
+
+    console.log('âœ… ========== EXAM SUBMISSION COMPLETE ==========')
   }
-
-
 
   const formatTime = (seconds: number) => {
     const totalSeconds = Math.max(0, Math.floor(seconds))
@@ -744,9 +928,7 @@ export default function PracticeMockExam() {
           </div>
 
           {/* Title */}
-          <h1 className="text-2xl font-bold text-white mb-2">
-            {mockTestData.title}
-          </h1>
+          <h1 className="text-2xl font-bold text-white mb-2">{mockTestData.title}</h1>
           <p className="text-gray-400 text-sm mb-8">AI-Proctored Mock Test</p>
 
           {/* Spinner + Status */}
@@ -759,7 +941,9 @@ export default function PracticeMockExam() {
           )}
 
           {/* Camera preview (hidden but accessible for ref) */}
-          <div className={`mt-6 bg-gray-900 rounded-xl overflow-hidden ${examState.cameraEnabled ? 'w-48 h-36 mx-auto' : 'sr-only h-0'}`}>
+          <div
+            className={`mt-6 bg-gray-900 rounded-xl overflow-hidden ${examState.cameraEnabled ? 'w-48 h-36 mx-auto' : 'sr-only h-0'}`}
+          >
             <video
               ref={videoRef}
               autoPlay
@@ -774,7 +958,9 @@ export default function PracticeMockExam() {
             <div className="mt-4">
               <div className="bg-red-900/30 border border-red-500/30 rounded-xl p-4 mb-4">
                 <p className="text-red-400 font-medium text-sm">Camera initialization failed</p>
-                <p className="text-red-300 text-xs mt-1">Please check camera permissions and try again</p>
+                <p className="text-red-300 text-xs mt-1">
+                  Please check camera permissions and try again
+                </p>
               </div>
               <button
                 onClick={() => startCamera()}
@@ -796,7 +982,7 @@ export default function PracticeMockExam() {
   }
 
   const question = mockTestData.questions[examState.currentQuestion]
-  
+
   // Safety check - redirect if invalid question index
   if (!question && examState.examStarted) {
     console.error('Invalid question index:', examState.currentQuestion)
@@ -809,7 +995,10 @@ export default function PracticeMockExam() {
       {/* Violation Warnings */}
       <AnimatePresence>
         {examState.activeViolations.map((violation, index) => (
-          <div key={`${violation.timestamp.getTime()}-${index}`} style={{ top: `${4 + index * 120}px` }}>
+          <div
+            key={`${violation.timestamp.getTime()}-${index}`}
+            style={{ top: `${4 + index * 120}px` }}
+          >
             <ViolationWarning
               violation={violation}
               onDismiss={() => dispatch({ type: 'REMOVE_ACTIVE_VIOLATION', payload: violation })}
@@ -851,13 +1040,35 @@ export default function PracticeMockExam() {
         </div>
       )}
 
+      {/* Time's Up Overlay */}
+      {showTimesUp && (
+        <div className="fixed inset-0 bg-gradient-to-br from-yellow-500/90 to-red-500/90 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl text-center animate-bounce">
+            <div className="w-20 h-20 bg-gradient-to-br from-yellow-400 to-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Clock className="w-10 h-10 text-white" />
+            </div>
+            <h2 className="text-3xl font-bold text-gray-900 mb-2">â° Time's Up!</h2>
+            <p className="text-gray-600 text-lg mb-2">Your exam time has expired.</p>
+            <p className="text-gray-500 text-sm">Auto-submitting your answers...</p>
+            <div className="mt-6 w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-yellow-400 to-red-500 h-2 rounded-full animate-pulse"
+                style={{ width: '100%' }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Submitting Overlay */}
       {examState.isSubmitting && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
           <div className="bg-white rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl text-center">
             <div className="animate-spin w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Submitting Exam...</h2>
-            <p className="text-gray-600">Please wait while we process your answers and stop the camera.</p>
+            <p className="text-gray-600">
+              Please wait while we process your answers and stop the camera.
+            </p>
           </div>
         </div>
       )}
@@ -880,29 +1091,43 @@ export default function PracticeMockExam() {
               </div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">Exam Paused</h2>
               <p className="text-gray-600 mb-6">{examState.proctoringStatus.pauseReason}</p>
-              
+
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
                 <p className="text-sm text-yellow-800">
-                  <strong>Suspicious Activity Score:</strong> {examState.proctoringStatus.suspiciousActivityScore}/100
+                  <strong>Suspicious Activity Score:</strong>{' '}
+                  {examState.proctoringStatus.suspiciousActivityScore}/100
                 </p>
                 <p className="text-xs text-yellow-600 mt-2">
-                  Multiple critical examState.violations detected. Please contact the proctor to resume.
+                  Multiple critical examState.violations detected. Please contact the proctor to
+                  resume.
                 </p>
               </div>
 
               <button
                 onClick={() => {
-                  if (window.confirm('Are you sure you want to resume? Make sure you\'re in fullscreen with only the exam tab open.')) {
+                  if (
+                    window.confirm(
+                      "Are you sure you want to resume? Make sure you're in fullscreen with only the exam tab open."
+                    )
+                  ) {
                     proctoringEngine.resumeExam()
                     if (examState.proctoringStatus) {
-                      dispatch({ type: 'SET_PROCTORING_STATUS', payload: { ...examState.proctoringStatus, isPaused: false } as ProctoringStatus })
+                      dispatch({
+                        type: 'SET_PROCTORING_STATUS',
+                        payload: {
+                          ...examState.proctoringStatus,
+                          isPaused: false,
+                        } as ProctoringStatus,
+                      })
                     }
                     const target = document.documentElement as HTMLElement & {
                       webkitRequestFullscreen?: () => Promise<void>
                       msRequestFullscreen?: () => Promise<void>
                     }
                     if (target.requestFullscreen) {
-                      target.requestFullscreen({ navigationUI: 'hide' } as FullscreenOptions).catch(() => {})
+                      target
+                        .requestFullscreen({ navigationUI: 'hide' } as FullscreenOptions)
+                        .catch(() => {})
                     } else if (target.webkitRequestFullscreen) {
                       target.webkitRequestFullscreen().catch(() => {})
                     } else if (target.msRequestFullscreen) {
@@ -935,16 +1160,22 @@ export default function PracticeMockExam() {
                 <h1 className="text-sm sm:text-base font-bold truncate max-w-[200px] sm:max-w-none">
                   {mockTestData.title}
                 </h1>
-                <p className="text-xs text-blue-100 hidden sm:block">Question {examState.currentQuestion + 1} of {mockTestData.questions.length}</p>
+                <p className="text-xs text-blue-100 hidden sm:block">
+                  Question {examState.currentQuestion + 1} of {mockTestData.questions.length}
+                </p>
               </div>
             </div>
 
             <div className="flex items-center space-x-2 sm:space-x-4">
-              <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg ${
-                examState.timeRemaining < 300 ? 'bg-red-500' : 'bg-white/20'
-              } min-h-[44px]`}>
+              <div
+                className={`flex items-center space-x-2 px-3 py-2 rounded-lg ${
+                  examState.timeRemaining < 300 ? 'bg-red-500' : 'bg-white/20'
+                } min-h-[44px]`}
+              >
                 <Clock className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span className="font-bold text-sm sm:text-base">{formatTime(examState.timeRemaining)}</span>
+                <span className="font-bold text-sm sm:text-base">
+                  {formatTime(examState.timeRemaining)}
+                </span>
               </div>
               {!isMobile && (
                 <div className="flex items-center space-x-1 bg-white/20 px-3 py-2 rounded-lg">
@@ -960,11 +1191,20 @@ export default function PracticeMockExam() {
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar - Question Navigator */}
         {examState.showMobileMenu && (isMobile || isTablet) && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-50" onClick={() => dispatch({ type: 'TOGGLE_MOBILE_MENU' })}>
-            <div className="absolute right-0 top-0 h-full w-80 max-w-[85%] bg-white shadow-xl overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 z-50"
+            onClick={() => dispatch({ type: 'TOGGLE_MOBILE_MENU' })}
+          >
+            <div
+              className="absolute right-0 top-0 h-full w-80 max-w-[85%] bg-white shadow-xl overflow-y-auto"
+              onClick={e => e.stopPropagation()}
+            >
               <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-white">
                 <h3 className="font-bold">Questions</h3>
-                <button onClick={() => dispatch({ type: 'TOGGLE_MOBILE_MENU' })} className="p-2 hover:bg-gray-100 rounded-lg">
+                <button
+                  onClick={() => dispatch({ type: 'TOGGLE_MOBILE_MENU' })}
+                  className="p-2 hover:bg-gray-100 rounded-lg"
+                >
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -973,7 +1213,7 @@ export default function PracticeMockExam() {
                   totalQuestions={mockTestData.questions.length}
                   currentQuestion={examState.currentQuestion}
                   getQuestionStatus={getQuestionStatus}
-                  onQuestionClick={(index) => {
+                  onQuestionClick={index => {
                     dispatch({ type: 'SET_CURRENT_QUESTION', payload: index })
                     dispatch({ type: 'TOGGLE_MOBILE_MENU' })
                   }}
@@ -989,7 +1229,7 @@ export default function PracticeMockExam() {
               totalQuestions={mockTestData.questions.length}
               currentQuestion={examState.currentQuestion}
               getQuestionStatus={getQuestionStatus}
-              onQuestionClick={(index) => dispatch({ type: 'SET_CURRENT_QUESTION', payload: index })}
+              onQuestionClick={index => dispatch({ type: 'SET_CURRENT_QUESTION', payload: index })}
             />
           </div>
         </div>
@@ -1001,18 +1241,25 @@ export default function PracticeMockExam() {
             <div className="bg-white rounded-lg shadow-sm p-3 sm:p-4 mb-4">
               <div className="flex items-center justify-between mb-2 text-xs sm:text-sm">
                 <span className="text-gray-600">Progress</span>
-                <span className="font-semibold">{getAnsweredCount()} / {mockTestData.questions.length} answered</span>
+                <span className="font-semibold">
+                  {getAnsweredCount()} / {mockTestData.questions.length} answered
+                </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-blue-600 h-2 rounded-full transition-all"
-                  style={{ width: `${(getAnsweredCount() / mockTestData.questions.length) * 100}%` }}
+                  style={{
+                    width: `${(getAnsweredCount() / mockTestData.questions.length) * 100}%`,
+                  }}
                 />
               </div>
             </div>
 
             {/* Question Card */}
-            <div {...swipeHandlers} className="bg-white rounded-xl shadow-lg p-4 sm:p-8 mb-4 touch-pan-y">
+            <div
+              {...swipeHandlers}
+              className="bg-white rounded-xl shadow-lg p-4 sm:p-8 mb-4 touch-pan-y"
+            >
               <div className="flex items-start justify-between mb-6">
                 <div className="flex-1">
                   <div className="flex items-center flex-wrap gap-2 mb-2">
@@ -1020,26 +1267,36 @@ export default function PracticeMockExam() {
                       Question {examState.currentQuestion + 1}
                     </span>
                     <span className="bg-green-100 text-green-800 px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-semibold">
-                      {question.points} <span className="hidden sm:inline">points</span><span className="sm:hidden">pt</span>
+                      {question.points} <span className="hidden sm:inline">points</span>
+                      <span className="sm:hidden">pt</span>
                     </span>
-                    <span className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-semibold flex items-center gap-1 ${
-                      question.difficulty === 'Easy' ? 'bg-emerald-100 text-emerald-800' :
-                      question.difficulty === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-red-100 text-red-800'
-                    }`}>
+                    <span
+                      className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-semibold flex items-center gap-1 ${
+                        question.difficulty === 'Easy'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : question.difficulty === 'Medium'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-red-100 text-red-800'
+                      }`}
+                    >
                       <TrendingUp className="w-3 h-3" />
                       {question.difficulty}
                     </span>
                     {examState.currentDifficulty !== 'Medium' && (
-                      <span className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-semibold flex items-center gap-1 ${
-                        examState.currentDifficulty === 'Easy' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
-                        'bg-purple-50 text-purple-700 border border-purple-200'
-                      }`}>
+                      <span
+                        className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-semibold flex items-center gap-1 ${
+                          examState.currentDifficulty === 'Easy'
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                            : 'bg-purple-50 text-purple-700 border border-purple-200'
+                        }`}
+                      >
                         Next: {examState.currentDifficulty}
                       </span>
                     )}
                   </div>
-                  <h2 className="text-lg sm:text-xl font-bold text-gray-900 leading-relaxed">{question.text}</h2>
+                  <h2 className="text-lg sm:text-xl font-bold text-gray-900 leading-relaxed">
+                    {question.text}
+                  </h2>
                 </div>
                 <button
                   onClick={handleFlagQuestion}
@@ -1055,56 +1312,62 @@ export default function PracticeMockExam() {
 
               {/* Answer Options */}
               <div className="space-y-3">
-                {question.type === 'mcq' && question.options?.map((option, index) => (
-                  <label
-                    key={index}
-                    className={`flex items-center space-x-3 p-3 sm:p-4 border-2 rounded-lg cursor-pointer transition min-h-[44px] touch-manipulation ${
-                      examState.answers[examState.currentQuestion] === option
-                        ? 'border-blue-600 bg-blue-50'
-                        : 'border-gray-200 hover:border-blue-300'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name={`question-${examState.currentQuestion}`}
-                      value={option}
-                      checked={examState.answers[examState.currentQuestion] === option}
-                      onChange={(e) => handleAnswerChange(examState.currentQuestion, e.target.value)}
-                      className="w-5 h-5 text-blue-600"
-                    />
-                    <span className="text-sm sm:text-base">{option}</span>
-                  </label>
-                ))}
+                {question.type === 'mcq' &&
+                  question.options?.map((option, index) => (
+                    <label
+                      key={index}
+                      className={`flex items-center space-x-3 p-3 sm:p-4 border-2 rounded-lg cursor-pointer transition min-h-[44px] touch-manipulation ${
+                        examState.answers[examState.currentQuestion] === option
+                          ? 'border-blue-600 bg-blue-50'
+                          : 'border-gray-200 hover:border-blue-300'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name={`question-${examState.currentQuestion}`}
+                        value={option}
+                        checked={examState.answers[examState.currentQuestion] === option}
+                        onChange={e =>
+                          handleAnswerChange(examState.currentQuestion, e.target.value)
+                        }
+                        className="w-5 h-5 text-blue-600"
+                      />
+                      <span className="text-sm sm:text-base">{option}</span>
+                    </label>
+                  ))}
 
-                {question.type === 'multiple-answer' && question.options?.map((option, index) => (
-                  <label
-                    key={index}
-                    className={`flex items-center space-x-3 p-3 sm:p-4 border-2 rounded-lg cursor-pointer transition min-h-[44px] touch-manipulation ${
-                      examState.answers[examState.currentQuestion]?.includes(option)
-                        ? 'border-blue-600 bg-blue-50'
-                        : 'border-gray-200 hover:border-blue-300'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      value={option}
-                      checked={examState.answers[examState.currentQuestion]?.includes(option) || false}
-                      onChange={(e) => {
-                        const current = examState.answers[examState.currentQuestion] || []
-                        const newAnswers = e.target.checked
-                          ? [...current, option]
-                          : current.filter((a: string) => a !== option)
-                        handleAnswerChange(examState.currentQuestion, newAnswers)
-                      }}
-                      className="w-5 h-5 text-blue-600 rounded"
-                    />
-                    <span className="text-sm sm:text-base">{option}</span>
-                  </label>
-                ))}
+                {question.type === 'multiple-answer' &&
+                  question.options?.map((option, index) => (
+                    <label
+                      key={index}
+                      className={`flex items-center space-x-3 p-3 sm:p-4 border-2 rounded-lg cursor-pointer transition min-h-[44px] touch-manipulation ${
+                        examState.answers[examState.currentQuestion]?.includes(option)
+                          ? 'border-blue-600 bg-blue-50'
+                          : 'border-gray-200 hover:border-blue-300'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        value={option}
+                        checked={
+                          examState.answers[examState.currentQuestion]?.includes(option) || false
+                        }
+                        onChange={e => {
+                          const current = examState.answers[examState.currentQuestion] || []
+                          const newAnswers = e.target.checked
+                            ? [...current, option]
+                            : current.filter((a: string) => a !== option)
+                          handleAnswerChange(examState.currentQuestion, newAnswers)
+                        }}
+                        className="w-5 h-5 text-blue-600 rounded"
+                      />
+                      <span className="text-sm sm:text-base">{option}</span>
+                    </label>
+                  ))}
 
                 {question.type === 'true-false' && (
                   <>
-                    {['True', 'False'].map((option) => (
+                    {['True', 'False'].map(option => (
                       <label
                         key={option}
                         className={`flex items-center space-x-3 p-3 sm:p-4 border-2 rounded-lg cursor-pointer transition min-h-[44px] touch-manipulation ${
@@ -1118,7 +1381,9 @@ export default function PracticeMockExam() {
                           name={`question-${examState.currentQuestion}`}
                           value={option}
                           checked={examState.answers[examState.currentQuestion] === option}
-                          onChange={(e) => handleAnswerChange(examState.currentQuestion, e.target.value)}
+                          onChange={e =>
+                            handleAnswerChange(examState.currentQuestion, e.target.value)
+                          }
                           className="w-5 h-5 text-blue-600"
                         />
                         <span className="text-sm sm:text-base font-semibold">{option}</span>
@@ -1130,7 +1395,7 @@ export default function PracticeMockExam() {
                 {question.type === 'short-answer' && (
                   <textarea
                     value={examState.answers[examState.currentQuestion] || ''}
-                    onChange={(e) => handleAnswerChange(examState.currentQuestion, e.target.value)}
+                    onChange={e => handleAnswerChange(examState.currentQuestion, e.target.value)}
                     placeholder="Type your answer here..."
                     className="w-full p-3 sm:p-4 border-2 border-gray-200 rounded-lg focus:border-blue-600 focus:ring-2 focus:ring-blue-500 resize-y min-h-[120px] text-sm sm:text-base"
                   />
@@ -1148,12 +1413,16 @@ export default function PracticeMockExam() {
             {/* Navigation Buttons */}
             <div className="flex items-center justify-between gap-3">
               <button
-                onClick={() => dispatch({ type: 'SET_CURRENT_QUESTION', payload: examState.currentQuestion - 1 })}
+                onClick={() =>
+                  dispatch({ type: 'SET_CURRENT_QUESTION', payload: examState.currentQuestion - 1 })
+                }
                 disabled={examState.currentQuestion === 0}
                 className="flex items-center space-x-2 px-4 sm:px-6 py-2 sm:py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition min-h-[44px] touch-manipulation flex-1 sm:flex-initial justify-center"
               >
                 <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span className="text-sm sm:text-base font-semibold hidden sm:inline">Previous</span>
+                <span className="text-sm sm:text-base font-semibold hidden sm:inline">
+                  Previous
+                </span>
               </button>
 
               {examState.currentQuestion === mockTestData.questions.length - 1 ? (
@@ -1166,7 +1435,12 @@ export default function PracticeMockExam() {
                 </button>
               ) : (
                 <button
-                  onClick={() => dispatch({ type: 'SET_CURRENT_QUESTION', payload: examState.currentQuestion + 1 })}
+                  onClick={() =>
+                    dispatch({
+                      type: 'SET_CURRENT_QUESTION',
+                      payload: examState.currentQuestion + 1,
+                    })
+                  }
                   className="flex items-center space-x-2 px-4 sm:px-6 py-2 sm:py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition min-h-[44px] touch-manipulation flex-1 sm:flex-initial justify-center"
                 >
                   <span className="text-sm sm:text-base font-semibold hidden sm:inline">Next</span>
@@ -1184,17 +1458,23 @@ export default function PracticeMockExam() {
             proctoringActive={examState.cameraEnabled && !!examState.proctoringStatus?.isActive}
             cameraReady={examState.cameraEnabled}
             trustScore={examState.proctoringStatus?.integrityScore ?? 100}
-            proctoringStatus={examState.proctoringStatus ? {
-              faceDetected: examState.proctoringStatus.faceDetected,
-              lookingAtScreen: examState.proctoringStatus.lookingAtScreen,
-              faceCount: examState.proctoringStatus.faceCount,
-              audioLevel: examState.proctoringStatus.audioLevel,
-              isActive: examState.proctoringStatus.isActive,
-              integrityScore: examState.proctoringStatus.integrityScore,
-            } : null}
+            proctoringStatus={
+              examState.proctoringStatus
+                ? {
+                    faceDetected: examState.proctoringStatus.faceDetected,
+                    lookingAtScreen: examState.proctoringStatus.lookingAtScreen,
+                    faceCount: examState.proctoringStatus.faceCount,
+                    audioLevel: examState.proctoringStatus.audioLevel,
+                    isActive: examState.proctoringStatus.isActive,
+                    integrityScore: examState.proctoringStatus.integrityScore,
+                  }
+                : null
+            }
             audioWaveData={audioWaveData}
             tabSwitches={examState.tabSwitches}
-            flags={examState.violations.map((v: any) => typeof v === 'string' ? { evidence: v, severity: 'medium' } : v)}
+            flags={examState.violations.map((v: any) =>
+              typeof v === 'string' ? { evidence: v, severity: 'medium' } : v
+            )}
             mode="practice"
           />
         </div>
@@ -1208,7 +1488,7 @@ function QuestionNavigator({
   totalQuestions,
   currentQuestion,
   getQuestionStatus,
-  onQuestionClick
+  onQuestionClick,
 }: {
   totalQuestions: number
   currentQuestion: number
@@ -1229,10 +1509,10 @@ function QuestionNavigator({
                 i === currentQuestion
                   ? 'bg-blue-600 text-white ring-2 ring-blue-600 ring-offset-2'
                   : status === 'answered'
-                  ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                  : status === 'flagged'
-                  ? 'bg-red-100 text-red-800 hover:bg-red-200'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                    : status === 'flagged'
+                      ? 'bg-red-100 text-red-800 hover:bg-red-200'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
               {i + 1}
@@ -1261,44 +1541,160 @@ function QuestionNavigator({
 
 // Mock test data generator using comprehensive question bank
 function getMockTestData(testId: string): MockTestData {
-  const testConfigs: { [key: string]: { category: string, difficulty: string, count: number, duration: number, title: string } } = {
+  const testConfigs: {
+    [key: string]: {
+      category: string
+      difficulty: string
+      count: number
+      duration: number
+      title: string
+    }
+  } = {
     // Mathematics Tests
-    'mock-math-1': { category: 'mathematics', difficulty: 'Easy', count: 30, duration: 45, title: 'Mathematics - Algebra Basics' },
-    'mock-math-2': { category: 'mathematics', difficulty: 'Medium', count: 40, duration: 60, title: 'Mathematics - Geometry & Trigonometry' },
-    'mock-math-3': { category: 'mathematics', difficulty: 'Hard', count: 50, duration: 90, title: 'Mathematics - Advanced Calculus' },
-    
+    'mock-math-1': {
+      category: 'mathematics',
+      difficulty: 'Easy',
+      count: 30,
+      duration: 45,
+      title: 'Mathematics - Algebra Basics',
+    },
+    'mock-math-2': {
+      category: 'mathematics',
+      difficulty: 'Medium',
+      count: 40,
+      duration: 60,
+      title: 'Mathematics - Geometry & Trigonometry',
+    },
+    'mock-math-3': {
+      category: 'mathematics',
+      difficulty: 'Hard',
+      count: 50,
+      duration: 90,
+      title: 'Mathematics - Advanced Calculus',
+    },
+
     // Science Tests
-    'mock-sci-1': { category: 'science', difficulty: 'Easy', count: 35, duration: 50, title: 'Science - Physics Fundamentals' },
-    'mock-sci-2': { category: 'science', difficulty: 'Medium', count: 40, duration: 60, title: 'Science - Chemistry & Biology' },
-    'mock-sci-3': { category: 'science', difficulty: 'Hard', count: 45, duration: 75, title: 'Science - Advanced Physics' },
-    
+    'mock-sci-1': {
+      category: 'science',
+      difficulty: 'Easy',
+      count: 35,
+      duration: 50,
+      title: 'Science - Physics Fundamentals',
+    },
+    'mock-sci-2': {
+      category: 'science',
+      difficulty: 'Medium',
+      count: 40,
+      duration: 60,
+      title: 'Science - Chemistry & Biology',
+    },
+    'mock-sci-3': {
+      category: 'science',
+      difficulty: 'Hard',
+      count: 45,
+      duration: 75,
+      title: 'Science - Advanced Physics',
+    },
+
     // General Knowledge Tests
-    'mock-gk-1': { category: 'general-knowledge', difficulty: 'Easy', count: 50, duration: 40, title: 'GK - Current Affairs 2024-25' },
-    'mock-gk-2': { category: 'general-knowledge', difficulty: 'Medium', count: 60, duration: 50, title: 'GK - World Geography & Politics' },
-    'mock-gk-3': { category: 'general-knowledge', difficulty: 'Hard', count: 100, duration: 90, title: 'GK - Comprehensive Test' },
-    
+    'mock-gk-1': {
+      category: 'general-knowledge',
+      difficulty: 'Easy',
+      count: 50,
+      duration: 40,
+      title: 'GK - Current Affairs 2024-25',
+    },
+    'mock-gk-2': {
+      category: 'general-knowledge',
+      difficulty: 'Medium',
+      count: 60,
+      duration: 50,
+      title: 'GK - World Geography & Politics',
+    },
+    'mock-gk-3': {
+      category: 'general-knowledge',
+      difficulty: 'Hard',
+      count: 100,
+      duration: 90,
+      title: 'GK - Comprehensive Test',
+    },
+
     // History Tests
-    'mock-hist-1': { category: 'history', difficulty: 'Easy', count: 30, duration: 40, title: 'History - Ancient Civilizations' },
-    'mock-hist-2': { category: 'history', difficulty: 'Medium', count: 35, duration: 50, title: 'History - Indian Independence' },
-    'mock-hist-3': { category: 'history', difficulty: 'Hard', count: 40, duration: 60, title: 'History - World Wars & Modern Era' },
-    
+    'mock-hist-1': {
+      category: 'history',
+      difficulty: 'Easy',
+      count: 30,
+      duration: 40,
+      title: 'History - Ancient Civilizations',
+    },
+    'mock-hist-2': {
+      category: 'history',
+      difficulty: 'Medium',
+      count: 35,
+      duration: 50,
+      title: 'History - Indian Independence',
+    },
+    'mock-hist-3': {
+      category: 'history',
+      difficulty: 'Hard',
+      count: 40,
+      duration: 60,
+      title: 'History - World Wars & Modern Era',
+    },
+
     // English Tests
-    'mock-eng-1': { category: 'english', difficulty: 'Easy', count: 25, duration: 30, title: 'English - Grammar Basics' },
-    'mock-eng-2': { category: 'english', difficulty: 'Medium', count: 35, duration: 45, title: 'English - Vocabulary & Comprehension' },
-    'mock-eng-3': { category: 'english', difficulty: 'Hard', count: 40, duration: 60, title: 'English - Advanced Literature' },
-    
+    'mock-eng-1': {
+      category: 'english',
+      difficulty: 'Easy',
+      count: 25,
+      duration: 30,
+      title: 'English - Grammar Basics',
+    },
+    'mock-eng-2': {
+      category: 'english',
+      difficulty: 'Medium',
+      count: 35,
+      duration: 45,
+      title: 'English - Vocabulary & Comprehension',
+    },
+    'mock-eng-3': {
+      category: 'english',
+      difficulty: 'Hard',
+      count: 40,
+      duration: 60,
+      title: 'English - Advanced Literature',
+    },
+
     // Reasoning Tests
-    'mock-reas-1': { category: 'reasoning', difficulty: 'Easy', count: 30, duration: 40, title: 'Reasoning - Basic Puzzles' },
-    'mock-reas-2': { category: 'reasoning', difficulty: 'Medium', count: 35, duration: 50, title: 'Reasoning - Analytical Thinking' },
-    'mock-reas-3': { category: 'reasoning', difficulty: 'Hard', count: 40, duration: 60, title: 'Reasoning - Complex Problems' }
+    'mock-reas-1': {
+      category: 'reasoning',
+      difficulty: 'Easy',
+      count: 30,
+      duration: 40,
+      title: 'Reasoning - Basic Puzzles',
+    },
+    'mock-reas-2': {
+      category: 'reasoning',
+      difficulty: 'Medium',
+      count: 35,
+      duration: 50,
+      title: 'Reasoning - Analytical Thinking',
+    },
+    'mock-reas-3': {
+      category: 'reasoning',
+      difficulty: 'Hard',
+      count: 40,
+      duration: 60,
+      title: 'Reasoning - Complex Problems',
+    },
   }
 
   const config = testConfigs[testId]
-  
+
   if (config) {
     // Get questions from question bank
     const bankQuestions = getQuestionsByCategory(config.category, config.difficulty, config.count)
-    
+
     // If not enough questions in bank, supplement with generated ones
     const questions: Question[] = bankQuestions.map(q => ({
       id: q.id,
@@ -1308,26 +1704,30 @@ function getMockTestData(testId: string): MockTestData {
       correctAnswer: q.correctAnswer,
       points: q.points,
       explanation: q.explanation,
-      difficulty: q.difficulty
+      difficulty: q.difficulty,
     }))
-    
+
     // Generate additional questions if needed
     if (questions.length < config.count) {
       const additionalCount = config.count - questions.length
-      const generated = generateCategoryQuestions(config.category, additionalCount, questions.length + 1)
+      const generated = generateCategoryQuestions(
+        config.category,
+        additionalCount,
+        questions.length + 1
+      )
       questions.push(...generated)
     }
-    
+
     return {
       id: testId,
       title: config.title,
       category: config.category,
       duration: config.duration,
       passingScore: 60,
-      questions: questions.slice(0, config.count)
+      questions: questions.slice(0, config.count),
     }
   }
-  
+
   // Default fallback
   return {
     id: testId,
@@ -1335,7 +1735,7 @@ function getMockTestData(testId: string): MockTestData {
     category: 'general',
     duration: 60,
     passingScore: 60,
-    questions: generateGenericQuestions(30)
+    questions: generateGenericQuestions(30),
   }
 }
 
@@ -1343,7 +1743,7 @@ function getMockTestData(testId: string): MockTestData {
 function generateCategoryQuestions(category: string, count: number, startId: number): Question[] {
   const questions: Question[] = []
   const templates = getCategoryTemplates(category)
-  
+
   for (let i = 0; i < count; i++) {
     const template = templates[i % templates.length]
     questions.push({
@@ -1354,7 +1754,7 @@ function generateCategoryQuestions(category: string, count: number, startId: num
       correctAnswer: template.correctAnswer || 'Option A',
       points: 2,
       explanation: template.explanation || 'Sample explanation',
-      difficulty: template.difficulty || 'Medium'
+      difficulty: template.difficulty || 'Medium',
     })
   }
   return questions
@@ -1364,31 +1764,103 @@ function generateCategoryQuestions(category: string, count: number, startId: num
 function getCategoryTemplates(category: string): Partial<Question>[] {
   const templates: { [key: string]: Partial<Question>[] } = {
     mathematics: [
-      { text: 'Solve for x: 3x - 7 = 14', type: 'mcq', options: ['7', '21', '14', '5'], correctAnswer: '7', explanation: '3x = 21, x = 7' },
-      { text: 'What is 15% of 200?', type: 'mcq', options: ['30', '25', '20', '35'], correctAnswer: '30', explanation: '200 × 0.15 = 30' }
+      {
+        text: 'Solve for x: 3x - 7 = 14',
+        type: 'mcq',
+        options: ['7', '21', '14', '5'],
+        correctAnswer: '7',
+        explanation: '3x = 21, x = 7',
+      },
+      {
+        text: 'What is 15% of 200?',
+        type: 'mcq',
+        options: ['30', '25', '20', '35'],
+        correctAnswer: '30',
+        explanation: '200 Ã— 0.15 = 30',
+      },
     ],
     science: [
-      { text: 'What is the boiling point of water at sea level?', type: 'mcq', options: ['90°C', '100°C', '110°C', '120°C'], correctAnswer: '100°C', explanation: 'Water boils at 100°C at standard atmospheric pressure.' },
-      { text: 'Which gas do plants absorb during photosynthesis?', type: 'mcq', options: ['Oxygen', 'Nitrogen', 'Carbon Dioxide', 'Hydrogen'], correctAnswer: 'Carbon Dioxide', explanation: 'Plants use CO₂ and sunlight to produce glucose.' }
+      {
+        text: 'What is the boiling point of water at sea level?',
+        type: 'mcq',
+        options: ['90Â°C', '100Â°C', '110Â°C', '120Â°C'],
+        correctAnswer: '100Â°C',
+        explanation: 'Water boils at 100Â°C at standard atmospheric pressure.',
+      },
+      {
+        text: 'Which gas do plants absorb during photosynthesis?',
+        type: 'mcq',
+        options: ['Oxygen', 'Nitrogen', 'Carbon Dioxide', 'Hydrogen'],
+        correctAnswer: 'Carbon Dioxide',
+        explanation: 'Plants use COâ‚‚ and sunlight to produce glucose.',
+      },
     ],
     'general-knowledge': [
-      { text: 'What is the largest country by area?', type: 'mcq', options: ['Canada', 'China', 'Russia', 'USA'], correctAnswer: 'Russia', explanation: 'Russia is the largest country covering 17.1 million km²' },
-      { text: 'How many colors are in a rainbow?', type: 'mcq', options: ['5', '6', '7', '8'], correctAnswer: '7', explanation: 'ROYGBIV: Red, Orange, Yellow, Green, Blue, Indigo, Violet' }
+      {
+        text: 'What is the largest country by area?',
+        type: 'mcq',
+        options: ['Canada', 'China', 'Russia', 'USA'],
+        correctAnswer: 'Russia',
+        explanation: 'Russia is the largest country covering 17.1 million kmÂ²',
+      },
+      {
+        text: 'How many colors are in a rainbow?',
+        type: 'mcq',
+        options: ['5', '6', '7', '8'],
+        correctAnswer: '7',
+        explanation: 'ROYGBIV: Red, Orange, Yellow, Green, Blue, Indigo, Violet',
+      },
     ],
     history: [
-      { text: 'Who discovered America in 1492?', type: 'mcq', options: ['Vasco da Gama', 'Christopher Columbus', 'Marco Polo', 'Ferdinand Magellan'], correctAnswer: 'Christopher Columbus', explanation: 'Columbus reached the Americas in 1492.' },
-      { text: 'The Magna Carta was signed in which year?', type: 'mcq', options: ['1215', '1315', '1415', '1515'], correctAnswer: '1215', explanation: 'The Magna Carta was signed in 1215 in England.' }
+      {
+        text: 'Who discovered America in 1492?',
+        type: 'mcq',
+        options: ['Vasco da Gama', 'Christopher Columbus', 'Marco Polo', 'Ferdinand Magellan'],
+        correctAnswer: 'Christopher Columbus',
+        explanation: 'Columbus reached the Americas in 1492.',
+      },
+      {
+        text: 'The Magna Carta was signed in which year?',
+        type: 'mcq',
+        options: ['1215', '1315', '1415', '1515'],
+        correctAnswer: '1215',
+        explanation: 'The Magna Carta was signed in 1215 in England.',
+      },
     ],
     english: [
-      { text: 'What is the superlative form of "good"?', type: 'mcq', options: ['Gooder', 'Goodest', 'Better', 'Best'], correctAnswer: 'Best', explanation: 'Good → Better → Best (irregular comparison)' },
-      { text: 'Identify the adjective: "The blue sky is beautiful."', type: 'mcq', options: ['Sky', 'Blue', 'Is', 'Beautiful'], correctAnswer: 'Blue', explanation: 'Blue describes the noun "sky"' }
+      {
+        text: 'What is the superlative form of "good"?',
+        type: 'mcq',
+        options: ['Gooder', 'Goodest', 'Better', 'Best'],
+        correctAnswer: 'Best',
+        explanation: 'Good â†’ Better â†’ Best (irregular comparison)',
+      },
+      {
+        text: 'Identify the adjective: "The blue sky is beautiful."',
+        type: 'mcq',
+        options: ['Sky', 'Blue', 'Is', 'Beautiful'],
+        correctAnswer: 'Blue',
+        explanation: 'Blue describes the noun "sky"',
+      },
     ],
     reasoning: [
-      { text: 'If A > B and B > C, then:', type: 'mcq', options: ['A < C', 'A = C', 'A > C', 'Cannot determine'], correctAnswer: 'A > C', explanation: 'Transitive property: if A > B and B > C, then A > C' },
-      { text: 'Complete: Square, Circle, Triangle, ?', type: 'mcq', options: ['Rectangle', 'Pentagon', 'Hexagon', 'Star'], correctAnswer: 'Rectangle', explanation: 'Common geometric shapes sequence' }
-    ]
+      {
+        text: 'If A > B and B > C, then:',
+        type: 'mcq',
+        options: ['A < C', 'A = C', 'A > C', 'Cannot determine'],
+        correctAnswer: 'A > C',
+        explanation: 'Transitive property: if A > B and B > C, then A > C',
+      },
+      {
+        text: 'Complete: Square, Circle, Triangle, ?',
+        type: 'mcq',
+        options: ['Rectangle', 'Pentagon', 'Hexagon', 'Star'],
+        correctAnswer: 'Rectangle',
+        explanation: 'Common geometric shapes sequence',
+      },
+    ],
   }
-  
+
   return templates[category] || templates['general-knowledge']
 }
 
@@ -1403,20 +1875,8 @@ function generateGenericQuestions(count: number): Question[] {
       correctAnswer: 'Option A',
       points: 2,
       explanation: 'This is a sample explanation.',
-      difficulty: 'Medium'
+      difficulty: 'Medium',
     })
   }
   return questions
 }
-
-
-
-
-
-
-
-
-
-
-
-

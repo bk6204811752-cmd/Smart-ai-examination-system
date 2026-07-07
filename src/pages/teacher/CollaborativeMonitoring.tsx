@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { collaborativeMonitoringAPI } from '../../lib/advancedAPIs'
-import { Users, AlertTriangle, Eye, MessageSquare, Pause, XCircle, CheckCircle, Brain, TrendingUp, Activity } from 'lucide-react'
+import { Users, AlertTriangle, MessageSquare, CheckCircle, Brain } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface Alert {
@@ -48,7 +48,11 @@ interface ExamState {
   }>
 }
 
-export default function CollaborativeMonitoring({ examId = '', teacherId = '', teacherName = 'Teacher' }: { 
+export default function CollaborativeMonitoring({
+  examId = '',
+  teacherId = '',
+  teacherName = 'Teacher',
+}: {
   examId?: string
   teacherId?: string
   teacherName?: string
@@ -62,6 +66,7 @@ export default function CollaborativeMonitoring({ examId = '', teacherId = '', t
     joinMonitoring()
     const interval = setInterval(fetchExamState, 2000) // Refresh every 2 seconds
     return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const joinMonitoring = async () => {
@@ -69,7 +74,7 @@ export default function CollaborativeMonitoring({ examId = '', teacherId = '', t
       await collaborativeMonitoringAPI.teacherJoin({
         exam_id: examId,
         teacher_id: teacherId,
-        teacher_name: teacherName
+        teacher_name: teacherName,
       })
       toast.success('Joined collaborative monitoring')
       fetchExamState()
@@ -98,7 +103,7 @@ export default function CollaborativeMonitoring({ examId = '', teacherId = '', t
         student_id: studentId,
         teacher_id: teacherId,
         action,
-        message
+        message,
       })
       toast.success(`Intervention sent: ${action}`)
       fetchExamState()
@@ -110,7 +115,7 @@ export default function CollaborativeMonitoring({ examId = '', teacherId = '', t
   const getStudentsList = () => {
     if (!examState) return []
     const students = Object.values(examState.active_students)
-    
+
     switch (filter) {
       case 'high-risk':
         return students.filter(s => s.current_risk_score >= 70)
@@ -123,10 +128,14 @@ export default function CollaborativeMonitoring({ examId = '', teacherId = '', t
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'CRITICAL': return 'bg-red-500'
-      case 'HIGH': return 'bg-orange-500'
-      case 'MEDIUM': return 'bg-yellow-500'
-      default: return 'bg-blue-500'
+      case 'CRITICAL':
+        return 'bg-red-500'
+      case 'HIGH':
+        return 'bg-orange-500'
+      case 'MEDIUM':
+        return 'bg-yellow-500'
+      default:
+        return 'bg-blue-500'
     }
   }
 
@@ -138,7 +147,9 @@ export default function CollaborativeMonitoring({ examId = '', teacherId = '', t
   }
 
   const pendingAlerts = examState?.alerts.filter(a => a.status === 'pending') || []
-  const highRiskCount = examState ? Object.values(examState.active_students).filter(s => s.current_risk_score >= 70).length : 0
+  const highRiskCount = examState
+    ? Object.values(examState.active_students).filter(s => s.current_risk_score >= 70).length
+    : 0
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -151,13 +162,13 @@ export default function CollaborativeMonitoring({ examId = '', teacherId = '', t
                 <Users className="w-6 h-6" />
                 Collaborative Monitoring
               </h1>
-              <p className="text-white/90 mt-1">
-                {examState?.exam_title || 'Loading...'}
-              </p>
+              <p className="text-white/90 mt-1">{examState?.exam_title || 'Loading...'}</p>
             </div>
             <div className="flex items-center gap-6">
               <div className="text-center">
-                <div className="text-3xl font-bold">{Object.keys(examState?.active_students || {}).length}</div>
+                <div className="text-3xl font-bold">
+                  {Object.keys(examState?.active_students || {}).length}
+                </div>
                 <div className="text-xs text-white/80">Active Students</div>
               </div>
               <div className="text-center">
@@ -217,7 +228,7 @@ export default function CollaborativeMonitoring({ examId = '', teacherId = '', t
 
             {/* Students Grid */}
             <div className="grid grid-cols-2 gap-4">
-              {getStudentsList().map((student) => (
+              {getStudentsList().map(student => (
                 <div
                   key={student.student_id}
                   className={`bg-white rounded-lg shadow-sm p-4 cursor-pointer transition hover:shadow-md ${
@@ -265,7 +276,9 @@ export default function CollaborativeMonitoring({ examId = '', teacherId = '', t
                       <div className="text-gray-500">Attention</div>
                     </div>
                     <div className="text-center">
-                      <div className="font-bold text-gray-900">{Math.floor(student.time_remaining / 60)}</div>
+                      <div className="font-bold text-gray-900">
+                        {Math.floor(student.time_remaining / 60)}
+                      </div>
                       <div className="text-gray-500">Min left</div>
                     </div>
                   </div>
@@ -274,7 +287,10 @@ export default function CollaborativeMonitoring({ examId = '', teacherId = '', t
                   {student.flags.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1">
                       {student.flags.map((flag, idx) => (
-                        <span key={idx} className="bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded">
+                        <span
+                          key={idx}
+                          className="bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded"
+                        >
                           {flag}
                         </span>
                       ))}
@@ -284,7 +300,7 @@ export default function CollaborativeMonitoring({ examId = '', teacherId = '', t
                   {/* Quick Actions */}
                   <div className="mt-3 flex gap-1">
                     <button
-                      onClick={(e) => {
+                      onClick={e => {
                         e.stopPropagation()
                         handleIntervention(student.student_id, 'WARNING')
                       }}
@@ -294,7 +310,7 @@ export default function CollaborativeMonitoring({ examId = '', teacherId = '', t
                     </button>
                     {!student.is_paused ? (
                       <button
-                        onClick={(e) => {
+                        onClick={e => {
                           e.stopPropagation()
                           handleIntervention(student.student_id, 'PAUSE_EXAM')
                         }}
@@ -304,7 +320,7 @@ export default function CollaborativeMonitoring({ examId = '', teacherId = '', t
                       </button>
                     ) : (
                       <button
-                        onClick={(e) => {
+                        onClick={e => {
                           e.stopPropagation()
                           handleIntervention(student.student_id, 'CLEAR_VIOLATION')
                         }}
@@ -328,11 +344,8 @@ export default function CollaborativeMonitoring({ examId = '', teacherId = '', t
                 Alert Queue ({pendingAlerts.length})
               </h3>
               <div className="space-y-2 max-h-96 overflow-y-auto">
-                {pendingAlerts.map((alert) => (
-                  <div
-                    key={alert.alert_id}
-                    className="border border-gray-200 rounded-lg p-3"
-                  >
+                {pendingAlerts.map(alert => (
+                  <div key={alert.alert_id} className="border border-gray-200 rounded-lg p-3">
                     <div className="flex items-start gap-2">
                       <div className={`w-1 h-full ${getPriorityColor(alert.priority)} rounded`} />
                       <div className="flex-1">
@@ -340,12 +353,17 @@ export default function CollaborativeMonitoring({ examId = '', teacherId = '', t
                           <span className="font-medium text-sm text-gray-900">
                             {alert.student_name}
                           </span>
-                          <span className={`text-xs px-2 py-0.5 rounded ${
-                            alert.priority === 'CRITICAL' ? 'bg-red-100 text-red-700' :
-                            alert.priority === 'HIGH' ? 'bg-orange-100 text-orange-700' :
-                            alert.priority === 'MEDIUM' ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-blue-100 text-blue-700'
-                          }`}>
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded ${
+                              alert.priority === 'CRITICAL'
+                                ? 'bg-red-100 text-red-700'
+                                : alert.priority === 'HIGH'
+                                  ? 'bg-orange-100 text-orange-700'
+                                  : alert.priority === 'MEDIUM'
+                                    ? 'bg-yellow-100 text-yellow-700'
+                                    : 'bg-blue-100 text-blue-700'
+                            }`}
+                          >
                             {alert.priority}
                           </span>
                         </div>
@@ -394,16 +412,25 @@ export default function CollaborativeMonitoring({ examId = '', teacherId = '', t
                 Teacher Team ({examState?.teachers.length || 0})
               </h3>
               <div className="space-y-2">
-                {examState?.teachers.map((teacher) => (
-                  <div key={teacher.teacher_id} className="flex items-center justify-between text-sm">
+                {examState?.teachers.map(teacher => (
+                  <div
+                    key={teacher.teacher_id}
+                    className="flex items-center justify-between text-sm"
+                  >
                     <span className="text-gray-900">{teacher.teacher_name}</span>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-500">{teacher.watching_count} watching</span>
-                      <div className={`w-2 h-2 rounded-full ${
-                        teacher.workload_score > 80 ? 'bg-red-500' :
-                        teacher.workload_score > 50 ? 'bg-yellow-500' :
-                        'bg-green-500'
-                      }`} />
+                      <span className="text-xs text-gray-500">
+                        {teacher.watching_count} watching
+                      </span>
+                      <div
+                        className={`w-2 h-2 rounded-full ${
+                          teacher.workload_score > 80
+                            ? 'bg-red-500'
+                            : teacher.workload_score > 50
+                              ? 'bg-yellow-500'
+                              : 'bg-green-500'
+                        }`}
+                      />
                     </div>
                   </div>
                 ))}
@@ -428,8 +455,8 @@ export default function CollaborativeMonitoring({ examId = '', teacherId = '', t
                 <input
                   type="text"
                   value={messageInput}
-                  onChange={(e) => setMessageInput(e.target.value)}
-                  onKeyPress={(e) => {
+                  onChange={e => setMessageInput(e.target.value)}
+                  onKeyPress={e => {
                     if (e.key === 'Enter' && messageInput.trim()) {
                       // Send message via API
                       setMessageInput('')

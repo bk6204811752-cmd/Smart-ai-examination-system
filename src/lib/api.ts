@@ -9,7 +9,7 @@ import { toast } from 'sonner'
 const RENDER_BACKEND = 'https://pcmt-ai-exam-backend.onrender.com'
 const API_URL =
   (import.meta as any).env?.VITE_API_URL ||
-  ((import.meta as any).env?.DEV ? 'http://localhost:8000' : RENDER_BACKEND)
+  ((import.meta as any).env?.DEV ? 'http://localhost:8000' : '')
 
 // Offline request queue
 interface QueuedRequest {

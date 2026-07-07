@@ -2,17 +2,31 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Users, AlertTriangle, Eye, CheckCircle, XCircle, Clock,
-  Camera, TrendingUp, RefreshCw, Mic, Shield, Activity,
-  MessageSquare, Pause, Search, Filter, Bell, BarChart3,
-  Zap, MonitorOff, Radio, ChevronDown, Volume2, VolumeX
+  Users,
+  AlertTriangle,
+  Eye,
+  CheckCircle,
+  Camera,
+  RefreshCw,
+  Mic,
+  Shield,
+  Activity,
+  MessageSquare,
+  Search,
+  Bell,
+  BarChart3,
+  Zap,
+  MonitorOff,
+  Radio,
+  Volume2,
+  VolumeX,
 } from 'lucide-react'
 import { examAPI, proctoringAPI, sessionAPI } from '../../lib/api'
 import { WebSocketClient } from '../../lib/websocket'
 import { useAuthStore } from '../../store/globalStore'
 import { toast } from 'sonner'
 import StudentDetailModal from '../../components/StudentDetailModal'
-import AudioWaveform from '../../components/AudioWaveform'
+import ExamChat from '../../components/ExamChat'
 
 interface StudentSession {
   student_id: string
@@ -31,6 +45,7 @@ interface StudentSession {
   looking_at_screen?: boolean
   attention_level?: number
   integrity_score?: number
+  is_paused?: boolean
 }
 
 interface ViolationFlag {
@@ -56,15 +71,17 @@ export default function LiveMonitoringPage() {
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [videoStreams, setVideoStreams] = useState<Record<string, string>>({})
   const [lastFrameTime, setLastFrameTime] = useState<Record<string, number>>({})
-  const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'reconnecting' | 'error'>('disconnected')
+  const [wsStatus, setWsStatus] = useState<
+    'connecting' | 'connected' | 'disconnected' | 'reconnecting' | 'error'
+  >('disconnected')
   const [frameUpdateTrigger, setFrameUpdateTrigger] = useState(0)
   const [searchQuery, setSearchQuery] = useState('')
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'flagged' | 'submitted'>('all')
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'flagged' | 'submitted'>(
+    'all'
+  )
   const [showAlerts, setShowAlerts] = useState(true)
   const [newViolations, setNewViolations] = useState<ViolationFlag[]>([])
   const [alertSoundEnabled, setAlertSoundEnabled] = useState(true)
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
-  const [activeTab, setActiveTab] = useState<'students' | 'violations' | 'analytics'>('students')
   const [showStudentModal, setShowStudentModal] = useState(false)
   const wsClientRef = useRef<WebSocketClient | null>(null)
   const staleFrameCheckInterval = useRef<number | null>(null)
@@ -118,6 +135,7 @@ export default function LiveMonitoringPage() {
         clearInterval(streamRefreshIntervalRef.current)
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [examId])
 
   useEffect(() => {
@@ -141,16 +159,22 @@ export default function LiveMonitoringPage() {
                   attention_level: existing.attention_level,
                   integrity_score: existing.integrity_score,
                   // Use WS trust_score if available and different
-                  trust_score: existing.trust_score !== 100 ? Math.min(existing.trust_score, newS.trust_score || 100) : (newS.trust_score || 100),
+                  trust_score:
+                    existing.trust_score !== 100
+                      ? Math.min(existing.trust_score, newS.trust_score || 100)
+                      : newS.trust_score || 100,
                 }
               }
               return newS
             })
           })
-        } catch { /* noop */ }
+        } catch {
+          /* noop */
+        }
       }, 3000) // Poll every 3s for better real-time feel
       return () => clearInterval(interval)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoRefresh, examId])
 
   const loadExamData = async () => {
@@ -160,7 +184,9 @@ export default function LiveMonitoringPage() {
       try {
         const sessionsData = await sessionAPI.getSessions(examId!)
         setSessions(Array.isArray(sessionsData) ? sessionsData : [])
-      } catch { setSessions([]) }
+      } catch {
+        setSessions([])
+      }
       setLoading(false)
     } catch {
       setLoading(false)
@@ -173,7 +199,9 @@ export default function LiveMonitoringPage() {
         const data = await proctoringAPI.getFlags(examId)
         setFlags(data)
       }
-    } catch { /* noop */ }
+    } catch {
+      /* noop */
+    }
   }
 
   const playAlertSound = useCallback(() => {
@@ -192,7 +220,9 @@ export default function LiveMonitoringPage() {
       gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3)
       oscillator.start(ctx.currentTime)
       oscillator.stop(ctx.currentTime + 0.3)
-    } catch { /* noop */ }
+    } catch {
+      /* noop */
+    }
   }, [alertSoundEnabled])
 
   const initializeWebSocket = () => {
@@ -229,51 +259,63 @@ export default function LiveMonitoringPage() {
           ...data.violation,
           student_id: data.student_id,
           exam_id: examId,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         }
         setFlags(prev => [...prev, newFlag])
         setNewViolations(prev => [...prev.slice(-4), newFlag])
-        
+
         // Play alert for critical/high violations
         if (['CRITICAL', 'HIGH', 'critical', 'high'].includes(data.violation.severity)) {
           playAlertSound()
-          toast.error(`⚠️ ${data.student_id}: ${data.violation.type?.replace(/_/g, ' ')}`, { duration: 4000 })
+          toast.error(`⚠️ ${data.student_id}: ${data.violation.type?.replace(/_/g, ' ')}`, {
+            duration: 4000,
+          })
         }
-        
-        setSessions(prev => prev.map(session => {
-          if (session.student_id === data.student_id) {
-            const newFlags = (session.flags || 0) + 1
-            return {
-              ...session,
-              flags: newFlags,
-              trust_score: Math.max(0, (session.trust_score || 100) - (
-                ['CRITICAL', 'critical'].includes(data.violation.severity) ? 15 :
-                ['HIGH', 'high'].includes(data.violation.severity) ? 10 : 5
-              )),
-              status: newFlags >= 3 ? 'flagged' as const : session.status
+
+        setSessions(prev =>
+          prev.map(session => {
+            if (session.student_id === data.student_id) {
+              const newFlags = (session.flags || 0) + 1
+              return {
+                ...session,
+                flags: newFlags,
+                trust_score: Math.max(
+                  0,
+                  (session.trust_score || 100) -
+                    (['CRITICAL', 'critical'].includes(data.violation.severity)
+                      ? 15
+                      : ['HIGH', 'high'].includes(data.violation.severity)
+                        ? 10
+                        : 5)
+                ),
+                status: newFlags >= 3 ? ('flagged' as const) : session.status,
+              }
             }
-          }
-          return session
-        }))
+            return session
+          })
+        )
       }
     })
 
     wsClient.on('proctoring_status', (data: any) => {
-      setSessions(prev => prev.map(session => {
-        if (session.student_id === data.student_id && data.status) {
-          return {
-            ...session,
-            audio_level: data.status.audioLevel,
-            face_detected: data.status.faceDetected,
-            looking_at_screen: data.status.lookingAtScreen,
-            attention_level: data.status.attentionLevel,
-            integrity_score: data.status.integrityScore,
-            trust_score: data.trust_score ?? session.trust_score,
-            last_activity: new Date().toISOString()
+      setSessions(prev =>
+        prev.map(session => {
+          if (session.student_id === data.student_id && data.status) {
+            return {
+              ...session,
+              audio_level: data.status.audioLevel,
+              face_detected: data.status.faceDetected,
+              looking_at_screen: data.status.lookingAtScreen,
+              attention_level: data.status.attentionLevel,
+              integrity_score: data.status.integrityScore,
+              trust_score: data.trust_score ?? session.trust_score,
+              is_paused: data.status.isPaused ?? session.is_paused,
+              last_activity: new Date().toISOString(),
+            }
           }
-        }
-        return session
-      }))
+          return session
+        })
+      )
     })
 
     wsClient.on('active_streams', (data: any) => {
@@ -296,12 +338,14 @@ export default function LiveMonitoringPage() {
     // Track student heartbeats for online/offline status
     wsClient.on('student_heartbeat', (data: any) => {
       if (data.student_id) {
-        setSessions(prev => prev.map(s => {
-          if (s.student_id === data.student_id) {
-            return { ...s, last_activity: new Date().toISOString(), status: 'active' as const }
-          }
-          return s
-        }))
+        setSessions(prev =>
+          prev.map(s => {
+            if (s.student_id === data.student_id) {
+              return { ...s, last_activity: new Date().toISOString(), status: 'active' as const }
+            }
+            return s
+          })
+        )
       }
     })
 
@@ -310,9 +354,12 @@ export default function LiveMonitoringPage() {
       if (data.student_id) {
         toast.success(`Student joined: ${data.student_id}`, { duration: 2000 })
         // Refresh sessions to get the new student
-        sessionAPI.getSessions(examId!).then(sessionsData => {
-          setSessions(Array.isArray(sessionsData) ? sessionsData : [])
-        }).catch(() => {})
+        sessionAPI
+          .getSessions(examId!)
+          .then(sessionsData => {
+            setSessions(Array.isArray(sessionsData) ? sessionsData : [])
+          })
+          .catch(() => {})
       }
     })
 
@@ -320,12 +367,14 @@ export default function LiveMonitoringPage() {
     wsClient.on('student_disconnected', (data: any) => {
       if (data.student_id) {
         // Mark as possibly disconnected but don't remove
-        setSessions(prev => prev.map(s => {
-          if (s.student_id === data.student_id && s.status === 'active') {
-            return { ...s, last_activity: new Date().toISOString() }
-          }
-          return s
-        }))
+        setSessions(prev =>
+          prev.map(s => {
+            if (s.student_id === data.student_id && s.status === 'active') {
+              return { ...s, last_activity: new Date().toISOString() }
+            }
+            return s
+          })
+        )
         // Remove stale video frame
         setVideoStreams(prev => {
           const updated = { ...prev }
@@ -347,23 +396,50 @@ export default function LiveMonitoringPage() {
     return streamRefreshInterval
   }
 
-  const handleIntervene = useCallback(async (studentId: string, action: 'warn' | 'pause' | 'terminate', message: string) => {
-    try {
-      if (wsClientRef.current) {
-        wsClientRef.current.send({
-          type: 'intervention',
-          exam_id: examId,
-          student_id: studentId,
-          action,
-          message
-        })
+  const handleIntervene = useCallback(
+    async (
+      studentId: string,
+      action: 'warn' | 'pause' | 'resume' | 'terminate',
+      message: string
+    ) => {
+      try {
+        if (wsClientRef.current) {
+          wsClientRef.current.send({
+            type: 'intervention',
+            exam_id: examId,
+            student_id: studentId,
+            action,
+            message,
+          })
+        }
+        if (action === 'resume') {
+          setSessions((prev: StudentSession[]) =>
+            prev.map((s: StudentSession) =>
+              s.student_id === studentId ? { ...s, is_paused: false } : s
+            )
+          )
+        } else if (action === 'pause') {
+          setSessions((prev: StudentSession[]) =>
+            prev.map((s: StudentSession) =>
+              s.student_id === studentId ? { ...s, is_paused: true } : s
+            )
+          )
+        }
+        const actionLabel =
+          action === 'warn'
+            ? 'Warning sent'
+            : action === 'pause'
+              ? 'Exam paused'
+              : action === 'resume'
+                ? 'Exam resumed'
+                : 'Exam terminated'
+        toast.success(`✓ ${actionLabel} for student`)
+      } catch {
+        toast.error('Failed to send intervention')
       }
-      const actionLabel = action === 'warn' ? 'Warning sent' : action === 'pause' ? 'Exam paused' : 'Exam terminated'
-      toast.success(`✓ ${actionLabel} for student`)
-    } catch {
-      toast.error('Failed to send intervention')
-    }
-  }, [examId])
+    },
+    [examId]
+  )
 
   const getTimeElapsed = (startTime: string) => {
     const elapsed = Date.now() - new Date(startTime).getTime()
@@ -375,7 +451,9 @@ export default function LiveMonitoringPage() {
 
   // Filtered sessions
   const filteredSessions = sessions.filter(s => {
-    const matchSearch = !searchQuery || s.student_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    const matchSearch =
+      !searchQuery ||
+      s.student_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.email.toLowerCase().includes(searchQuery.toLowerCase())
     const matchFilter = filterStatus === 'all' || s.status === filterStatus
     return matchSearch && matchFilter
@@ -386,15 +464,19 @@ export default function LiveMonitoringPage() {
     active: sessions.filter(s => s.status === 'active').length,
     submitted: sessions.filter(s => s.status === 'submitted').length,
     flagged: sessions.filter(s => s.status === 'flagged').length,
-    avgTrustScore: sessions.length > 0
-      ? Math.round(sessions.reduce((acc, s) => acc + (s.trust_score || 0), 0) / sessions.length) : 0,
+    avgTrustScore:
+      sessions.length > 0
+        ? Math.round(sessions.reduce((acc, s) => acc + (s.trust_score || 0), 0) / sessions.length)
+        : 0,
     criticalFlags: flags.filter(f => ['CRITICAL', 'critical'].includes(f.severity)).length,
-    liveStreams: Object.keys(videoStreams).length
+    liveStreams: Object.keys(videoStreams).length,
   }
 
-  const selectedStudentData = selectedStudent ? sessions.find(s => s.student_id === selectedStudent) || null : null
+  const selectedStudentData = selectedStudent
+    ? sessions.find(s => s.student_id === selectedStudent) || null
+    : null
   const selectedStudentFlags = flags.filter(f => f.student_id === selectedStudent)
-  const selectedStudentVideo = selectedStudent ? (videoStreams[selectedStudent] || null) : null
+  const selectedStudentVideo = selectedStudent ? videoStreams[selectedStudent] || null : null
 
   if (loading && examId) {
     return (
@@ -416,7 +498,8 @@ export default function LiveMonitoringPage() {
         </div>
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Live Monitoring</h2>
         <p className="text-gray-500 mb-8 max-w-md">
-          Select a specific exam to monitor, or access Live Monitor from an exam's action menu to watch students in real time.
+          Select a specific exam to monitor, or access Live Monitor from an exam's action menu to
+          watch students in real time.
         </p>
         <div className="flex gap-3">
           <a
@@ -440,7 +523,10 @@ export default function LiveMonitoringPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white" style={{ fontFamily: "'Inter', sans-serif" }}>
+    <div
+      className="min-h-screen bg-gray-950 text-white"
+      style={{ fontFamily: "'Inter', sans-serif" }}
+    >
       {/* Background */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute -top-64 -left-64 w-128 h-128 bg-blue-500/5 rounded-full blur-3xl" />
@@ -456,6 +542,8 @@ export default function LiveMonitoringPage() {
           onClose={() => setShowStudentModal(false)}
           onIntervene={handleIntervene}
           totalQuestions={exam?.questions?.length || 25}
+          wsClientRef={wsClientRef}
+          examId={examId || ''}
         />
       )}
 
@@ -481,7 +569,9 @@ export default function LiveMonitoringPage() {
                     <div className="font-semibold text-xs mb-0.5">
                       {sessions.find(s => s.student_id === v.student_id)?.student_name || 'Student'}
                     </div>
-                    <div className="text-xs opacity-80">{(v.flag_type || v.type || '').replace(/_/g, ' ')}</div>
+                    <div className="text-xs opacity-80">
+                      {(v.flag_type || v.type || '').replace(/_/g, ' ')}
+                    </div>
                   </div>
                 </div>
               </motion.div>
@@ -514,12 +604,19 @@ export default function LiveMonitoringPage() {
                   : 'bg-gray-800/50 border-gray-700 text-gray-500'
               }`}
             >
-              {alertSoundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+              {alertSoundEnabled ? (
+                <Volume2 className="w-4 h-4" />
+              ) : (
+                <VolumeX className="w-4 h-4" />
+              )}
             </button>
 
             {/* Alert Feed Toggle */}
             <button
-              onClick={() => { setShowAlerts(prev => !prev); setNewViolations([]) }}
+              onClick={() => {
+                setShowAlerts(prev => !prev)
+                setNewViolations([])
+              }}
               className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition ${
                 showAlerts
                   ? 'bg-red-950/50 border-red-600/50 text-red-400'
@@ -539,36 +636,102 @@ export default function LiveMonitoringPage() {
                   : 'bg-gray-800/50 border-gray-700 text-gray-500'
               }`}
             >
-              <RefreshCw className={`w-4 h-4 ${autoRefresh ? 'animate-spin' : ''}`} style={{ animationDuration: '3s' }} />
+              <RefreshCw
+                className={`w-4 h-4 ${autoRefresh ? 'animate-spin' : ''}`}
+                style={{ animationDuration: '3s' }}
+              />
               <span>Auto</span>
             </button>
 
             {/* WebSocket Status */}
-            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-semibold ${
-              wsStatus === 'connected' ? 'bg-emerald-950/50 border-emerald-600/50 text-emerald-400' :
-              wsStatus === 'connecting' ? 'bg-yellow-950/50 border-yellow-600/50 text-yellow-400' :
-              'bg-red-950/50 border-red-600/50 text-red-400'
-            }`}>
-              <div className={`w-2 h-2 rounded-full ${
-                wsStatus === 'connected' ? 'bg-emerald-400 animate-pulse' :
-                wsStatus === 'connecting' ? 'bg-yellow-400 animate-pulse' :
-                'bg-red-400'
-              }`} />
-              {wsStatus === 'connected' ? 'LIVE' : wsStatus === 'connecting' ? 'Connecting...' : 'Offline'}
+            <div
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-semibold ${
+                wsStatus === 'connected'
+                  ? 'bg-emerald-950/50 border-emerald-600/50 text-emerald-400'
+                  : wsStatus === 'connecting'
+                    ? 'bg-yellow-950/50 border-yellow-600/50 text-yellow-400'
+                    : 'bg-red-950/50 border-red-600/50 text-red-400'
+              }`}
+            >
+              <div
+                className={`w-2 h-2 rounded-full ${
+                  wsStatus === 'connected'
+                    ? 'bg-emerald-400 animate-pulse'
+                    : wsStatus === 'connecting'
+                      ? 'bg-yellow-400 animate-pulse'
+                      : 'bg-red-400'
+                }`}
+              />
+              {wsStatus === 'connected'
+                ? 'LIVE'
+                : wsStatus === 'connecting'
+                  ? 'Connecting...'
+                  : 'Offline'}
             </div>
+
+            {/* Teacher Chat Button */}
+            <ExamChat
+              wsClientRef={wsClientRef}
+              userId={user?._id || user?.email || 'teacher'}
+              userName={user?.full_name || 'Teacher'}
+              role="teacher"
+              examId={examId || ''}
+            />
           </div>
         </div>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
           {[
-            { label: 'Total', value: stats.total, icon: Users, color: 'text-blue-400', bg: 'bg-blue-950/30 border-blue-800/40' },
-            { label: 'Active', value: stats.active, icon: Activity, color: 'text-emerald-400', bg: 'bg-emerald-950/30 border-emerald-800/40' },
-            { label: 'Submitted', value: stats.submitted, icon: CheckCircle, color: 'text-blue-400', bg: 'bg-blue-950/20 border-blue-800/30' },
-            { label: 'Flagged', value: stats.flagged, icon: AlertTriangle, color: 'text-red-400', bg: 'bg-red-950/30 border-red-800/40' },
-            { label: 'Avg Trust', value: `${stats.avgTrustScore}%`, icon: Shield, color: 'text-purple-400', bg: 'bg-purple-950/30 border-purple-800/40' },
-            { label: 'Critical', value: stats.criticalFlags, icon: Zap, color: 'text-red-400', bg: 'bg-red-950/40 border-red-700/50' },
-            { label: 'Live Feeds', value: stats.liveStreams, icon: Camera, color: 'text-cyan-400', bg: 'bg-cyan-950/30 border-cyan-800/40' },
+            {
+              label: 'Total',
+              value: stats.total,
+              icon: Users,
+              color: 'text-blue-400',
+              bg: 'bg-blue-950/30 border-blue-800/40',
+            },
+            {
+              label: 'Active',
+              value: stats.active,
+              icon: Activity,
+              color: 'text-emerald-400',
+              bg: 'bg-emerald-950/30 border-emerald-800/40',
+            },
+            {
+              label: 'Submitted',
+              value: stats.submitted,
+              icon: CheckCircle,
+              color: 'text-blue-400',
+              bg: 'bg-blue-950/20 border-blue-800/30',
+            },
+            {
+              label: 'Flagged',
+              value: stats.flagged,
+              icon: AlertTriangle,
+              color: 'text-red-400',
+              bg: 'bg-red-950/30 border-red-800/40',
+            },
+            {
+              label: 'Avg Trust',
+              value: `${stats.avgTrustScore}%`,
+              icon: Shield,
+              color: 'text-purple-400',
+              bg: 'bg-purple-950/30 border-purple-800/40',
+            },
+            {
+              label: 'Critical',
+              value: stats.criticalFlags,
+              icon: Zap,
+              color: 'text-red-400',
+              bg: 'bg-red-950/40 border-red-700/50',
+            },
+            {
+              label: 'Live Feeds',
+              value: stats.liveStreams,
+              icon: Camera,
+              color: 'text-cyan-400',
+              bg: 'bg-cyan-950/30 border-cyan-800/40',
+            },
           ].map(({ label, value, icon: Icon, color, bg }) => (
             <div key={label} className={`${bg} border rounded-xl p-4 backdrop-blur-sm`}>
               <Icon className={`w-5 h-5 ${color} mb-2`} />
@@ -602,10 +765,13 @@ export default function LiveMonitoringPage() {
                       onClick={() => setFilterStatus(status)}
                       className={`px-3 py-2 rounded-lg text-xs font-semibold capitalize transition border ${
                         filterStatus === status
-                          ? status === 'all' ? 'bg-blue-600 border-blue-500 text-white' :
-                            status === 'flagged' ? 'bg-red-600 border-red-500 text-white' :
-                            status === 'active' ? 'bg-emerald-600 border-emerald-500 text-white' :
-                            'bg-gray-600 border-gray-500 text-white'
+                          ? status === 'all'
+                            ? 'bg-blue-600 border-blue-500 text-white'
+                            : status === 'flagged'
+                              ? 'bg-red-600 border-red-500 text-white'
+                              : status === 'active'
+                                ? 'bg-emerald-600 border-emerald-500 text-white'
+                                : 'bg-gray-600 border-gray-500 text-white'
                           : 'bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700'
                       }`}
                     >
@@ -628,7 +794,10 @@ export default function LiveMonitoringPage() {
                     </span>
                   </div>
                   <button
-                    onClick={() => { setFrameUpdateTrigger(p => p + 1); toast.success('Refreshed', { duration: 1000 }) }}
+                    onClick={() => {
+                      setFrameUpdateTrigger(p => p + 1)
+                      toast.success('Refreshed', { duration: 1000 })
+                    }}
                     className="text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded-lg border border-gray-700 hover:bg-gray-700 transition flex items-center gap-1.5"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
@@ -639,17 +808,23 @@ export default function LiveMonitoringPage() {
                   {Object.entries(videoStreams).map(([studentId, frameData]) => {
                     const student = sessions.find(s => s.student_id === studentId)
                     const lastFrame = lastFrameTime[studentId]
-                    const isRecent = lastFrame && (Date.now() - lastFrame < 8000)
+                    const isRecent = lastFrame && Date.now() - lastFrame < 8000
                     const isFlagged = student?.status === 'flagged'
 
                     return (
                       <motion.div
                         key={`${studentId}-${frameUpdateTrigger}`}
                         whileHover={{ scale: 1.02 }}
-                        onClick={() => { setSelectedStudent(studentId); setShowStudentModal(true) }}
+                        onClick={() => {
+                          setSelectedStudent(studentId)
+                          setShowStudentModal(true)
+                        }}
                         className={`cursor-pointer rounded-xl overflow-hidden border-2 transition ${
-                          isFlagged ? 'border-red-500/60' :
-                          isRecent ? 'border-emerald-500/40' : 'border-gray-700'
+                          isFlagged
+                            ? 'border-red-500/60'
+                            : isRecent
+                              ? 'border-emerald-500/40'
+                              : 'border-gray-700'
                         }`}
                       >
                         <div className="relative">
@@ -660,13 +835,18 @@ export default function LiveMonitoringPage() {
                             className="w-full h-28 object-cover bg-gray-900"
                             loading="eager"
                             onError={e => {
-                              e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect fill="%23111" width="100" height="100"/%3E%3C/svg%3E'
+                              e.currentTarget.src =
+                                'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect fill="%23111" width="100" height="100"/%3E%3C/svg%3E'
                             }}
                           />
-                          <div className={`absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 ${
-                            isRecent ? 'bg-red-600/90 text-white' : 'bg-gray-700/90 text-gray-300'
-                          }`}>
-                            <div className={`w-1.5 h-1.5 rounded-full ${isRecent ? 'bg-white animate-pulse' : 'bg-gray-500'}`} />
+                          <div
+                            className={`absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 ${
+                              isRecent ? 'bg-red-600/90 text-white' : 'bg-gray-700/90 text-gray-300'
+                            }`}
+                          >
+                            <div
+                              className={`w-1.5 h-1.5 rounded-full ${isRecent ? 'bg-white animate-pulse' : 'bg-gray-500'}`}
+                            />
                             {isRecent ? 'LIVE' : 'STALE'}
                           </div>
                           {isFlagged && (
@@ -684,9 +864,12 @@ export default function LiveMonitoringPage() {
                                   className="w-1 rounded-sm"
                                   style={{
                                     height: `${bar * 4}px`,
-                                    backgroundColor: (student.audio_level || 0) > bar * 25
-                                      ? bar > 2 ? '#ef4444' : '#10b981'
-                                      : '#374151'
+                                    backgroundColor:
+                                      (student.audio_level || 0) > bar * 25
+                                        ? bar > 2
+                                          ? '#ef4444'
+                                          : '#10b981'
+                                        : '#374151',
                                   }}
                                 />
                               ))}
@@ -694,12 +877,19 @@ export default function LiveMonitoringPage() {
                           )}
                         </div>
                         <div className="p-2 bg-gray-900">
-                          <p className="text-white text-xs font-semibold truncate">{student?.student_name || 'Unknown'}</p>
+                          <p className="text-white text-xs font-semibold truncate">
+                            {student?.student_name || 'Unknown'}
+                          </p>
                           <div className="flex items-center justify-between mt-1">
-                            <span className={`text-[10px] font-bold ${
-                              (student?.trust_score || 0) >= 80 ? 'text-emerald-400' :
-                              (student?.trust_score || 0) >= 60 ? 'text-yellow-400' : 'text-red-400'
-                            }`}>
+                            <span
+                              className={`text-[10px] font-bold ${
+                                (student?.trust_score || 0) >= 80
+                                  ? 'text-emerald-400'
+                                  : (student?.trust_score || 0) >= 60
+                                    ? 'text-yellow-400'
+                                    : 'text-red-400'
+                              }`}
+                            >
                               {student?.trust_score || 0}%
                             </span>
                             <span className="text-[10px] text-gray-500">
@@ -728,7 +918,9 @@ export default function LiveMonitoringPage() {
                   <Users className="w-12 h-12 text-gray-700 mx-auto mb-3" />
                   <p className="text-gray-500 text-sm">No students found</p>
                   <p className="text-gray-600 text-xs mt-1">
-                    {sessions.length === 0 ? 'Waiting for students to join...' : 'Try clearing your filters'}
+                    {sessions.length === 0
+                      ? 'Waiting for students to join...'
+                      : 'Try clearing your filters'}
                   </p>
                 </div>
               ) : (
@@ -740,15 +932,20 @@ export default function LiveMonitoringPage() {
                       : 0
                     const videoFrame = videoStreams[session.student_id]
                     const lastFrame = lastFrameTime[session.student_id]
-                    const isLive = lastFrame && (Date.now() - lastFrame < 8000)
+                    const isLive = lastFrame && Date.now() - lastFrame < 8000
 
                     return (
                       <motion.div
                         key={session.student_id}
                         whileHover={{ backgroundColor: 'rgba(255,255,255,0.02)' }}
-                        onClick={() => { setSelectedStudent(session.student_id); setShowStudentModal(true) }}
+                        onClick={() => {
+                          setSelectedStudent(session.student_id)
+                          setShowStudentModal(true)
+                        }}
                         className={`p-4 cursor-pointer transition ${
-                          selectedStudent === session.student_id ? 'bg-blue-950/20 border-l-2 border-l-blue-500' : ''
+                          selectedStudent === session.student_id
+                            ? 'bg-blue-950/20 border-l-2 border-l-blue-500'
+                            : ''
                         }`}
                       >
                         <div className="flex items-center gap-4">
@@ -775,12 +972,18 @@ export default function LiveMonitoringPage() {
                           {/* Student Info */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
-                              <span className="font-semibold text-white text-sm truncate">{session.student_name}</span>
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold flex-shrink-0 ${
-                                session.status === 'active' ? 'bg-emerald-900/50 text-emerald-400 border border-emerald-800/50' :
-                                session.status === 'flagged' ? 'bg-red-900/50 text-red-400 border border-red-800/50' :
-                                'bg-blue-900/50 text-blue-400 border border-blue-800/50'
-                              }`}>
+                              <span className="font-semibold text-white text-sm truncate">
+                                {session.student_name}
+                              </span>
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold flex-shrink-0 ${
+                                  session.status === 'active'
+                                    ? 'bg-emerald-900/50 text-emerald-400 border border-emerald-800/50'
+                                    : session.status === 'flagged'
+                                      ? 'bg-red-900/50 text-red-400 border border-red-800/50'
+                                      : 'bg-blue-900/50 text-blue-400 border border-blue-800/50'
+                                }`}
+                              >
                                 {session.status.toUpperCase()}
                               </span>
                             </div>
@@ -802,7 +1005,7 @@ export default function LiveMonitoringPage() {
 
                           {/* Metrics */}
                           <div className="flex items-center gap-4 flex-shrink-0">
-                           {/* Audio Level */}
+                            {/* Audio Level */}
                             {session.audio_level !== undefined && (
                               <div className="hidden md:flex items-center gap-1">
                                 <Mic className="w-3.5 h-3.5 text-gray-500" />
@@ -813,10 +1016,12 @@ export default function LiveMonitoringPage() {
                                       className="w-1 rounded-sm transition-all"
                                       style={{
                                         height: `${bar * 4}px`,
-                                        backgroundColor: (session.audio_level || 0) > 75
-                                          ? '#ef4444' // red — loud/suspicious
-                                          : (session.audio_level || 0) > bar * 25
-                                            ? '#10b981' : '#374151'
+                                        backgroundColor:
+                                          (session.audio_level || 0) > 75
+                                            ? '#ef4444' // red — loud/suspicious
+                                            : (session.audio_level || 0) > bar * 25
+                                              ? '#10b981'
+                                              : '#374151',
                                       }}
                                     />
                                   ))}
@@ -826,16 +1031,25 @@ export default function LiveMonitoringPage() {
 
                             {/* Trust Score */}
                             <div className="text-center">
-                              <div className={`text-sm font-black ${
-                                session.trust_score >= 80 ? 'text-emerald-400' :
-                                session.trust_score >= 60 ? 'text-yellow-400' : 'text-red-400'
-                              }`}>{session.trust_score}%</div>
+                              <div
+                                className={`text-sm font-black ${
+                                  session.trust_score >= 80
+                                    ? 'text-emerald-400'
+                                    : session.trust_score >= 60
+                                      ? 'text-yellow-400'
+                                      : 'text-red-400'
+                                }`}
+                              >
+                                {session.trust_score}%
+                              </div>
                               <div className="text-[10px] text-gray-600">Trust</div>
                             </div>
 
                             {/* Flags */}
                             <div className="text-center">
-                              <div className={`text-sm font-black ${flagCount > 0 ? 'text-red-400' : 'text-gray-500'}`}>
+                              <div
+                                className={`text-sm font-black ${flagCount > 0 ? 'text-red-400' : 'text-gray-500'}`}
+                              >
                                 {flagCount}
                               </div>
                               <div className="text-[10px] text-gray-600">Flags</div>
@@ -851,39 +1065,82 @@ export default function LiveMonitoringPage() {
 
                             {/* Face Status */}
                             {session.face_detected !== undefined && (
-                              <div className="hidden xl:block" aria-label={session.face_detected ? 'Face detected' : 'No face'}>
-                                {session.face_detected
-                                  ? <Eye className="w-4 h-4 text-emerald-400" />
-                                  : <MonitorOff className="w-4 h-4 text-red-400" />
-                                }
+                              <div
+                                className="hidden xl:block"
+                                aria-label={session.face_detected ? 'Face detected' : 'No face'}
+                              >
+                                {session.face_detected ? (
+                                  <Eye className="w-4 h-4 text-emerald-400" />
+                                ) : (
+                                  <MonitorOff className="w-4 h-4 text-red-400" />
+                                )}
+                              </div>
+                            )}
+
+                            {/* Paused Badge */}
+                            {session.is_paused && (
+                              <div className="px-2 py-0.5 bg-red-950/80 border border-red-700/60 text-red-400 text-[10px] font-bold rounded">
+                                PAUSED
                               </div>
                             )}
 
                             {/* Quick Action Buttons */}
-                            <div className="hidden xl:flex items-center gap-1 ml-1" onClick={e => e.stopPropagation()}>
+                            <div
+                              className="hidden xl:flex items-center gap-1 ml-1"
+                              onClick={e => e.stopPropagation()}
+                            >
                               <button
-                                onClick={() => handleIntervene(session.student_id, 'warn', 'Please follow exam rules. Official warning.')}
+                                onClick={() =>
+                                  handleIntervene(
+                                    session.student_id,
+                                    'warn',
+                                    'Please follow exam rules. Official warning.'
+                                  )
+                                }
                                 title="Warn student"
                                 className="px-2 py-1 bg-yellow-950/60 border border-yellow-700/50 text-yellow-400 text-[10px] font-bold rounded hover:bg-yellow-900/70 transition"
                               >
                                 ⚠
                               </button>
                               <button
-                                onClick={() => handleIntervene(session.student_id, 'pause', 'Your exam has been paused by the proctor.')}
+                                onClick={() =>
+                                  handleIntervene(
+                                    session.student_id,
+                                    'pause',
+                                    'Your exam has been paused by the proctor.'
+                                  )
+                                }
                                 title="Pause exam"
                                 className="px-2 py-1 bg-orange-950/60 border border-orange-700/50 text-orange-400 text-[10px] font-bold rounded hover:bg-orange-900/70 transition"
                               >
                                 ⏸
                               </button>
+                              {session.is_paused && (
+                                <button
+                                  onClick={() =>
+                                    handleIntervene(
+                                      session.student_id,
+                                      'resume',
+                                      'Your exam has been resumed by the proctor.'
+                                    )
+                                  }
+                                  title="Resume exam"
+                                  className="px-2 py-1 bg-green-950/60 border border-green-700/50 text-green-400 text-[10px] font-bold rounded hover:bg-green-900/70 transition"
+                                >
+                                  ▶
+                                </button>
+                              )}
                               <button
-                                onClick={() => { setSelectedStudent(session.student_id); setShowStudentModal(true) }}
+                                onClick={() => {
+                                  setSelectedStudent(session.student_id)
+                                  setShowStudentModal(true)
+                                }}
                                 title="View details"
                                 className="px-2 py-1 bg-blue-950/60 border border-blue-700/50 text-blue-400 text-[10px] font-bold rounded hover:bg-blue-900/70 transition"
                               >
                                 🔍
                               </button>
                             </div>
-
                           </div>
                         </div>
                       </motion.div>
@@ -914,42 +1171,51 @@ export default function LiveMonitoringPage() {
                   </div>
                 ) : (
                   <div className="p-3 space-y-2">
-                    {[...flags].reverse().slice(0, 20).map((flag, idx) => {
-                      const student = sessions.find(s => s.student_id === flag.student_id)
-                      const isCritical = ['CRITICAL', 'critical'].includes(flag.severity)
-                      return (
-                        <motion.div
-                          key={idx}
-                          initial={{ opacity: 0, y: -5 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className={`border rounded-lg p-2.5 text-xs ${
-                            isCritical
-                              ? 'border-red-800/50 bg-red-950/20'
-                              : 'border-orange-800/30 bg-orange-950/10'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-2 mb-1">
-                            <span className="font-semibold text-white truncate">
-                              {student?.student_name || 'Unknown'}
-                            </span>
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                    {[...flags]
+                      .reverse()
+                      .slice(0, 20)
+                      .map((flag, idx) => {
+                        const student = sessions.find(s => s.student_id === flag.student_id)
+                        const isCritical = ['CRITICAL', 'critical'].includes(flag.severity)
+                        return (
+                          <motion.div
+                            key={idx}
+                            initial={{ opacity: 0, y: -5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className={`border rounded-lg p-2.5 text-xs ${
                               isCritical
-                                ? 'bg-red-950 text-red-400 border-red-700'
-                                : 'bg-orange-950 text-orange-400 border-orange-700'
-                            }`}>
-                              {flag.severity.toUpperCase()}
-                            </span>
-                          </div>
-                          <p className={`font-medium ${isCritical ? 'text-red-400' : 'text-orange-400'}`}>
-                            {(flag.flag_type || flag.type || '').replace(/_/g, ' ')}
-                          </p>
-                          <p className="text-gray-500 mt-0.5 truncate">
-                            {flag.evidence || flag.message || ''}
-                          </p>
-                          <p className="text-gray-600 mt-1">{new Date(flag.timestamp).toLocaleTimeString()}</p>
-                        </motion.div>
-                      )
-                    })}
+                                ? 'border-red-800/50 bg-red-950/20'
+                                : 'border-orange-800/30 bg-orange-950/10'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <span className="font-semibold text-white truncate">
+                                {student?.student_name || 'Unknown'}
+                              </span>
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                                  isCritical
+                                    ? 'bg-red-950 text-red-400 border-red-700'
+                                    : 'bg-orange-950 text-orange-400 border-orange-700'
+                                }`}
+                              >
+                                {flag.severity.toUpperCase()}
+                              </span>
+                            </div>
+                            <p
+                              className={`font-medium ${isCritical ? 'text-red-400' : 'text-orange-400'}`}
+                            >
+                              {(flag.flag_type || flag.type || '').replace(/_/g, ' ')}
+                            </p>
+                            <p className="text-gray-500 mt-0.5 truncate">
+                              {flag.evidence || flag.message || ''}
+                            </p>
+                            <p className="text-gray-600 mt-1">
+                              {new Date(flag.timestamp).toLocaleTimeString()}
+                            </p>
+                          </motion.div>
+                        )
+                      })}
                   </div>
                 )}
               </div>
@@ -974,17 +1240,23 @@ export default function LiveMonitoringPage() {
                       <>
                         <div
                           className="h-full bg-emerald-500 transition-all"
-                          style={{ width: `${(sessions.filter(s => s.trust_score >= 80).length / sessions.length) * 100}%` }}
+                          style={{
+                            width: `${(sessions.filter(s => s.trust_score >= 80).length / sessions.length) * 100}%`,
+                          }}
                           title="High trust (80%+)"
                         />
                         <div
                           className="h-full bg-yellow-500 transition-all"
-                          style={{ width: `${(sessions.filter(s => s.trust_score >= 60 && s.trust_score < 80).length / sessions.length) * 100}%` }}
+                          style={{
+                            width: `${(sessions.filter(s => s.trust_score >= 60 && s.trust_score < 80).length / sessions.length) * 100}%`,
+                          }}
                           title="Medium trust (60-79%)"
                         />
                         <div
                           className="h-full bg-red-500 transition-all"
-                          style={{ width: `${(sessions.filter(s => s.trust_score < 60).length / sessions.length) * 100}%` }}
+                          style={{
+                            width: `${(sessions.filter(s => s.trust_score < 60).length / sessions.length) * 100}%`,
+                          }}
                           title="Low trust (<60%)"
                         />
                       </>
@@ -1002,27 +1274,33 @@ export default function LiveMonitoringPage() {
                   <div>
                     <div className="text-xs text-gray-500 mb-2">Top Violation Types</div>
                     {Object.entries(
-                      flags.reduce((acc, f) => {
-                        const t = (f.flag_type || f.type || 'unknown').replace(/_/g, ' ')
-                        acc[t] = (acc[t] || 0) + 1
-                        return acc
-                      }, {} as Record<string, number>)
-                    ).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([type, count]) => (
-                      <div key={type} className="flex items-center gap-2 mb-1.5">
-                        <div className="flex-1">
-                          <div className="flex justify-between text-xs mb-0.5">
-                            <span className="text-gray-400 capitalize truncate">{type}</span>
-                            <span className="text-gray-500">{count}</span>
-                          </div>
-                          <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-orange-500/70 rounded-full"
-                              style={{ width: `${(count / flags.length) * 100}%` }}
-                            />
+                      flags.reduce(
+                        (acc, f) => {
+                          const t = (f.flag_type || f.type || 'unknown').replace(/_/g, ' ')
+                          acc[t] = (acc[t] || 0) + 1
+                          return acc
+                        },
+                        {} as Record<string, number>
+                      )
+                    )
+                      .sort((a, b) => b[1] - a[1])
+                      .slice(0, 4)
+                      .map(([type, count]) => (
+                        <div key={type} className="flex items-center gap-2 mb-1.5">
+                          <div className="flex-1">
+                            <div className="flex justify-between text-xs mb-0.5">
+                              <span className="text-gray-400 capitalize truncate">{type}</span>
+                              <span className="text-gray-500">{count}</span>
+                            </div>
+                            <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-orange-500/70 rounded-full"
+                                style={{ width: `${(count / flags.length) * 100}%` }}
+                              />
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
                   </div>
                 )}
               </div>
@@ -1040,17 +1318,44 @@ export default function LiveMonitoringPage() {
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => handleIntervene(selectedStudent, 'warn', 'Please follow exam rules. This is an official warning.')}
+                    onClick={() =>
+                      handleIntervene(
+                        selectedStudent,
+                        'warn',
+                        'Please follow exam rules. This is an official warning.'
+                      )
+                    }
                     className="flex-1 py-2 px-3 bg-yellow-950/50 border border-yellow-800/50 text-yellow-400 rounded-lg text-xs font-semibold hover:bg-yellow-900/50 transition"
                   >
                     ⚠ Warn
                   </button>
-                  <button
-                    onClick={() => handleIntervene(selectedStudent, 'pause', 'Your exam has been paused by the proctor for review.')}
-                    className="flex-1 py-2 px-3 bg-orange-950/50 border border-orange-800/50 text-orange-400 rounded-lg text-xs font-semibold hover:bg-orange-900/50 transition"
-                  >
-                    ⏸ Pause
-                  </button>
+                  {selectedStudentData?.is_paused ? (
+                    <button
+                      onClick={() =>
+                        handleIntervene(
+                          selectedStudent,
+                          'resume',
+                          'Your exam has been resumed by the proctor.'
+                        )
+                      }
+                      className="flex-1 py-2 px-3 bg-green-950/50 border border-green-800/50 text-green-400 rounded-lg text-xs font-semibold hover:bg-green-900/50 transition"
+                    >
+                      ▶ Resume
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() =>
+                        handleIntervene(
+                          selectedStudent,
+                          'pause',
+                          'Your exam has been paused by the proctor for review.'
+                        )
+                      }
+                      className="flex-1 py-2 px-3 bg-orange-950/50 border border-orange-800/50 text-orange-400 rounded-lg text-xs font-semibold hover:bg-orange-900/50 transition"
+                    >
+                      ⏸ Pause
+                    </button>
+                  )}
                   <button
                     onClick={() => setShowStudentModal(true)}
                     className="flex-1 py-2 px-3 bg-blue-950/50 border border-blue-800/50 text-blue-400 rounded-lg text-xs font-semibold hover:bg-blue-900/50 transition"

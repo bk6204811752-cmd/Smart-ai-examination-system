@@ -1,7 +1,21 @@
 import { useState, useEffect } from 'react'
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import { TrendingUp, Users, FileText, Award, Download, Filter, Calendar, Loader2 } from 'lucide-react'
-import { analyticsAPI, examAPI, resultsAPI } from '../../lib/api'
+import {
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from 'recharts'
+import { TrendingUp, Users, FileText, Award, Download } from 'lucide-react'
+import { analyticsAPI, examAPI, resultsAPI, userAPI } from '../../lib/api'
 
 interface ExamSummary {
   name: string
@@ -19,26 +33,27 @@ export default function AnalyticsPage() {
   const [examPerformance, setExamPerformance] = useState<ExamSummary[]>([])
   const [trendData, setTrendData] = useState<any[]>([])
   const [topPerformers, setTopPerformers] = useState<any[]>([])
+  const [programDistribution, setProgramDistribution] = useState<
+    { name: string; value: number; color: string }[]
+  >([])
+  const [gradeDistribution, setGradeDistribution] = useState<
+    { grade: string; count: number; percentage: number }[]
+  >([])
 
-  const programDistribution = [
-    { name: 'BCA', value: 450, color: '#3B82F6' },
-    { name: 'BBA', value: 320, color: '#10B981' },
-    { name: 'B.Tech', value: 280, color: '#F59E0B' },
-    { name: 'MBA', value: 120, color: '#EF4444' },
-    { name: 'MCA', value: 80, color: '#8B5CF6' },
-  ]
-
-  const gradeDistribution = [
-    { grade: 'A+', count: 180, percentage: 14.4 },
-    { grade: 'A', count: 250, percentage: 20.0 },
-    { grade: 'B+', count: 320, percentage: 25.6 },
-    { grade: 'B', count: 280, percentage: 22.4 },
-    { grade: 'C', count: 150, percentage: 12.0 },
-    { grade: 'F', count: 70, percentage: 5.6 },
+  const PROGRAM_COLORS = [
+    '#3B82F6',
+    '#10B981',
+    '#F59E0B',
+    '#EF4444',
+    '#8B5CF6',
+    '#EC4899',
+    '#14B8A6',
+    '#F97316',
   ]
 
   useEffect(() => {
     loadAnalytics()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeRange, selectedProgram])
 
   const loadAnalytics = async () => {
@@ -79,11 +94,13 @@ export default function AnalyticsPage() {
       try {
         const trends = await analyticsAPI.getAnalyticsTrend('30d')
         if (Array.isArray(trends)) {
-          setTrendData(trends.map((d: any) => ({
-            month: d.date?.slice(5, 10) || d.date,
-            avgScore: d.users || d.avg_score || 0,
-            students: d.exams || d.count || 0,
-          })))
+          setTrendData(
+            trends.map((d: any) => ({
+              month: d.date?.slice(5, 10) || d.date,
+              avgScore: d.users || d.avg_score || 0,
+              students: d.exams || d.count || 0,
+            }))
+          )
         } else {
           setTrendData([])
         }
@@ -92,18 +109,72 @@ export default function AnalyticsPage() {
       }
 
       if (Array.isArray(resultsData)) {
+        // Compute grade distribution from results
+        const grades = resultsData.map((r: any) => r.percentage)
+        const gradeCounts = [
+          { grade: 'A+', min: 90, count: 0 },
+          { grade: 'A', min: 80, count: 0 },
+          { grade: 'B+', min: 70, count: 0 },
+          { grade: 'B', min: 60, count: 0 },
+          { grade: 'C', min: 40, count: 0 },
+          { grade: 'F', min: 0, count: 0 },
+        ]
+        grades.forEach((p: number) => {
+          for (const g of gradeCounts) {
+            if (p >= g.min) {
+              g.count++
+              break
+            }
+          }
+        })
+        const total = grades.length || 1
+        setGradeDistribution(
+          gradeCounts.map(g => ({
+            grade: g.grade,
+            count: g.count,
+            percentage: +((g.count / total) * 100).toFixed(1),
+          }))
+        )
+
         const sorted = resultsData
           .filter((r: any) => r.percentage)
           .sort((a: any, b: any) => (b.percentage || 0) - (a.percentage || 0))
           .slice(0, 5)
-        setTopPerformers(sorted.map((r: any, i: number) => ({
-          name: r.student_name || `Student #${i + 1}`,
-          program: r.program || r.exam_title?.slice(0, 8) || 'N/A',
-          cgpa: ((r.percentage || 0) / 10).toFixed(1),
-          exams: r.exam_title || 1,
-        })))
+        setTopPerformers(
+          sorted.map((r: any, i: number) => ({
+            name: r.student_name || `Student #${i + 1}`,
+            program: r.program || r.exam_title?.slice(0, 8) || 'N/A',
+            cgpa: ((r.percentage || 0) / 10).toFixed(1),
+            exams: r.exam_title || 1,
+          }))
+        )
       } else {
+        setGradeDistribution([])
         setTopPerformers([])
+      }
+
+      // Compute program distribution from user data
+      try {
+        const users = await userAPI.getUsers('student')
+        if (Array.isArray(users)) {
+          const programMap: Record<string, number> = {}
+          users.forEach((u: any) => {
+            const prog = u.program || 'Other'
+            programMap[prog] = (programMap[prog] || 0) + 1
+          })
+          const sorted = Object.entries(programMap)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 8)
+          setProgramDistribution(
+            sorted.map(([name, value], i) => ({
+              name,
+              value,
+              color: PROGRAM_COLORS[i % PROGRAM_COLORS.length],
+            }))
+          )
+        }
+      } catch {
+        // silently fail — program distribution is optional
       }
     } catch (error) {
       console.error('Failed to load analytics:', error)
@@ -116,12 +187,16 @@ export default function AnalyticsPage() {
     const csv = [
       ['Exam', 'Avg Score', 'Students', 'Pass Rate'],
       ...examPerformance.map(e => [e.name, e.avg, e.students, e.pass]),
-    ].map(r => r.join(',')).join('\n')
+    ]
+      .map(r => r.join(','))
+      .join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url; a.download = `analytics-${new Date().toISOString().slice(0, 10)}.csv`
-    a.click(); URL.revokeObjectURL(url)
+    a.href = url
+    a.download = `analytics-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   if (loading) {
@@ -148,7 +223,7 @@ export default function AnalyticsPage() {
             <div className="flex items-center space-x-4">
               <select
                 value={selectedProgram}
-                onChange={(e) => setSelectedProgram(e.target.value)}
+                onChange={e => setSelectedProgram(e.target.value)}
                 className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
               >
                 <option value="all">All Programs</option>
@@ -160,7 +235,7 @@ export default function AnalyticsPage() {
               </select>
               <select
                 value={timeRange}
-                onChange={(e) => setTimeRange(e.target.value)}
+                onChange={e => setTimeRange(e.target.value)}
                 className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
               >
                 <option value="week">Last Week</option>
@@ -246,8 +321,22 @@ export default function AnalyticsPage() {
                 <YAxis yAxisId="right" orientation="right" />
                 <Tooltip />
                 <Legend />
-                <Line yAxisId="left" type="monotone" dataKey="avgScore" stroke="#3B82F6" strokeWidth={2} name="Avg Score" />
-                <Line yAxisId="right" type="monotone" dataKey="students" stroke="#10B981" strokeWidth={2} name="Students" />
+                <Line
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="avgScore"
+                  stroke="#3B82F6"
+                  strokeWidth={2}
+                  name="Avg Score"
+                />
+                <Line
+                  yAxisId="right"
+                  type="monotone"
+                  dataKey="students"
+                  stroke="#10B981"
+                  strokeWidth={2}
+                  name="Students"
+                />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -328,7 +417,9 @@ export default function AnalyticsPage() {
                         {index === 0 && <span className="text-2xl">🥇</span>}
                         {index === 1 && <span className="text-2xl">🥈</span>}
                         {index === 2 && <span className="text-2xl">🥉</span>}
-                        {index > 2 && <span className="text-gray-600 font-medium">{index + 1}</span>}
+                        {index > 2 && (
+                          <span className="text-gray-600 font-medium">{index + 1}</span>
+                        )}
                       </div>
                     </td>
                     <td className="py-3 px-4 font-medium text-gray-900">{student.name}</td>

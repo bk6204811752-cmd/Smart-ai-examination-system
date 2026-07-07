@@ -2,12 +2,24 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/globalStore'
 import { examAPI, analyticsAPI, notificationsAPI } from '../../lib/api'
-import { toast } from 'sonner'
-import { 
-  PlusCircle, Users, BarChart, Monitor, LogOut, BookOpen,
-  TrendingUp, CheckCircle, AlertTriangle, Clock, Award,
-  FileText, Activity, Zap, Eye, Bell, Settings,
-  Calendar, Target, Brain, Sparkles
+import {
+  PlusCircle,
+  Users,
+  BarChart,
+  Monitor,
+  LogOut,
+  BookOpen,
+  CheckCircle,
+  AlertTriangle,
+  Clock,
+  Award,
+  FileText,
+  Activity,
+  Zap,
+  Eye,
+  Bell,
+  Brain,
+  Sparkles,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 
@@ -31,12 +43,15 @@ export default function TeacherDashboard() {
   const [loading, setLoading] = useState(true)
   const [activeExams, setActiveExams] = useState(0)
   const [totalStudents, setTotalStudents] = useState(0)
-  const [teacherStats, setTeacherStats] = useState<{ avg_score: number; pass_rate: number } | null>(null)
+  const [teacherStats, setTeacherStats] = useState<{ avg_score: number; pass_rate: number } | null>(
+    null
+  )
   const [recentActivity, setRecentActivity] = useState<any[]>([])
   const [notifCount, setNotifCount] = useState(0)
 
   useEffect(() => {
     loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const loadData = async () => {
@@ -50,8 +65,12 @@ export default function TeacherDashboard() {
       const myExamsData = (examsData || []).filter((e: any) => e.created_by === user?.email)
       setMyExams(myExamsData)
       setActiveExams(myExamsData.filter((e: any) => e.status === 'active').length)
-      setTotalStudents(myExamsData.reduce((sum: number, e: any) => sum + (e.enrolled_students || 0), 0))
-      setTeacherStats(teacherData ? { avg_score: teacherData.avg_score, pass_rate: teacherData.pass_rate } : null)
+      setTotalStudents(
+        myExamsData.reduce((sum: number, e: any) => sum + (e.enrolled_students || 0), 0)
+      )
+      setTeacherStats(
+        teacherData ? { avg_score: teacherData.avg_score, pass_rate: teacherData.pass_rate } : null
+      )
       setRecentActivity(Array.isArray(activityData) ? activityData : [])
       setNotifCount(notifData?.total || 0)
     } catch (error) {
@@ -74,7 +93,7 @@ export default function TeacherDashboard() {
       change: `${activeExams} active`,
       color: 'blue',
       bgColor: 'bg-blue-50',
-      iconColor: 'text-blue-600'
+      iconColor: 'text-blue-600',
     },
     {
       icon: Users,
@@ -83,7 +102,7 @@ export default function TeacherDashboard() {
       change: 'Across all exams',
       color: 'green',
       bgColor: 'bg-green-50',
-      iconColor: 'text-green-600'
+      iconColor: 'text-green-600',
     },
     {
       icon: CheckCircle,
@@ -92,7 +111,7 @@ export default function TeacherDashboard() {
       change: teacherStats ? 'Current average' : 'Loading...',
       color: 'purple',
       bgColor: 'bg-purple-50',
-      iconColor: 'text-purple-600'
+      iconColor: 'text-purple-600',
     },
     {
       icon: Award,
@@ -101,7 +120,7 @@ export default function TeacherDashboard() {
       change: 'Class average',
       color: 'orange',
       bgColor: 'bg-orange-50',
-      iconColor: 'text-orange-600'
+      iconColor: 'text-orange-600',
     },
   ]
 
@@ -113,7 +132,7 @@ export default function TeacherDashboard() {
       link: '/teacher/create-exam',
       gradient: 'from-blue-500 to-blue-600',
       iconBg: 'bg-blue-100',
-      iconColor: 'text-blue-600'
+      iconColor: 'text-blue-600',
     },
     {
       title: 'Live Monitoring',
@@ -122,7 +141,7 @@ export default function TeacherDashboard() {
       link: '/teacher/live-monitoring',
       gradient: 'from-green-500 to-green-600',
       iconBg: 'bg-green-100',
-      iconColor: 'text-green-600'
+      iconColor: 'text-green-600',
     },
     {
       title: 'Analytics',
@@ -131,7 +150,7 @@ export default function TeacherDashboard() {
       link: '/teacher/analytics',
       gradient: 'from-purple-500 to-purple-600',
       iconBg: 'bg-purple-100',
-      iconColor: 'text-purple-600'
+      iconColor: 'text-purple-600',
     },
     {
       title: 'Plagiarism Check',
@@ -140,7 +159,7 @@ export default function TeacherDashboard() {
       link: '/teacher/plagiarism',
       gradient: 'from-orange-500 to-orange-600',
       iconBg: 'bg-orange-100',
-      iconColor: 'text-orange-600'
+      iconColor: 'text-orange-600',
     },
   ]
 
@@ -174,7 +193,10 @@ export default function TeacherDashboard() {
                 <p className="text-sm font-medium">{user?.full_name}</p>
                 <p className="text-xs text-gray-500">Educator</p>
               </div>
-              <button onClick={handleLogout} className="p-2 text-gray-600 hover:text-red-600 transition">
+              <button
+                onClick={handleLogout}
+                className="p-2 text-gray-600 hover:text-red-600 transition"
+              >
                 <LogOut className="w-5 h-5" />
               </button>
             </div>
@@ -184,11 +206,7 @@ export default function TeacherDashboard() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Section */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
-        >
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-3xl font-bold text-gray-900 mb-2">
@@ -213,7 +231,9 @@ export default function TeacherDashboard() {
               transition={{ delay: index * 0.1 }}
               className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-all duration-300 border border-gray-100"
             >
-              <div className={`${stat.bgColor} w-12 h-12 rounded-lg flex items-center justify-center mb-4`}>
+              <div
+                className={`${stat.bgColor} w-12 h-12 rounded-lg flex items-center justify-center mb-4`}
+              >
                 <stat.icon className={`w-6 h-6 ${stat.iconColor}`} />
               </div>
               <p className="text-sm text-gray-600 mb-1">{stat.label}</p>
@@ -241,7 +261,9 @@ export default function TeacherDashboard() {
                 to={action.link}
                 className="bg-white rounded-xl p-5 hover:shadow-lg transition-all duration-300 border border-gray-100 group"
               >
-                <div className={`${action.iconBg} w-12 h-12 rounded-lg flex items-center justify-center mb-3 group-hover:scale-110 transition-transform`}>
+                <div
+                  className={`${action.iconBg} w-12 h-12 rounded-lg flex items-center justify-center mb-3 group-hover:scale-110 transition-transform`}
+                >
                   <action.icon className={`w-6 h-6 ${action.iconColor}`} />
                 </div>
                 <h4 className="font-semibold mb-1">{action.title}</h4>
@@ -261,7 +283,10 @@ export default function TeacherDashboard() {
                   <FileText className="w-5 h-5 mr-2 text-purple-500" />
                   My Exams
                 </h3>
-                <Link to="/teacher/create-exam" className="text-sm text-purple-600 hover:text-purple-700 font-medium">
+                <Link
+                  to="/teacher/create-exam"
+                  className="text-sm text-purple-600 hover:text-purple-700 font-medium"
+                >
                   + Create New
                 </Link>
               </div>
@@ -284,8 +309,11 @@ export default function TeacherDashboard() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {myExams.slice(0, 5).map((exam) => (
-                    <div key={exam._id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition">
+                  {myExams.slice(0, 5).map(exam => (
+                    <div
+                      key={exam._id}
+                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition"
+                    >
                       <div className="flex-1">
                         <h4 className="font-semibold text-gray-900">{exam.title}</h4>
                         <div className="flex items-center space-x-4 mt-1">
@@ -317,7 +345,10 @@ export default function TeacherDashboard() {
                     </div>
                   ))}
                   {myExams.length > 5 && (
-                    <Link to="/teacher/exams" className="block text-center py-2 text-purple-600 hover:text-purple-700 font-medium">
+                    <Link
+                      to="/teacher/exams"
+                      className="block text-center py-2 text-purple-600 hover:text-purple-700 font-medium"
+                    >
                       View All {myExams.length} Exams →
                     </Link>
                   )}
@@ -336,15 +367,27 @@ export default function TeacherDashboard() {
               </h3>
               <div className="space-y-3">
                 {recentActivity.map((activity, index) => {
-                  const colorMap: Record<string, string> = { exam: 'blue', alert: 'red', user: 'green', system: 'purple' }
+                  const colorMap: Record<string, string> = {
+                    exam: 'blue',
+                    alert: 'red',
+                    user: 'green',
+                    system: 'purple',
+                  }
                   const c = colorMap[activity.type] || 'gray'
                   return (
                     <div key={index} className="flex items-start space-x-3">
-                      <div className={`w-10 h-10 bg-${c}-100 rounded-lg flex items-center justify-center flex-shrink-0`}>
-                        {activity.type === 'alert' ? <AlertTriangle className={`w-5 h-5 text-${c}-600`} /> :
-                         activity.type === 'exam' ? <FileText className={`w-5 h-5 text-${c}-600`} /> :
-                         activity.type === 'user' ? <Users className={`w-5 h-5 text-${c}-600`} /> :
-                         <Activity className={`w-5 h-5 text-${c}-600`} />}
+                      <div
+                        className={`w-10 h-10 bg-${c}-100 rounded-lg flex items-center justify-center flex-shrink-0`}
+                      >
+                        {activity.type === 'alert' ? (
+                          <AlertTriangle className={`w-5 h-5 text-${c}-600`} />
+                        ) : activity.type === 'exam' ? (
+                          <FileText className={`w-5 h-5 text-${c}-600`} />
+                        ) : activity.type === 'user' ? (
+                          <Users className={`w-5 h-5 text-${c}-600`} />
+                        ) : (
+                          <Activity className={`w-5 h-5 text-${c}-600`} />
+                        )}
                       </div>
                       <div className="flex-1">
                         <p className="font-medium text-sm">{activity.action}</p>

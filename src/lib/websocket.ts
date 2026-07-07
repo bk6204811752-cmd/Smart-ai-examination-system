@@ -336,6 +336,7 @@ export function useWebSocket(userInfo?: { userId: string; role: string; examId?:
         client.current.offStatusChange(handleStatusChange)
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userInfo?.userId, userInfo?.role, userInfo?.examId])
 
   return {

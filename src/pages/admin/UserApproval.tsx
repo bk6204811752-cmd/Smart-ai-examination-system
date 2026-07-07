@@ -1,21 +1,18 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { 
-  CheckCircle, 
-  XCircle, 
-  Clock, 
-  User, 
-  Mail, 
-  GraduationCap,
+import {
+  CheckCircle,
+  XCircle,
+  Clock,
+  User,
+  Mail,
   Calendar,
   AlertCircle,
   Filter,
   Search,
   Eye,
   X,
-  BookOpen,
-  Shield,
-  AlertTriangle
+  AlertTriangle,
 } from 'lucide-react'
 import { api } from '../../lib/api'
 import { toast } from 'sonner'
@@ -55,13 +52,13 @@ export default function UserApprovalManagement() {
       // Fetch pending users (only those who verified email)
       const pendingRes = await api.get('/api/users/pending')
       setPendingUsers(pendingRes.data || [])
-      
+
       // Fetch all users for other tabs
       const allRes = await api.get('/api/users')
       setAllUsers(allRes.data || [])
-      
+
       toast.success('Users loaded successfully', {
-        description: `Showing ${pendingRes.data?.length || 0} pending approvals`
+        description: `Showing ${pendingRes.data?.length || 0} pending approvals`,
       })
     } catch (error: any) {
       toast.error('Failed to fetch users')
@@ -75,15 +72,15 @@ export default function UserApprovalManagement() {
 
   const handleApprove = async (userId: string, userName: string) => {
     if (!confirm(`Are you sure you want to approve ${userName}?`)) return
-    
+
     try {
       setProcessingId(userId)
       await api.post(`/api/users/${userId}/approve`)
-      
+
       toast.success(`✅ ${userName} approved successfully!`, {
-        description: 'User can now login to the system'
+        description: 'User can now login to the system',
       })
-      
+
       // Refresh user lists immediately
       await fetchUsers()
     } catch (error: any) {
@@ -97,17 +94,17 @@ export default function UserApprovalManagement() {
   const handleReject = async (userId: string, userName: string) => {
     const reason = prompt(`Enter rejection reason for ${userName}:`)
     if (!reason) return
-    
+
     try {
       setProcessingId(userId)
-      await api.post(`/api/users/${userId}/reject`, null, { 
-        params: { reason } 
+      await api.post(`/api/users/${userId}/reject`, null, {
+        params: { reason },
       })
-      
+
       toast.error(`${userName} registration rejected`, {
-        description: reason
+        description: reason,
       })
-      
+
       // Refresh user lists immediately
       await fetchUsers()
     } catch (error: any) {
@@ -118,14 +115,16 @@ export default function UserApprovalManagement() {
     }
   }
 
-  const displayUsers = filter === 'pending'
-    ? pendingUsers
-    : filter === 'all'
-      ? allUsers
-      : allUsers.filter(u => u.status === filter)
-  const filteredUsers = displayUsers.filter(user => 
-    user.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchQuery.toLowerCase())
+  const displayUsers =
+    filter === 'pending'
+      ? pendingUsers
+      : filter === 'all'
+        ? allUsers
+        : allUsers.filter(u => u.status === filter)
+  const filteredUsers = displayUsers.filter(
+    user =>
+      user.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
   const openDetail = async (user: PendingUser) => {
@@ -133,14 +132,16 @@ export default function UserApprovalManagement() {
     try {
       const { data } = await api.get(`/api/users/${user._id}`)
       setViewUser(data)
-    } catch { /* use cached */ }
+    } catch {
+      /* use cached */
+    }
   }
 
   const stats = {
     pending: pendingUsers.length,
     total: allUsers.length,
     approved: allUsers.filter(u => u.status === 'approved').length,
-    rejected: allUsers.filter(u => u.status === 'rejected').length
+    rejected: allUsers.filter(u => u.status === 'rejected').length,
   }
 
   return (
@@ -258,7 +259,7 @@ export default function UserApprovalManagement() {
                   type="text"
                   placeholder="Search by name or email..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={e => setSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
@@ -277,8 +278,8 @@ export default function UserApprovalManagement() {
             <AlertCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-gray-900 mb-2">No users found</h3>
             <p className="text-gray-600">
-              {filter === 'pending' 
-                ? 'No pending approvals at the moment' 
+              {filter === 'pending'
+                ? 'No pending approvals at the moment'
                 : 'No users match your filter criteria'}
             </p>
           </div>
@@ -311,7 +312,7 @@ export default function UserApprovalManagement() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredUsers.map((user) => (
+                  {filteredUsers.map(user => (
                     <tr key={user._id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
@@ -319,7 +320,9 @@ export default function UserApprovalManagement() {
                             {user.full_name.charAt(0)}
                           </div>
                           <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">{user.full_name}</div>
+                            <div className="text-sm font-medium text-gray-900">
+                              {user.full_name}
+                            </div>
                             <div className="text-sm text-gray-500 flex items-center">
                               <Mail className="w-3 h-3 mr-1" />
                               {user.email}
@@ -328,11 +331,13 @@ export default function UserApprovalManagement() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          user.role === 'teacher'
-                            ? 'bg-purple-100 text-purple-800'
-                            : 'bg-blue-100 text-blue-800'
-                        }`}>
+                        <span
+                          className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            user.role === 'teacher'
+                              ? 'bg-purple-100 text-purple-800'
+                              : 'bg-blue-100 text-blue-800'
+                          }`}
+                        >
                           {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
                         </span>
                       </td>
@@ -355,17 +360,24 @@ export default function UserApprovalManagement() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          user.status === 'approved'
-                            ? 'bg-green-100 text-green-800'
-                            : user.status === 'rejected'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {user.status === 'approved' && <CheckCircle className="w-3 h-3 mr-1 inline" />}
-                          {user.status === 'rejected' && <XCircle className="w-3 h-3 mr-1 inline" />}
+                        <span
+                          className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            user.status === 'approved'
+                              ? 'bg-green-100 text-green-800'
+                              : user.status === 'rejected'
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-yellow-100 text-yellow-800'
+                          }`}
+                        >
+                          {user.status === 'approved' && (
+                            <CheckCircle className="w-3 h-3 mr-1 inline" />
+                          )}
+                          {user.status === 'rejected' && (
+                            <XCircle className="w-3 h-3 mr-1 inline" />
+                          )}
                           {user.status === 'pending' && <Clock className="w-3 h-3 mr-1 inline" />}
-                          {(user.status || 'pending').charAt(0).toUpperCase() + (user.status || 'pending').slice(1)}
+                          {(user.status || 'pending').charAt(0).toUpperCase() +
+                            (user.status || 'pending').slice(1)}
                         </span>
                       </td>
                       {filter === 'pending' && (
@@ -422,8 +434,8 @@ export default function UserApprovalManagement() {
               <div>
                 <h4 className="text-sm font-medium text-blue-900">Pending Approvals</h4>
                 <p className="text-sm text-blue-700 mt-1">
-                  You have {pendingUsers.length} user{pendingUsers.length > 1 ? 's' : ''} waiting for approval. 
-                  Review their information and approve or reject their registration.
+                  You have {pendingUsers.length} user{pendingUsers.length > 1 ? 's' : ''} waiting
+                  for approval. Review their information and approve or reject their registration.
                 </p>
               </div>
             </div>
@@ -436,18 +448,25 @@ export default function UserApprovalManagement() {
         {viewUser && (
           <>
             <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
               onClick={() => setViewUser(null)}
               className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40"
             />
             <motion.div
-              initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 28, stiffness: 300 }}
               className="fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl z-50 overflow-y-auto"
             >
               <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
                 <h2 className="text-lg font-bold text-gray-900">User Details</h2>
-                <button onClick={() => setViewUser(null)} className="p-2 hover:bg-gray-100 rounded-xl transition">
+                <button
+                  onClick={() => setViewUser(null)}
+                  className="p-2 hover:bg-gray-100 rounded-xl transition"
+                >
                   <X className="w-5 h-5 text-gray-500" />
                 </button>
               </div>
@@ -461,13 +480,27 @@ export default function UserApprovalManagement() {
                     <h3 className="font-black text-xl text-gray-900">{viewUser.full_name}</h3>
                     <p className="text-sm text-gray-500">{viewUser.email}</p>
                     <div className="flex gap-2 mt-2">
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                        viewUser.role === 'teacher' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                      }`}>{viewUser.role.charAt(0).toUpperCase() + viewUser.role.slice(1)}</span>
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                        viewUser.status === 'approved' ? 'bg-green-100 text-green-700' :
-                        viewUser.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
-                      }`}>{(viewUser.status || 'pending').charAt(0).toUpperCase() + (viewUser.status || 'pending').slice(1)}</span>
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          viewUser.role === 'teacher'
+                            ? 'bg-purple-100 text-purple-700'
+                            : 'bg-blue-100 text-blue-700'
+                        }`}
+                      >
+                        {viewUser.role.charAt(0).toUpperCase() + viewUser.role.slice(1)}
+                      </span>
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          viewUser.status === 'approved'
+                            ? 'bg-green-100 text-green-700'
+                            : viewUser.status === 'rejected'
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-amber-100 text-amber-700'
+                        }`}
+                      >
+                        {(viewUser.status || 'pending').charAt(0).toUpperCase() +
+                          (viewUser.status || 'pending').slice(1)}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -475,10 +508,22 @@ export default function UserApprovalManagement() {
                 {/* Info */}
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { label: 'Program',    value: viewUser.program    || '—' },
-                    { label: 'Semester',   value: viewUser.semester ? `Semester ${viewUser.semester}` : '—' },
-                    { label: 'Department', value: viewUser.department  || '—' },
-                    { label: 'Registered', value: viewUser.created_at ? new Date(viewUser.created_at).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—' },
+                    { label: 'Program', value: viewUser.program || '—' },
+                    {
+                      label: 'Semester',
+                      value: viewUser.semester ? `Semester ${viewUser.semester}` : '—',
+                    },
+                    { label: 'Department', value: viewUser.department || '—' },
+                    {
+                      label: 'Registered',
+                      value: viewUser.created_at
+                        ? new Date(viewUser.created_at).toLocaleDateString('en-IN', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                          })
+                        : '—',
+                    },
                   ].map(({ label, value }) => (
                     <div key={label} className="bg-gray-50 rounded-xl p-3.5">
                       <p className="text-xs text-gray-400 font-medium">{label}</p>
@@ -500,14 +545,20 @@ export default function UserApprovalManagement() {
                 {viewUser.status === 'pending' && (
                   <div className="flex gap-3 pt-2">
                     <button
-                      onClick={() => { handleApprove(viewUser._id, viewUser.full_name); setViewUser(null) }}
+                      onClick={() => {
+                        handleApprove(viewUser._id, viewUser.full_name)
+                        setViewUser(null)
+                      }}
                       disabled={processingId === viewUser._id}
                       className="flex-1 py-3 bg-green-500 hover:bg-green-600 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60"
                     >
                       <CheckCircle className="w-4 h-4" /> Approve
                     </button>
                     <button
-                      onClick={() => { handleReject(viewUser._id, viewUser.full_name); setViewUser(null) }}
+                      onClick={() => {
+                        handleReject(viewUser._id, viewUser.full_name)
+                        setViewUser(null)
+                      }}
                       disabled={processingId === viewUser._id}
                       className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60"
                     >

@@ -3,24 +3,40 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/globalStore'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Home, BookOpen, Monitor, BarChart3, Brain, FileText, Shield,
-  Award, Sparkles, Bell, Settings, LogOut, GraduationCap,
-  PlusCircle, Users, Menu, X, ChevronRight, Wifi, WifiOff
+  Home,
+  BookOpen,
+  Monitor,
+  BarChart3,
+  Brain,
+  FileText,
+  Shield,
+  Award,
+  Sparkles,
+  Bell,
+  Settings,
+  LogOut,
+  GraduationCap,
+  PlusCircle,
+  Menu,
+  X,
+  ChevronRight,
+  Wifi,
+  WifiOff,
 } from 'lucide-react'
 
 const navItems = [
-  { icon: Home,        label: 'Dashboard',       to: '/teacher/dashboard' },
-  { icon: BookOpen,    label: 'My Exams',         to: '/teacher/dashboard' },
-  { icon: PlusCircle,  label: 'Create Exam',      to: '/teacher/create-exam' },
-  { icon: Monitor,     label: 'Live Monitor',     to: '/teacher/live-monitoring' },
-  { icon: BarChart3,   label: 'Analytics',        to: '/teacher/analytics' },
-  { icon: Brain,       label: 'AI Generator',     to: '/teacher/ai-generator' },
-  { icon: FileText,    label: 'Question Bank',    to: '/teacher/question-bank' },
-  { icon: Shield,      label: 'Plagiarism',       to: '/teacher/plagiarism' },
-  { icon: Award,       label: 'Reports',          to: '/teacher/reports' },
-  { icon: Sparkles,    label: 'Templates',        to: '/teacher/templates' },
-  { icon: Bell,        label: 'Notifications',    to: '/notifications' },
-  { icon: Settings,    label: 'Settings',         to: '/settings' },
+  { icon: Home, label: 'Dashboard', to: '/teacher/dashboard' },
+  { icon: BookOpen, label: 'My Exams', to: '/teacher/dashboard' },
+  { icon: PlusCircle, label: 'Create Exam', to: '/teacher/create-exam' },
+  { icon: Monitor, label: 'Live Monitor', to: '/teacher/live-monitoring' },
+  { icon: BarChart3, label: 'Analytics', to: '/teacher/analytics' },
+  { icon: Brain, label: 'AI Generator', to: '/teacher/ai-generator' },
+  { icon: FileText, label: 'Question Bank', to: '/teacher/question-bank' },
+  { icon: Shield, label: 'Plagiarism', to: '/teacher/plagiarism' },
+  { icon: Award, label: 'Reports', to: '/teacher/reports' },
+  { icon: Sparkles, label: 'Templates', to: '/teacher/templates' },
+  { icon: Bell, label: 'Notifications', to: '/notifications' },
+  { icon: Settings, label: 'Settings', to: '/settings' },
 ]
 
 interface TeacherLayoutProps {
@@ -31,16 +47,26 @@ interface TeacherLayoutProps {
   liveCount?: number
 }
 
-export default function TeacherLayout({ children, title, subtitle, wsStatus, liveCount }: TeacherLayoutProps) {
+export default function TeacherLayout({
+  children,
+  title,
+  subtitle,
+  wsStatus,
+  liveCount,
+}: TeacherLayoutProps) {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const handleLogout = () => { logout(); navigate('/login') }
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
 
   const isActive = (to: string) => {
-    if (to === '/teacher/dashboard') return location.pathname === to || location.pathname === '/dashboard'
+    if (to === '/teacher/dashboard')
+      return location.pathname === to || location.pathname === '/dashboard'
     return location.pathname.startsWith(to)
   }
 
@@ -64,16 +90,32 @@ export default function TeacherLayout({ children, title, subtitle, wsStatus, liv
             {user?.full_name?.charAt(0)?.toUpperCase() || 'T'}
           </div>
           <div className="min-w-0">
-            <p className="font-semibold text-gray-900 text-sm truncate">{user?.full_name || 'Teacher'}</p>
+            <p className="font-semibold text-gray-900 text-sm truncate">
+              {user?.full_name || 'Teacher'}
+            </p>
             <p className="text-xs text-gray-500">{(user as any)?.department || 'Faculty'}</p>
           </div>
         </div>
         {wsStatus && (
-          <div className={`mt-2 flex items-center gap-1.5 text-xs font-medium ${
-            wsStatus === 'connected' ? 'text-green-600' : wsStatus === 'connecting' ? 'text-amber-500' : 'text-gray-400'
-          }`}>
-            {wsStatus === 'connected' ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-            {wsStatus === 'connected' ? 'Live Feed Active' : wsStatus === 'connecting' ? 'Connecting...' : 'Offline'}
+          <div
+            className={`mt-2 flex items-center gap-1.5 text-xs font-medium ${
+              wsStatus === 'connected'
+                ? 'text-green-600'
+                : wsStatus === 'connecting'
+                  ? 'text-amber-500'
+                  : 'text-gray-400'
+            }`}
+          >
+            {wsStatus === 'connected' ? (
+              <Wifi className="w-3 h-3" />
+            ) : (
+              <WifiOff className="w-3 h-3" />
+            )}
+            {wsStatus === 'connected'
+              ? 'Live Feed Active'
+              : wsStatus === 'connecting'
+                ? 'Connecting...'
+                : 'Offline'}
             {liveCount != null && liveCount > 0 && (
               <span className="ml-auto bg-green-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full animate-pulse">
                 {liveCount}
@@ -127,7 +169,6 @@ export default function TeacherLayout({ children, title, subtitle, wsStatus, liv
 
   return (
     <div className="min-h-screen bg-gray-50" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
-
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex fixed left-0 top-0 h-full w-64 bg-white border-r border-gray-100 shadow-sm flex-col z-40">
         <SidebarContent />
@@ -153,7 +194,10 @@ export default function TeacherLayout({ children, title, subtitle, wsStatus, liv
             >
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                 <span className="font-black text-gray-900">PCMT Teacher</span>
-                <button onClick={() => setSidebarOpen(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+                <button
+                  onClick={() => setSidebarOpen(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg"
+                >
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -200,14 +244,23 @@ export default function TeacherLayout({ children, title, subtitle, wsStatus, liv
                   {liveCount} Live
                 </Link>
               )}
-              <Link to="/notifications" className="relative p-2 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition-all">
+              <Link
+                to="/notifications"
+                className="relative p-2 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition-all"
+              >
                 <Bell className="w-5 h-5" />
               </Link>
-              <Link to="/teacher/create-exam" className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 text-white text-xs font-semibold rounded-xl hover:bg-purple-700 transition-all">
+              <Link
+                to="/teacher/create-exam"
+                className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 text-white text-xs font-semibold rounded-xl hover:bg-purple-700 transition-all"
+              >
                 <PlusCircle className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">New Exam</span>
               </Link>
-              <button onClick={handleLogout} className="hidden lg:flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-600 transition-colors px-3 py-2 rounded-xl hover:bg-red-50">
+              <button
+                onClick={handleLogout}
+                className="hidden lg:flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-600 transition-colors px-3 py-2 rounded-xl hover:bg-red-50"
+              >
                 <LogOut className="w-4 h-4" />
               </button>
             </div>
@@ -215,19 +268,17 @@ export default function TeacherLayout({ children, title, subtitle, wsStatus, liv
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8">
-          {children}
-        </main>
+        <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
 
       {/* Mobile bottom nav */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 shadow-lg z-30 flex justify-around py-2 px-2">
         {[
-          { icon: Home,       label: 'Home',    to: '/teacher/dashboard' },
-          { icon: PlusCircle, label: 'Create',  to: '/teacher/create-exam' },
-          { icon: Monitor,    label: 'Monitor', to: '/teacher/live-monitoring' },
-          { icon: BarChart3,  label: 'Stats',   to: '/teacher/analytics' },
-          { icon: Settings,   label: 'Settings', to: '/settings' },
+          { icon: Home, label: 'Home', to: '/teacher/dashboard' },
+          { icon: PlusCircle, label: 'Create', to: '/teacher/create-exam' },
+          { icon: Monitor, label: 'Monitor', to: '/teacher/live-monitoring' },
+          { icon: BarChart3, label: 'Stats', to: '/teacher/analytics' },
+          { icon: Settings, label: 'Settings', to: '/settings' },
         ].map(item => {
           const active = isActive(item.to)
           return (

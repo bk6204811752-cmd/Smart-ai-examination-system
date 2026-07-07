@@ -60,6 +60,7 @@ export default function AdvancedProctoringMonitor({
     return () => {
       stopProctoring()
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const startProctoring = async () => {

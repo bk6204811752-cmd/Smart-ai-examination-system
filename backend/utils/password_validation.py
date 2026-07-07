@@ -5,47 +5,31 @@ Password validation utilities
 """
 
 import re
-from fastapi import HTTPException
 
 
 def validate_password_strength(password: str) -> bool:
     """
     Validate password meets strong requirements:
-    - At least 12 characters
+    - At least 8 characters
     - At least one uppercase letter
     - At least one lowercase letter
     - At least one digit
     - At least one special character
     """
     if len(password) < 8:
-        raise HTTPException(
-            status_code=400,
-            detail="Password must be at least 8 characters long"
-        )
+        raise ValueError("Password must be at least 8 characters long")
     
     if not re.search(r"[A-Z]", password):
-        raise HTTPException(
-            status_code=400,
-            detail="Password must contain at least one uppercase letter"
-        )
+        raise ValueError("Password must contain at least one uppercase letter")
     
     if not re.search(r"[a-z]", password):
-        raise HTTPException(
-            status_code=400,
-            detail="Password must contain at least one lowercase letter"
-        )
+        raise ValueError("Password must contain at least one lowercase letter")
     
     if not re.search(r"[0-9]", password):
-        raise HTTPException(
-            status_code=400,
-            detail="Password must contain at least one digit"
-        )
+        raise ValueError("Password must contain at least one digit")
     
     if not re.search(r"[!@#$%^&*()_+\-=\[\]{};:,.<>?]", password):
-        raise HTTPException(
-            status_code=400,
-            detail="Password must contain at least one special character (!@#$%^&*...)"
-        )
+        raise ValueError("Password must contain at least one special character (!@#$%^&*...)")
     
     # Check for common weak patterns
     weak_patterns = [
@@ -55,10 +39,7 @@ def validate_password_strength(password: str) -> bool:
     
     for pattern in weak_patterns:
         if re.search(pattern, password.lower()):
-            raise HTTPException(
-                status_code=400,
-                detail="Password is too predictable. Avoid sequences like 'qwerty' or '1234'"
-            )
+            raise ValueError("Password is too predictable. Avoid sequences like 'qwerty' or '1234'")
     
     return True
 

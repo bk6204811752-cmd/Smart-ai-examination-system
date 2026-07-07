@@ -20,7 +20,6 @@ services:
         value: "false"
       - key: SEED_DEMO_DATA
         value: "false"
-        # Note: ensure_demo_accounts() always seeds admin/teacher/student on startup regardless of this flag
       - key: APP_NAME
         value: "PCMT Smart AI Exam System"
       - key: APP_VERSION
@@ -63,10 +62,13 @@ services:
         value: "true"
       - key: CORS_ORIGINS
         value: "https://pcmt-ai-exam-system.vercel.app"
-      # ── SECRETS — Set these in Render Dashboard → Environment ──
-      - key: MONGODB_URI
-        sync: false
+      - key: ADMIN_EMAIL
+        value: "bk6204811752@gmail.com"
       - key: DATABASE_NAME
+        value: "pcmt_exam"
+      # ── SECRETS: Set these manually in Render Dashboard → Environment ──────
+      # Go to: https://dashboard.render.com/web/srv-d960md0js32c7397pmn0/env
+      - key: MONGODB_URI
         sync: false
       - key: SECRET_KEY
         sync: false
@@ -80,14 +82,3 @@ services:
         sync: false
       - key: SMTP_FROM_NAME
         sync: false
-      - key: ADMIN_EMAIL
-        sync: false
-      # MONGODB_URI      → mongodb+srv://bk6204811752_db_user:...@cluster0.6ei5wi0.mongodb.net/pcmt_exam
-      # DATABASE_NAME    → pcmt_exam
-      # SECRET_KEY       → (strong 32+ char random key — generate: python -c "import secrets; print(secrets.token_urlsafe(48))")
-      # SMTP_USERNAME    → b12a0d001@smtp-brevo.com
-      # SMTP_USER        → b12a0d001@smtp-brevo.com
-      # SMTP_PASSWORD    → (Set Brevo SMTP Key here)
-      # SMTP_FROM_EMAIL  → verified sender email
-      # SMTP_FROM_NAME   → Smart Examination System
-      # ADMIN_EMAIL      → bk6204811752@gmail.com

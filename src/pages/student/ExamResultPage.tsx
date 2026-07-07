@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { CheckCircle, XCircle, Clock, Award, TrendingUp, Download, Home, ChevronRight, AlertCircle, BarChart3, Trophy } from 'lucide-react'
+import {
+  CheckCircle,
+  XCircle,
+  TrendingUp,
+  Home,
+  ChevronRight,
+  AlertCircle,
+  BarChart3,
+  Trophy,
+} from 'lucide-react'
 import { resultsAPI } from '../../lib/api'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
@@ -45,13 +54,14 @@ export default function ExamResultPage() {
       return
     }
     loadResults()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [submissionId, initialResult])
 
   const loadResults = async () => {
     try {
       setLoading(true)
       setError(null)
-      
+
       if (submissionId) {
         // Load specific submission
         const data = await resultsAPI.getResult(submissionId)
@@ -85,8 +95,11 @@ export default function ExamResultPage() {
     if (!dateStr) return 'N/A'
     try {
       return new Date(dateStr).toLocaleDateString('en-IN', {
-        year: 'numeric', month: 'long', day: 'numeric',
-        hour: '2-digit', minute: '2-digit'
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
       })
     } catch {
       return dateStr
@@ -136,16 +149,19 @@ export default function ExamResultPage() {
   const isPassed = result.passed
   const gradeInfo = getGrade(result.percentage)
   const correctCount = result.detailed_results?.filter(q => q.is_correct).length ?? result.score
-  const wrongCount = result.detailed_results ? result.detailed_results.filter(q => !q.is_correct).length : (result.total - result.score)
+  const wrongCount = result.detailed_results
+    ? result.detailed_results.filter(q => !q.is_correct).length
+    : result.total - result.score
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 py-8">
       <div className="max-w-5xl mx-auto px-4">
-        
         {/* All Results Selector */}
         {allResults.length > 1 && (
           <div className="mb-6 bg-white rounded-xl shadow-sm p-4 flex items-center gap-4 overflow-x-auto">
-            <span className="text-sm font-medium text-gray-600 whitespace-nowrap">Recent Results:</span>
+            <span className="text-sm font-medium text-gray-600 whitespace-nowrap">
+              Recent Results:
+            </span>
             {allResults.slice(0, 5).map((r, i) => (
               <button
                 key={r._id}
@@ -184,14 +200,18 @@ export default function ExamResultPage() {
                 </div>
               )}
               <div>
-                <h1 className="text-3xl font-bold">{isPassed ? '🎉 Congratulations!' : '💪 Keep Going!'}</h1>
+                <h1 className="text-3xl font-bold">
+                  {isPassed ? '🎉 Congratulations!' : '💪 Keep Going!'}
+                </h1>
                 <p className="text-white/80 text-lg">{result.exam_title || 'Exam Result'}</p>
                 <p className="text-white/60 text-sm">{formatDate(result.date)}</p>
               </div>
             </div>
             <div className="text-right">
               <div className="text-6xl font-bold">{result.percentage?.toFixed(1)}%</div>
-              <div className="text-xl">Grade: <span className="font-bold">{gradeInfo.grade}</span></div>
+              <div className="text-xl">
+                Grade: <span className="font-bold">{gradeInfo.grade}</span>
+              </div>
               <div className="text-white/80 font-medium mt-1">
                 {isPassed ? '✅ PASSED' : '❌ FAILED'}
               </div>
@@ -201,7 +221,9 @@ export default function ExamResultPage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
             <div className="bg-white/20 rounded-xl p-4 backdrop-blur-sm">
               <p className="text-sm text-white/80 mb-1">Score</p>
-              <p className="text-2xl font-bold">{result.score}/{result.total}</p>
+              <p className="text-2xl font-bold">
+                {result.score}/{result.total}
+              </p>
             </div>
             <div className="bg-white/20 rounded-xl p-4 backdrop-blur-sm">
               <p className="text-sm text-white/80 mb-1">Time Taken</p>
@@ -213,7 +235,9 @@ export default function ExamResultPage() {
             </div>
             <div className="bg-white/20 rounded-xl p-4 backdrop-blur-sm">
               <p className="text-sm text-white/80 mb-1">Violations</p>
-              <p className="text-2xl font-bold text-yellow-300">{result.proctoring_violations || 0}</p>
+              <p className="text-2xl font-bold text-yellow-300">
+                {result.proctoring_violations || 0}
+              </p>
             </div>
           </div>
         </motion.div>
@@ -234,12 +258,16 @@ export default function ExamResultPage() {
             <div className="mt-3">
               <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
                 <span>Accuracy</span>
-                <span>{result.total > 0 ? Math.round((correctCount / result.total) * 100) : 0}%</span>
+                <span>
+                  {result.total > 0 ? Math.round((correctCount / result.total) * 100) : 0}%
+                </span>
               </div>
               <div className="flex-1 bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-green-500 h-2 rounded-full transition-all"
-                  style={{ width: `${result.total > 0 ? (correctCount / result.total) * 100 : 0}%` }}
+                  style={{
+                    width: `${result.total > 0 ? (correctCount / result.total) * 100 : 0}%`,
+                  }}
                 ></div>
               </div>
             </div>
@@ -300,10 +328,15 @@ export default function ExamResultPage() {
             </h3>
             <div className="flex items-center gap-6">
               <div className="text-center">
-                <div className={`text-5xl font-bold ${
-                  result.proctoring_violations === 0 ? 'text-green-600' :
-                  result.proctoring_violations <= 2 ? 'text-yellow-600' : 'text-red-600'
-                }`}>
+                <div
+                  className={`text-5xl font-bold ${
+                    result.proctoring_violations === 0
+                      ? 'text-green-600'
+                      : result.proctoring_violations <= 2
+                        ? 'text-yellow-600'
+                        : 'text-red-600'
+                  }`}
+                >
                   {Math.max(0, 100 - (result.proctoring_violations || 0) * 10)}%
                 </div>
                 <p className="text-sm text-gray-500 mt-1">Trust Score</p>
@@ -311,19 +344,26 @@ export default function ExamResultPage() {
               <div className="flex-1">
                 <div className="flex items-center justify-between text-sm mb-1">
                   <span className="text-gray-600">Proctoring Violations</span>
-                  <span className={`font-semibold ${
-                    result.proctoring_violations === 0 ? 'text-green-600' : 'text-red-600'
-                  }`}>
+                  <span
+                    className={`font-semibold ${
+                      result.proctoring_violations === 0 ? 'text-green-600' : 'text-red-600'
+                    }`}
+                  >
                     {result.proctoring_violations || 0}
                   </span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-3">
                   <div
                     className={`h-3 rounded-full transition-all ${
-                      result.proctoring_violations === 0 ? 'bg-green-500' :
-                      result.proctoring_violations <= 2 ? 'bg-yellow-500' : 'bg-red-500'
+                      result.proctoring_violations === 0
+                        ? 'bg-green-500'
+                        : result.proctoring_violations <= 2
+                          ? 'bg-yellow-500'
+                          : 'bg-red-500'
                     }`}
-                    style={{ width: `${Math.max(0, 100 - (result.proctoring_violations || 0) * 10)}%` }}
+                    style={{
+                      width: `${Math.max(0, 100 - (result.proctoring_violations || 0) * 10)}%`,
+                    }}
                   ></div>
                 </div>
                 <p className="text-sm text-gray-500 mt-2">
@@ -349,18 +389,22 @@ export default function ExamResultPage() {
               <div>
                 <h3 className="text-xl font-bold text-gray-900">📋 Question Review</h3>
                 <p className="text-sm text-gray-500 mt-0.5">
-                  {result.detailed_results.filter(q => q.is_correct).length} correct out of {result.detailed_results.length} questions
+                  {result.detailed_results.filter(q => q.is_correct).length} correct out of{' '}
+                  {result.detailed_results.length} questions
                 </p>
               </div>
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2 text-xs">
-                  <div className="w-3 h-3 rounded-full bg-green-500" /><span className="text-gray-600 font-medium">Correct</span>
+                  <div className="w-3 h-3 rounded-full bg-green-500" />
+                  <span className="text-gray-600 font-medium">Correct</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
-                  <div className="w-3 h-3 rounded-full bg-red-500" /><span className="text-gray-600 font-medium">Wrong</span>
+                  <div className="w-3 h-3 rounded-full bg-red-500" />
+                  <span className="text-gray-600 font-medium">Wrong</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
-                  <div className="w-3 h-3 rounded-full bg-gray-300" /><span className="text-gray-600 font-medium">Skipped</span>
+                  <div className="w-3 h-3 rounded-full bg-gray-300" />
+                  <span className="text-gray-600 font-medium">Skipped</span>
                 </div>
               </div>
             </div>
@@ -368,35 +412,49 @@ export default function ExamResultPage() {
             {/* Questions List */}
             <div className="divide-y divide-gray-50">
               {result.detailed_results.map((q, index) => {
-                const isSkipped = q.student_answer === null || q.student_answer === undefined || q.student_answer === ''
+                const isSkipped =
+                  q.student_answer === null ||
+                  q.student_answer === undefined ||
+                  q.student_answer === ''
                 return (
                   <div
                     key={index}
                     className={`p-5 sm:p-6 transition-colors ${
-                      isSkipped ? 'bg-gray-50/50' :
-                      q.is_correct ? 'bg-green-50/30' : 'bg-red-50/30'
+                      isSkipped ? 'bg-gray-50/50' : q.is_correct ? 'bg-green-50/30' : 'bg-red-50/30'
                     }`}
                   >
                     {/* Question Row Header */}
                     <div className="flex items-start gap-3 mb-4">
                       {/* Status Icon */}
-                      <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                        isSkipped ? 'bg-gray-100 text-gray-500' :
-                        q.is_correct ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                      }`}>
+                      <div
+                        className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                          isSkipped
+                            ? 'bg-gray-100 text-gray-500'
+                            : q.is_correct
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-red-100 text-red-700'
+                        }`}
+                      >
                         {isSkipped ? '—' : q.is_correct ? '✓' : '✗'}
                       </div>
                       <div className="flex-1">
                         {/* Q# and marks */}
                         <div className="flex items-center justify-between mb-1">
-                          <span className={`text-xs font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${
-                            isSkipped ? 'bg-gray-100 text-gray-500' :
-                            q.is_correct ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                          }`}>
-                            Q{index + 1} • {isSkipped ? 'Skipped' : q.is_correct ? 'Correct' : 'Incorrect'}
+                          <span
+                            className={`text-xs font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${
+                              isSkipped
+                                ? 'bg-gray-100 text-gray-500'
+                                : q.is_correct
+                                  ? 'bg-green-100 text-green-700'
+                                  : 'bg-red-100 text-red-700'
+                            }`}
+                          >
+                            Q{index + 1} •{' '}
+                            {isSkipped ? 'Skipped' : q.is_correct ? 'Correct' : 'Incorrect'}
                           </span>
                           <span className="text-xs text-gray-400 font-medium">
-                            {q.is_correct ? (q.marks || 1) : 0}/{q.marks || 1} {(q.marks || 1) === 1 ? 'mark' : 'marks'}
+                            {q.is_correct ? q.marks || 1 : 0}/{q.marks || 1}{' '}
+                            {(q.marks || 1) === 1 ? 'mark' : 'marks'}
                           </span>
                         </div>
                         {/* Question Text */}
@@ -409,17 +467,27 @@ export default function ExamResultPage() {
                     {/* Answers grid */}
                     <div className="ml-11 grid sm:grid-cols-2 gap-3">
                       {/* Student's Answer */}
-                      <div className={`rounded-xl p-3 border ${
-                        isSkipped ? 'bg-gray-50 border-gray-200' :
-                        q.is_correct ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
-                      }`}>
+                      <div
+                        className={`rounded-xl p-3 border ${
+                          isSkipped
+                            ? 'bg-gray-50 border-gray-200'
+                            : q.is_correct
+                              ? 'bg-green-50 border-green-200'
+                              : 'bg-red-50 border-red-200'
+                        }`}
+                      >
                         <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">
                           Your Answer
                         </p>
-                        <p className={`text-sm font-semibold ${
-                          isSkipped ? 'text-gray-400 italic' :
-                          q.is_correct ? 'text-green-800' : 'text-red-800'
-                        }`}>
+                        <p
+                          className={`text-sm font-semibold ${
+                            isSkipped
+                              ? 'text-gray-400 italic'
+                              : q.is_correct
+                                ? 'text-green-800'
+                                : 'text-red-800'
+                          }`}
+                        >
                           {isSkipped
                             ? 'Not answered'
                             : Array.isArray(q.student_answer)
@@ -434,9 +502,15 @@ export default function ExamResultPage() {
                           Correct Answer
                         </p>
                         <p className="text-sm font-semibold text-green-800">
-                          {q.correct_answer !== null && q.correct_answer !== undefined
-                            ? (Array.isArray(q.correct_answer) ? q.correct_answer.join(', ') : String(q.correct_answer))
-                            : <span className="text-gray-400 italic">N/A</span>}
+                          {q.correct_answer !== null && q.correct_answer !== undefined ? (
+                            Array.isArray(q.correct_answer) ? (
+                              q.correct_answer.join(', ')
+                            ) : (
+                              String(q.correct_answer)
+                            )
+                          ) : (
+                            <span className="text-gray-400 italic">N/A</span>
+                          )}
                         </p>
                       </div>
                     </div>

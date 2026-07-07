@@ -3,14 +3,14 @@
  * Real-time screen size detection and updates
  */
 
-import { useState, useEffect, useCallback } from 'react'
-import { 
-  getDeviceInfo, 
-  DeviceInfo, 
-  ScreenSize, 
+import { useState, useEffect } from 'react'
+import {
+  getDeviceInfo,
+  DeviceInfo,
+  ScreenSize,
   matchesMediaQuery,
   mediaQueries,
-  getGridColumns
+  getGridColumns,
 } from '../lib/responsiveUtils'
 
 /**
@@ -27,7 +27,7 @@ export const useDeviceInfo = (): DeviceInfo => {
 
     window.addEventListener('resize', handleResize)
     window.addEventListener('orientationchange', handleResize)
-    
+
     return () => {
       window.removeEventListener('resize', handleResize)
       window.removeEventListener('orientationchange', handleResize)
@@ -75,7 +75,7 @@ export const useMediaQuery = (query: string): boolean => {
     if (mediaQuery.addEventListener) {
       mediaQuery.addEventListener('change', handleChange)
       return () => mediaQuery.removeEventListener('change', handleChange)
-    } 
+    }
     // Legacy browsers
     else {
       mediaQuery.addListener(handleChange)
@@ -100,7 +100,7 @@ export const useBreakpoint = () => {
     isTablet,
     isDesktop,
     isLarge,
-    current: isMobile ? 'mobile' : isTablet ? 'tablet' : isDesktop ? 'desktop' : 'large'
+    current: isMobile ? 'mobile' : isTablet ? 'tablet' : isDesktop ? 'desktop' : 'large',
   }
 }
 
@@ -141,7 +141,7 @@ export const useOrientation = () => {
 
     window.addEventListener('orientationchange', handleOrientationChange)
     window.addEventListener('resize', handleOrientationChange)
-    
+
     return () => {
       window.removeEventListener('orientationchange', handleOrientationChange)
       window.removeEventListener('resize', handleOrientationChange)
@@ -151,7 +151,7 @@ export const useOrientation = () => {
   return {
     isPortrait,
     isLandscape: !isPortrait,
-    orientation: isPortrait ? 'portrait' : 'landscape'
+    orientation: isPortrait ? 'portrait' : 'landscape',
   }
 }
 
@@ -161,7 +161,7 @@ export const useOrientation = () => {
 export const useWindowSize = () => {
   const [size, setSize] = useState({
     width: window.innerWidth,
-    height: window.innerHeight
+    height: window.innerHeight,
   })
 
   useEffect(() => {
@@ -172,7 +172,7 @@ export const useWindowSize = () => {
       timeoutId = setTimeout(() => {
         setSize({
           width: window.innerWidth,
-          height: window.innerHeight
+          height: window.innerHeight,
         })
       }, 150) // Debounce resize events
     }
@@ -221,7 +221,7 @@ export const useOnlineStatus = (): boolean => {
  * Hook for responsive values
  * Returns different values based on screen size
  */
-export const useResponsiveValue = <T,>(values: {
+export const useResponsiveValue = <T>(values: {
   mobile?: T
   tablet?: T
   desktop?: T
@@ -234,7 +234,7 @@ export const useResponsiveValue = <T,>(values: {
   if (current === 'tablet' && values.tablet !== undefined) return values.tablet
   if (current === 'desktop' && values.desktop !== undefined) return values.desktop
   if (current === 'large' && values.large !== undefined) return values.large
-  
+
   return values.default
 }
 
@@ -247,11 +247,12 @@ export const useScreenReader = (): boolean => {
   useEffect(() => {
     // Detect if screen reader is active
     const checkScreenReader = () => {
-      const isUsingScreenReader = 
+      const isUsingScreenReader =
         window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
-        // @ts-ignore - navigator.userAgent string checks for screen readers
-        (navigator.userAgent.includes('NVDA') || navigator.userAgent.includes('JAWS'))
-      
+        // @ts-expect-error - navigator.userAgent string checks for screen readers
+        navigator.userAgent.includes('NVDA') ||
+        navigator.userAgent.includes('JAWS')
+
       setIsScreenReader(isUsingScreenReader)
     }
 
@@ -295,5 +296,5 @@ export default {
   useResponsiveValue,
   useScreenReader,
   usePrefersColorScheme,
-  useHoverCapability
+  useHoverCapability,
 }

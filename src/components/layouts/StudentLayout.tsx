@@ -3,22 +3,35 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/globalStore'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Home, BookOpen, BarChart3, Bot, BookMarked, Trophy, Bell,
-  Settings, LogOut, GraduationCap, User, Zap, Menu, X,
-  Play, Sparkles, Target, Activity, ChevronRight
+  Home,
+  BookOpen,
+  BarChart3,
+  Bot,
+  BookMarked,
+  Trophy,
+  Bell,
+  Settings,
+  LogOut,
+  GraduationCap,
+  User,
+  Menu,
+  X,
+  Play,
+  Sparkles,
+  ChevronRight,
 } from 'lucide-react'
 
 const navItems = [
-  { icon: Home,       label: 'Dashboard',      to: '/student/dashboard' },
-  { icon: BookOpen,   label: 'Upcoming Exams', to: '/student/dashboard#exams' },
-  { icon: BarChart3,  label: 'My Results',     to: '/student/results' },
-  { icon: Bot,        label: 'AI Tutor',       to: '/student/ai-tutor' },
+  { icon: Home, label: 'Dashboard', to: '/student/dashboard' },
+  { icon: BookOpen, label: 'Upcoming Exams', to: '/student/dashboard#exams' },
+  { icon: BarChart3, label: 'My Results', to: '/student/results' },
+  { icon: Bot, label: 'AI Tutor', to: '/student/ai-tutor' },
   { icon: BookMarked, label: 'Study Materials', to: '/student/materials' },
-  { icon: Play,       label: 'Practice Tests', to: '/practice' },
-  { icon: Trophy,     label: 'Achievements',   to: '/student/gamification' },
-  { icon: Sparkles,   label: 'Learning Path',  to: '/student/learning-path' },
-  { icon: Bell,       label: 'Notifications',  to: '/notifications' },
-  { icon: Settings,   label: 'Settings',       to: '/settings' },
+  { icon: Play, label: 'Practice Tests', to: '/practice' },
+  { icon: Trophy, label: 'Achievements', to: '/student/gamification' },
+  { icon: Sparkles, label: 'Learning Path', to: '/student/learning-path' },
+  { icon: Bell, label: 'Notifications', to: '/notifications' },
+  { icon: Settings, label: 'Settings', to: '/settings' },
 ]
 
 interface StudentLayoutProps {
@@ -33,7 +46,10 @@ export default function StudentLayout({ children, title, subtitle }: StudentLayo
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const handleLogout = () => { logout(); navigate('/login') }
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
 
   const isActive = (to: string) => {
     const path = to.split('#')[0]
@@ -62,7 +78,9 @@ export default function StudentLayout({ children, title, subtitle }: StudentLayo
           </div>
           <div className="min-w-0">
             <p className="font-semibold text-gray-900 text-sm truncate">{user?.full_name}</p>
-            <p className="text-xs text-gray-500">{user?.program} · Sem {user?.semester}</p>
+            <p className="text-xs text-gray-500">
+              {user?.program} · Sem {user?.semester}
+            </p>
           </div>
         </div>
       </div>
@@ -105,7 +123,6 @@ export default function StudentLayout({ children, title, subtitle }: StudentLayo
 
   return (
     <div className="min-h-screen bg-gray-50" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
-
       {/* Desktop Sidebar — fixed, always visible */}
       <aside className="hidden lg:flex fixed left-0 top-0 h-full w-64 bg-white border-r border-gray-100 shadow-sm flex-col z-40">
         <SidebarContent />
@@ -131,7 +148,10 @@ export default function StudentLayout({ children, title, subtitle }: StudentLayo
             >
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                 <span className="font-black text-gray-900">PCMT Student</span>
-                <button onClick={() => setSidebarOpen(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+                <button
+                  onClick={() => setSidebarOpen(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg"
+                >
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -145,7 +165,6 @@ export default function StudentLayout({ children, title, subtitle }: StudentLayo
 
       {/* Main content */}
       <div className="lg:ml-64 flex flex-col min-h-screen">
-
         {/* Top header */}
         <header className="bg-white border-b border-gray-100 sticky top-0 z-30 shadow-sm">
           <div className="px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between">
@@ -176,14 +195,20 @@ export default function StudentLayout({ children, title, subtitle }: StudentLayo
             </div>
 
             <div className="flex items-center gap-2">
-              <Link to="/notifications" className="relative p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all">
+              <Link
+                to="/notifications"
+                className="relative p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+              >
                 <Bell className="w-5 h-5" />
                 <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
               </Link>
               <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
                 {user?.full_name?.charAt(0)?.toUpperCase() || 'S'}
               </div>
-              <button onClick={handleLogout} className="hidden lg:flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-600 transition-colors px-3 py-2 rounded-xl hover:bg-red-50">
+              <button
+                onClick={handleLogout}
+                className="hidden lg:flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-600 transition-colors px-3 py-2 rounded-xl hover:bg-red-50"
+              >
                 <LogOut className="w-4 h-4" />
               </button>
             </div>
@@ -191,19 +216,17 @@ export default function StudentLayout({ children, title, subtitle }: StudentLayo
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8">
-          {children}
-        </main>
+        <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
 
       {/* Mobile bottom nav */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 shadow-lg z-30 flex justify-around py-2 px-2">
         {[
-          { icon: Home,      label: 'Home',    to: '/student/dashboard' },
-          { icon: BookOpen,  label: 'Exams',   to: '/student/dashboard' },
+          { icon: Home, label: 'Home', to: '/student/dashboard' },
+          { icon: BookOpen, label: 'Exams', to: '/student/dashboard' },
           { icon: BarChart3, label: 'Results', to: '/student/results' },
-          { icon: Bot,       label: 'AI Tutor', to: '/student/ai-tutor' },
-          { icon: User,      label: 'Profile', to: '/settings' },
+          { icon: Bot, label: 'AI Tutor', to: '/student/ai-tutor' },
+          { icon: User, label: 'Profile', to: '/settings' },
         ].map(item => {
           const active = isActive(item.to)
           return (

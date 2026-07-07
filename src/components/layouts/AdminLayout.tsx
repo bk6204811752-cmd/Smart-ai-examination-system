@@ -3,21 +3,31 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/globalStore'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Home, Users, Shield, Settings, LogOut, GraduationCap,
-  Bell, Database, Activity, BarChart3, Lock, UserCheck,
-  Menu, X, ChevronRight, Webhook
+  Home,
+  Users,
+  Shield,
+  Settings,
+  LogOut,
+  Bell,
+  Activity,
+  Lock,
+  UserCheck,
+  Menu,
+  X,
+  ChevronRight,
+  Webhook,
 } from 'lucide-react'
 
 const navItems = [
-  { icon: Home,      label: 'Dashboard',         to: '/admin/dashboard' },
-  { icon: Users,     label: 'User Management',   to: '/admin/users' },
-  { icon: UserCheck, label: 'User Approvals',    to: '/admin/approvals' },
-  { icon: Shield,    label: 'Security Center',   to: '/admin/security' },
-  { icon: Activity,  label: 'Accessibility',     to: '/admin/accessibility' },
-  { icon: Lock,      label: 'Proctoring Config', to: '/admin/proctoring-settings' },
-  { icon: Webhook,   label: 'Webhooks',          to: '/admin/webhooks' },
-  { icon: Bell,      label: 'Notifications',     to: '/notifications' },
-  { icon: Settings,  label: 'Settings',          to: '/settings' },
+  { icon: Home, label: 'Dashboard', to: '/admin/dashboard' },
+  { icon: Users, label: 'User Management', to: '/admin/users' },
+  { icon: UserCheck, label: 'User Approvals', to: '/admin/approvals' },
+  { icon: Shield, label: 'Security Center', to: '/admin/security' },
+  { icon: Activity, label: 'Accessibility', to: '/admin/accessibility' },
+  { icon: Lock, label: 'Proctoring Config', to: '/admin/proctoring-settings' },
+  { icon: Webhook, label: 'Webhooks', to: '/admin/webhooks' },
+  { icon: Bell, label: 'Notifications', to: '/notifications' },
+  { icon: Settings, label: 'Settings', to: '/settings' },
 ]
 
 interface AdminLayoutProps {
@@ -32,10 +42,14 @@ export default function AdminLayout({ children, title, subtitle }: AdminLayoutPr
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const handleLogout = () => { logout(); navigate('/login') }
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
 
   const isActive = (to: string) => {
-    if (to === '/admin/dashboard') return location.pathname === to || location.pathname === '/dashboard'
+    if (to === '/admin/dashboard')
+      return location.pathname === to || location.pathname === '/dashboard'
     return location.pathname.startsWith(to)
   }
 
@@ -59,7 +73,9 @@ export default function AdminLayout({ children, title, subtitle }: AdminLayoutPr
             {user?.full_name?.charAt(0)?.toUpperCase() || 'A'}
           </div>
           <div className="min-w-0">
-            <p className="font-semibold text-gray-900 text-sm truncate">{user?.full_name || 'Administrator'}</p>
+            <p className="font-semibold text-gray-900 text-sm truncate">
+              {user?.full_name || 'Administrator'}
+            </p>
             <p className="text-xs text-red-600 font-semibold">Admin Access</p>
           </div>
         </div>
@@ -103,7 +119,6 @@ export default function AdminLayout({ children, title, subtitle }: AdminLayoutPr
 
   return (
     <div className="min-h-screen bg-gray-50" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
-
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex fixed left-0 top-0 h-full w-64 bg-white border-r border-gray-100 shadow-sm flex-col z-40">
         <SidebarContent />
@@ -129,7 +144,10 @@ export default function AdminLayout({ children, title, subtitle }: AdminLayoutPr
             >
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                 <span className="font-black text-gray-900">PCMT Admin</span>
-                <button onClick={() => setSidebarOpen(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+                <button
+                  onClick={() => setSidebarOpen(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg"
+                >
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -167,10 +185,16 @@ export default function AdminLayout({ children, title, subtitle }: AdminLayoutPr
               )}
             </div>
             <div className="flex items-center gap-2">
-              <Link to="/notifications" className="relative p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all">
+              <Link
+                to="/notifications"
+                className="relative p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+              >
                 <Bell className="w-5 h-5" />
               </Link>
-              <button onClick={handleLogout} className="hidden lg:flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-600 transition-colors px-3 py-2 rounded-xl hover:bg-red-50">
+              <button
+                onClick={handleLogout}
+                className="hidden lg:flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-600 transition-colors px-3 py-2 rounded-xl hover:bg-red-50"
+              >
                 <LogOut className="w-4 h-4" />
               </button>
             </div>
@@ -178,18 +202,16 @@ export default function AdminLayout({ children, title, subtitle }: AdminLayoutPr
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8">
-          {children}
-        </main>
+        <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
 
       {/* Mobile bottom nav */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 shadow-lg z-30 flex justify-around py-2 px-2">
         {[
-          { icon: Home,      label: 'Home',    to: '/admin/dashboard' },
-          { icon: Users,     label: 'Users',   to: '/admin/users' },
-          { icon: Shield,    label: 'Security', to: '/admin/security' },
-          { icon: Settings,  label: 'Settings', to: '/settings' },
+          { icon: Home, label: 'Home', to: '/admin/dashboard' },
+          { icon: Users, label: 'Users', to: '/admin/users' },
+          { icon: Shield, label: 'Security', to: '/admin/security' },
+          { icon: Settings, label: 'Settings', to: '/settings' },
         ].map(item => {
           const active = isActive(item.to)
           return (

@@ -1,8 +1,26 @@
-import { FaceLandmarker, ObjectDetector, FilesetResolver } from '@mediapipe/tasks-vision'
+﻿import { FaceLandmarker, ObjectDetector, FilesetResolver } from '@mediapipe/tasks-vision'
 import { soundAlerts } from './soundAlerts'
 
 export interface ProctoringViolation {
-  type: 'NO_FACE' | 'MULTIPLE_FACES' | 'FACE_NOT_LOOKING' | 'TAB_SWITCH' | 'WINDOW_BLUR' | 'FULLSCREEN_EXIT' | 'AUDIO_DETECTED' | 'SUSPICIOUS_BEHAVIOR' | 'FACE_CHANGED' | 'COPY_PASTE' | 'MOUSE_LEFT_SCREEN' | 'RAPID_CLICKING' | 'PHONE_DETECTED' | 'HEADPHONE_DETECTED' | 'UNAUTHORIZED_DEVICE' | 'SCREEN_SHARE' | 'WINDOW_MINIMIZED' | 'PIP_DETECTED'
+  type:
+    | 'NO_FACE'
+    | 'MULTIPLE_FACES'
+    | 'FACE_NOT_LOOKING'
+    | 'TAB_SWITCH'
+    | 'WINDOW_BLUR'
+    | 'FULLSCREEN_EXIT'
+    | 'AUDIO_DETECTED'
+    | 'SUSPICIOUS_BEHAVIOR'
+    | 'FACE_CHANGED'
+    | 'COPY_PASTE'
+    | 'MOUSE_LEFT_SCREEN'
+    | 'RAPID_CLICKING'
+    | 'PHONE_DETECTED'
+    | 'HEADPHONE_DETECTED'
+    | 'UNAUTHORIZED_DEVICE'
+    | 'SCREEN_SHARE'
+    | 'WINDOW_MINIMIZED'
+    | 'PIP_DETECTED'
   severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
   timestamp: Date
   message: string
@@ -43,8 +61,10 @@ export interface ProctoringStatus {
 }
 
 const MEDIAPIPE_WASM_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm'
-const FACE_LANDMARKER_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task'
-const OBJECT_DETECTOR_MODEL = 'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/latest/efficientdet_lite0.task'
+const FACE_LANDMARKER_MODEL =
+  'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task'
+const OBJECT_DETECTOR_MODEL =
+  'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/latest/efficientdet_lite0.task'
 
 class ProctoringEngine {
   private videoElement: HTMLVideoElement | null = null
@@ -78,10 +98,12 @@ class ProctoringEngine {
   private consecutiveMultipleFace = 0
   private consecutiveLookingAway = 0
   private consecutiveAudio = 0
+  private consecutiveMusic = 0
   private lastNoFaceWarning = 0
   private lastMultipleFaceWarning = 0
   private lastLookingAwayWarning = 0
   private lastAudioWarning = 0
+  private lastMusicWarning = 0
   private lastHeadphoneWarning = 0
   private lastFocusWarning = 0
   private lastStatusUpdate = 0
@@ -150,7 +172,10 @@ class ProctoringEngine {
       this.visionResolver = await Promise.race([
         FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_CDN),
         new Promise<any>((_, reject) =>
-          setTimeout(() => reject(new Error('MediaPipe WASM load timeout')), this.MODEL_LOAD_TIMEOUT)
+          setTimeout(
+            () => reject(new Error('MediaPipe WASM load timeout')),
+            this.MODEL_LOAD_TIMEOUT
+          )
         ),
       ])
 
@@ -166,7 +191,10 @@ class ProctoringEngine {
           outputFacialTransformationMatrixes: true,
         }),
         new Promise<FaceLandmarker>((_, reject) =>
-          setTimeout(() => reject(new Error('FaceLandmarker model load timeout')), this.MODEL_LOAD_TIMEOUT)
+          setTimeout(
+            () => reject(new Error('FaceLandmarker model load timeout')),
+            this.MODEL_LOAD_TIMEOUT
+          )
         ),
       ])
 
@@ -209,7 +237,9 @@ class ProctoringEngine {
       source.connect(analyser)
       this.audioAnalyser = analyser
       this.audioDataArray = new Uint8Array(analyser.frequencyBinCount)
-    } catch { /* noop */ }
+    } catch {
+      /* noop */
+    }
   }
 
   private setupBlockingHandlers(): void {
@@ -219,7 +249,7 @@ class ProctoringEngine {
       this.addViolation({
         type: 'COPY_PASTE',
         severity: 'MEDIUM',
-        message: 'Copy operation blocked — cheating attempt detected',
+        message: 'Copy operation blocked â€” cheating attempt detected',
       })
     }
     this.boundPasteHandler = (e: ClipboardEvent) => {
@@ -228,7 +258,7 @@ class ProctoringEngine {
       this.addViolation({
         type: 'COPY_PASTE',
         severity: 'MEDIUM',
-        message: 'Paste operation blocked — cheating attempt detected',
+        message: 'Paste operation blocked â€” cheating attempt detected',
       })
     }
     this.boundCutHandler = (e: ClipboardEvent) => {
@@ -245,7 +275,7 @@ class ProctoringEngine {
           this.addViolation({
             type: 'COPY_PASTE',
             severity: 'MEDIUM',
-            message: 'Paste blocked — cheating attempt detected',
+            message: 'Paste blocked â€” cheating attempt detected',
           })
         }
       }
@@ -283,7 +313,8 @@ class ProctoringEngine {
     if (this.boundCopyHandler) document.removeEventListener('copy', this.boundCopyHandler)
     if (this.boundPasteHandler) document.removeEventListener('paste', this.boundPasteHandler)
     if (this.boundCutHandler) document.removeEventListener('cut', this.boundCutHandler)
-    if (this.boundContextMenuHandler) document.removeEventListener('contextmenu', this.boundContextMenuHandler)
+    if (this.boundContextMenuHandler)
+      document.removeEventListener('contextmenu', this.boundContextMenuHandler)
     if (this.boundKeyDownHandler) document.removeEventListener('keydown', this.boundKeyDownHandler)
     if (this.boundResizeHandler) document.removeEventListener('resize', this.boundResizeHandler)
     this.boundCopyHandler = null
@@ -317,7 +348,7 @@ class ProctoringEngine {
 
     this.boundScreenKeyHandler = (e: KeyboardEvent) => {
       const SCANCODE_RDP_THRESHOLD = 3
-      const rdpScancodes = [0x01, 0x3B, 0x3C, 0x3D, 0xC5]
+      const rdpScancodes = [0x01, 0x3b, 0x3c, 0x3d, 0xc5]
       if ((e as any).scanCode && rdpScancodes.includes((e as any).scanCode)) {
         this.rdpKeyboardCounter++
         if (this.rdpKeyboardCounter > SCANCODE_RDP_THRESHOLD) {
@@ -327,7 +358,7 @@ class ProctoringEngine {
             this.addViolation({
               type: 'SUSPICIOUS_BEHAVIOR',
               severity: 'CRITICAL',
-              message: 'Remote desktop protocol (RDP) detected — exam terminated',
+              message: 'Remote desktop protocol (RDP) detected â€” exam terminated',
             })
             this.pauseExam('Remote desktop access detected. Please contact your proctor.')
           }
@@ -339,7 +370,10 @@ class ProctoringEngine {
     this.screenSecurityInterval = window.setInterval(() => {
       const now = Date.now()
 
-      if (screen.width !== this.lastKnownScreenWidth || screen.height !== this.lastKnownScreenHeight) {
+      if (
+        screen.width !== this.lastKnownScreenWidth ||
+        screen.height !== this.lastKnownScreenHeight
+      ) {
         const prevWidth = this.lastKnownScreenWidth
         const prevHeight = this.lastKnownScreenHeight
         this.lastKnownScreenWidth = screen.width
@@ -357,7 +391,7 @@ class ProctoringEngine {
         this.addViolation({
           type: 'SUSPICIOUS_BEHAVIOR',
           severity: 'HIGH',
-          message: `Screen color depth changed from ${oldDepth}-bit to ${screen.colorDepth}-bit — possible remote desktop connection`,
+          message: `Screen color depth changed from ${oldDepth}-bit to ${screen.colorDepth}-bit â€” possible remote desktop connection`,
         })
       }
 
@@ -367,7 +401,7 @@ class ProctoringEngine {
           this.addViolation({
             type: 'SUSPICIOUS_BEHAVIOR',
             severity: 'HIGH',
-            message: 'Low screen resolution detected — possible remote desktop connection',
+            message: 'Low screen resolution detected â€” possible remote desktop connection',
           })
         }
       }
@@ -612,7 +646,9 @@ class ProctoringEngine {
     const gazeY = lookDown - lookUp
     const gazeMagnitude = Math.sqrt(gazeX * gazeX + gazeY * gazeY)
 
-    const isLookingAtScreen = gazeMagnitude < this.LOOKING_AWAY_GAZE_THRESHOLD && headDeviation < this.LOOKING_AWAY_HEAD_THRESHOLD
+    const isLookingAtScreen =
+      gazeMagnitude < this.LOOKING_AWAY_GAZE_THRESHOLD &&
+      headDeviation < this.LOOKING_AWAY_HEAD_THRESHOLD
 
     if (isLookingAtScreen) {
       this.consecutiveLookingAway = Math.max(0, this.consecutiveLookingAway - 2)
@@ -622,7 +658,8 @@ class ProctoringEngine {
       this.status.lookingAtScreen = this.consecutiveLookingAway < this.LOOKING_AWAY_GRACE_FRAMES
     }
 
-    const attentionPenalty = gazeMagnitude * 40 + (headDeviation > 1 ? Math.min(headDeviation * 30, 60) : 0)
+    const attentionPenalty =
+      gazeMagnitude * 40 + (headDeviation > 1 ? Math.min(headDeviation * 30, 60) : 0)
     this.status.attentionLevel = Math.max(0, Math.min(100, 100 - attentionPenalty))
   }
 
@@ -636,7 +673,7 @@ class ProctoringEngine {
         this.addViolation({
           type: 'NO_FACE',
           severity: this.consecutiveNoFace > 60 ? 'HIGH' : 'MEDIUM',
-          message: 'Face not detected — please ensure you are visible to the camera',
+          message: 'Face not detected â€” please ensure you are visible to the camera',
           metadata: { attentionScore: this.status.attentionLevel },
         })
       }
@@ -648,7 +685,7 @@ class ProctoringEngine {
         this.addViolation({
           type: 'MULTIPLE_FACES',
           severity: 'HIGH',
-          message: `${this.status.faceCount} faces detected — only one person should be visible`,
+          message: `${this.status.faceCount} faces detected â€” only one person should be visible`,
           metadata: { faceCount: this.status.faceCount },
         })
       }
@@ -686,7 +723,7 @@ class ProctoringEngine {
       this.addViolation({
         type: 'PHONE_DETECTED',
         severity: 'HIGH',
-        message: 'Cell phone detected in camera view — please remove all electronic devices',
+        message: 'Cell phone detected in camera view â€” please remove all electronic devices',
       })
     }
 
@@ -695,19 +732,39 @@ class ProctoringEngine {
       this.addViolation({
         type: 'UNAUTHORIZED_DEVICE',
         severity: 'MEDIUM',
-        message: 'Book or laptop detected near exam area — please clear your desk',
+        message: 'Book or laptop detected near exam area â€” please clear your desk',
       })
     }
 
-    if (this.consecutiveHeadphone > 150 && now - this.lastHeadphoneWarning > SAME_VIOLATION_COOLDOWN) {
+    if (
+      this.consecutiveHeadphone > 60 &&
+      now - this.lastHeadphoneWarning > SAME_VIOLATION_COOLDOWN
+    ) {
       this.lastHeadphoneWarning = now
       this.addViolation({
         type: 'HEADPHONE_DETECTED',
         severity: 'MEDIUM',
-        message: 'Possible headphones detected — consistently low ambient audio while face is visible',
+        message:
+          'Possible headphones detected â€” consistently low ambient audio while face is visible',
         metadata: { audioLevel: this.status.audioLevel },
       })
       this.consecutiveHeadphone = 0
+    }
+
+    if (this.status.audioLevel >= 20 && this.status.audioLevel <= 70 && this.status.faceDetected) {
+      this.consecutiveMusic++
+      if (this.consecutiveMusic > 300 && now - this.lastMusicWarning > SAME_VIOLATION_COOLDOWN) {
+        this.lastMusicWarning = now
+        this.addViolation({
+          type: 'AUDIO_DETECTED',
+          severity: 'MEDIUM',
+          message: `Sustained moderate audio â€” possible background music/playback (level: ${this.status.audioLevel})`,
+          metadata: { audioLevel: this.status.audioLevel },
+        })
+        this.consecutiveMusic = Math.max(0, this.consecutiveMusic - 50)
+      }
+    } else {
+      this.consecutiveMusic = Math.max(0, this.consecutiveMusic - 5)
     }
 
     if (this.devToolsOpen && now - this.lastDevToolsWarning > SAME_VIOLATION_COOLDOWN) {
@@ -715,12 +772,17 @@ class ProctoringEngine {
       this.addViolation({
         type: 'SUSPICIOUS_BEHAVIOR',
         severity: 'HIGH',
-        message: 'Developer tools window detected — close all developer tools immediately',
+        message: 'Developer tools window detected â€” close all developer tools immediately',
       })
     }
   }
 
-  private addViolation(base: { type: ProctoringViolation['type']; severity: ProctoringViolation['severity']; message: string; metadata?: any }): void {
+  private addViolation(base: {
+    type: ProctoringViolation['type']
+    severity: ProctoringViolation['severity']
+    message: string
+    metadata?: any
+  }): void {
     const violation: ProctoringViolation = {
       ...base,
       timestamp: new Date(),
@@ -728,8 +790,18 @@ class ProctoringEngine {
 
     this.status.violations = [...this.status.violations, violation].slice(-50)
 
-    const severityWeight = base.severity === 'CRITICAL' ? 15 : base.severity === 'HIGH' ? 10 : base.severity === 'MEDIUM' ? 5 : 2
-    this.status.suspiciousActivityScore = Math.min(100, this.status.suspiciousActivityScore + severityWeight)
+    const severityWeight =
+      base.severity === 'CRITICAL'
+        ? 15
+        : base.severity === 'HIGH'
+          ? 10
+          : base.severity === 'MEDIUM'
+            ? 5
+            : 2
+    this.status.suspiciousActivityScore = Math.min(
+      100,
+      this.status.suspiciousActivityScore + severityWeight
+    )
 
     this.onViolation?.(violation)
 
@@ -746,7 +818,10 @@ class ProctoringEngine {
     const violationPenalty = Math.min(30, this.status.suspiciousActivityScore * 0.3)
     const environmentScore = this.status.environmentScore * 0.1
 
-    this.status.integrityScore = Math.max(0, Math.min(100, faceScore + attentionScore + environmentScore - violationPenalty))
+    this.status.integrityScore = Math.max(
+      0,
+      Math.min(100, faceScore + attentionScore + environmentScore - violationPenalty)
+    )
   }
 
   pauseExam(reason: string): void {
@@ -831,7 +906,7 @@ class ProctoringEngine {
     if (!this.stream || this.mediaRecorder) return
     try {
       this.mediaRecorder = new MediaRecorder(this.stream, { mimeType: 'video/webm;codecs=vp9' })
-      this.mediaRecorder.ondataavailable = (e) => {
+      this.mediaRecorder.ondataavailable = e => {
         if (e.data.size > 0) {
           this.recordedChunks.push(e.data)
           if (this.recordedChunks.length > 12) this.recordedChunks.shift()
@@ -842,7 +917,7 @@ class ProctoringEngine {
     } catch {
       try {
         this.mediaRecorder = new MediaRecorder(this.stream, { mimeType: 'video/webm' })
-        this.mediaRecorder.ondataavailable = (e) => {
+        this.mediaRecorder.ondataavailable = e => {
           if (e.data.size > 0) {
             this.recordedChunks.push(e.data)
             if (this.recordedChunks.length > 12) this.recordedChunks.shift()
@@ -850,7 +925,9 @@ class ProctoringEngine {
         }
         this.mediaRecorder.start(5000)
         this.status.sessionRecording = true
-      } catch { /* noop */ }
+      } catch {
+        /* noop */
+      }
     }
   }
 
@@ -872,9 +949,15 @@ class ProctoringEngine {
     return this.status.audioLevel
   }
 
-  setOnViolation(cb: (v: ProctoringViolation) => void): void { this.onViolation = cb }
-  setOnStatusChange(cb: (s: ProctoringStatus) => void): void { this.onStatusChange = cb }
-  setOnPause(cb: (reason: string) => void): void { this.onPause = cb }
+  setOnViolation(cb: (v: ProctoringViolation) => void): void {
+    this.onViolation = cb
+  }
+  setOnStatusChange(cb: (s: ProctoringStatus) => void): void {
+    this.onStatusChange = cb
+  }
+  setOnPause(cb: (reason: string) => void): void {
+    this.onPause = cb
+  }
 }
 
 export default ProctoringEngine

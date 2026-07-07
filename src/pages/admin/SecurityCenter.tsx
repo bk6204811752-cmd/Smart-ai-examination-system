@@ -1,12 +1,39 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Shield, AlertTriangle, Activity, Server,
-  Lock, Download, Search,
-  Clock, Users, FileText, TrendingUp, TrendingDown,
-  CheckCircle, XCircle, AlertCircle, RefreshCw, Loader2,
-  Plus, Unlock
+  Shield,
+  AlertTriangle,
+  Activity,
+  Server,
+  Lock,
+  Search,
+  Clock,
+  Users,
+  FileText,
+  TrendingUp,
+  TrendingDown,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  RefreshCw,
+  Loader2,
+  Plus,
+  Unlock,
 } from 'lucide-react'
-import { LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import {
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from 'recharts'
 import { securityAPI } from '../../lib/api'
 
 interface AccessLog {
@@ -53,12 +80,12 @@ interface BlockedIP {
 }
 
 const THREAT_COLORS: Record<string, string> = {
-  'failed_login': '#ef4444',
-  'sql_injection': '#f97316',
-  'xss_attempt': '#eab308',
-  'unauthorized_access': '#3b82f6',
-  'suspicious_activity': '#8b5cf6',
-  'data_breach': '#dc2626',
+  failed_login: '#ef4444',
+  sql_injection: '#f97316',
+  xss_attempt: '#eab308',
+  unauthorized_access: '#3b82f6',
+  suspicious_activity: '#8b5cf6',
+  data_breach: '#dc2626',
 }
 
 const SEVERITY_COLORS: Record<string, string> = {
@@ -69,7 +96,9 @@ const SEVERITY_COLORS: Record<string, string> = {
 }
 
 export default function SecurityCenterPage() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'logs' | 'events' | 'diagnostics' | 'blocked'>('overview')
+  const [activeTab, setActiveTab] = useState<
+    'overview' | 'logs' | 'events' | 'diagnostics' | 'blocked'
+  >('overview')
   const [searchQuery, setSearchQuery] = useState('')
   const [timeRange, setTimeRange] = useState('7d')
   const [logStatusFilter, setLogStatusFilter] = useState('all')
@@ -86,7 +115,6 @@ export default function SecurityCenterPage() {
   const [logsPages, setLogsPages] = useState(1)
 
   const [events, setEvents] = useState<SecurityEvent[]>([])
-  const [eventsTotal, setEventsTotal] = useState(0)
   const [eventsPage, setEventsPage] = useState(1)
   const [eventsPages, setEventsPages] = useState(1)
 
@@ -107,8 +135,18 @@ export default function SecurityCenterPage() {
     try {
       const [overviewData, logsData, eventsData, blockedData] = await Promise.all([
         securityAPI.getOverview(),
-        securityAPI.getLogs({ page: logsPage, per_page: 20, status: logStatusFilter !== 'all' ? logStatusFilter : undefined, search: searchQuery || undefined, time_range: timeRange }),
-        securityAPI.getEvents({ page: eventsPage, per_page: 20, severity: eventSeverityFilter !== 'all' ? eventSeverityFilter : undefined }),
+        securityAPI.getLogs({
+          page: logsPage,
+          per_page: 20,
+          status: logStatusFilter !== 'all' ? logStatusFilter : undefined,
+          search: searchQuery || undefined,
+          time_range: timeRange,
+        }),
+        securityAPI.getEvents({
+          page: eventsPage,
+          per_page: 20,
+          severity: eventSeverityFilter !== 'all' ? eventSeverityFilter : undefined,
+        }),
         securityAPI.getBlockedIPs(),
       ])
       setOverview(overviewData)
@@ -128,9 +166,19 @@ export default function SecurityCenterPage() {
     }
   }, [logsPage, eventsPage, logStatusFilter, searchQuery, timeRange, eventSeverityFilter])
 
-  const buildCharts = (overviewData: OverviewData, accessLogs: AccessLog[], securityEvents: SecurityEvent[]) => {
+  const buildCharts = (
+    overviewData: OverviewData,
+    accessLogs: AccessLog[],
+    securityEvents: SecurityEvent[]
+  ) => {
     const hours = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`)
-    setActivityData(hours.map(h => ({ time: h, logins: Math.floor(Math.random() * 50 + 10), failures: Math.floor(Math.random() * 5) })))
+    setActivityData(
+      hours.map(h => ({
+        time: h,
+        logins: Math.floor(Math.random() * 50 + 10),
+        failures: Math.floor(Math.random() * 5),
+      }))
+    )
 
     const threatCounts: Record<string, number> = {}
     securityEvents.forEach(ev => {
@@ -143,20 +191,52 @@ export default function SecurityCenterPage() {
         { name: 'Other Threats', value: 1, color: '#f97316' },
       ])
     } else {
-      setThreatData(Object.entries(threatCounts).map(([key, value]) => ({
-        name: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-        value,
-        color: THREAT_COLORS[key] || '#6b7280',
-      })))
+      setThreatData(
+        Object.entries(threatCounts).map(([key, value]) => ({
+          name: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+          value,
+          color: THREAT_COLORS[key] || '#6b7280',
+        }))
+      )
     }
 
     setSystemMetrics([
-      { name: 'CPU Usage', value: Math.floor(Math.random() * 30 + 30), status: 'healthy', change: -5 },
-      { name: 'Memory Usage', value: Math.floor(Math.random() * 20 + 55), status: 'warning', change: 12 },
-      { name: 'Database Connections', value: Math.floor(Math.random() * 15 + 15), status: 'healthy', change: 3 },
-      { name: 'API Response Time', value: Math.floor(Math.random() * 80 + 100), status: 'healthy', change: -23 },
-      { name: 'Active Sessions', value: overviewData?.active_sessions || 0, status: 'healthy', change: 45 },
-      { name: 'Error Rate', value: parseFloat((Math.random() * 1.5 + 0.2).toFixed(1)), status: 'healthy', change: -0.3 },
+      {
+        name: 'CPU Usage',
+        value: Math.floor(Math.random() * 30 + 30),
+        status: 'healthy',
+        change: -5,
+      },
+      {
+        name: 'Memory Usage',
+        value: Math.floor(Math.random() * 20 + 55),
+        status: 'warning',
+        change: 12,
+      },
+      {
+        name: 'Database Connections',
+        value: Math.floor(Math.random() * 15 + 15),
+        status: 'healthy',
+        change: 3,
+      },
+      {
+        name: 'API Response Time',
+        value: Math.floor(Math.random() * 80 + 100),
+        status: 'healthy',
+        change: -23,
+      },
+      {
+        name: 'Active Sessions',
+        value: overviewData?.active_sessions || 0,
+        status: 'healthy',
+        change: 45,
+      },
+      {
+        name: 'Error Rate',
+        value: parseFloat((Math.random() * 1.5 + 0.2).toFixed(1)),
+        status: 'healthy',
+        change: -0.3,
+      },
     ])
 
     setPerformanceData([
@@ -164,14 +244,23 @@ export default function SecurityCenterPage() {
       { time: '45m ago', cpu: 48, memory: 68, db: 23 },
       { time: '30m ago', cpu: 45, memory: 70, db: 25 },
       { time: '15m ago', cpu: 43, memory: 67, db: 22 },
-      { time: 'Now', cpu: Math.floor(Math.random() * 10 + 40), memory: Math.floor(Math.random() * 10 + 60), db: Math.floor(Math.random() * 8 + 18) },
+      {
+        time: 'Now',
+        cpu: Math.floor(Math.random() * 10 + 40),
+        memory: Math.floor(Math.random() * 10 + 60),
+        db: Math.floor(Math.random() * 8 + 18),
+      },
     ])
 
     setServiceStatus([
       { name: 'Database', status: 'operational', latency: '12ms' },
       { name: 'Authentication Service', status: 'operational', latency: '45ms' },
       { name: 'File Storage', status: 'operational', latency: '89ms' },
-      { name: 'Email Service', status: Math.random() > 0.8 ? 'degraded' : 'operational', latency: Math.random() > 0.8 ? '234ms' : '67ms' },
+      {
+        name: 'Email Service',
+        status: Math.random() > 0.8 ? 'degraded' : 'operational',
+        latency: Math.random() > 0.8 ? '234ms' : '67ms',
+      },
       { name: 'AI Proctoring', status: 'operational', latency: '156ms' },
       { name: 'Notification Service', status: 'operational', latency: '67ms' },
     ])
@@ -194,8 +283,10 @@ export default function SecurityCenterPage() {
         severity: 'low',
         description: 'Security event resolved by admin',
       })
-      setEvents(prev => prev.map(e => e.id === eventId ? { ...e, resolved: true } : e))
-    } catch { /* noop */ }
+      setEvents(prev => prev.map(e => (e.id === eventId ? { ...e, resolved: true } : e)))
+    } catch {
+      /* noop */
+    }
   }
 
   const handleBlockIP = async () => {
@@ -224,19 +315,27 @@ export default function SecurityCenterPage() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'success': return <CheckCircle className="w-5 h-5 text-green-500" />
-      case 'failed': return <XCircle className="w-5 h-5 text-red-500" />
-      case 'blocked': return <Lock className="w-5 h-5 text-orange-500" />
-      default: return <AlertCircle className="w-5 h-5 text-gray-500" />
+      case 'success':
+        return <CheckCircle className="w-5 h-5 text-green-500" />
+      case 'failed':
+        return <XCircle className="w-5 h-5 text-red-500" />
+      case 'blocked':
+        return <Lock className="w-5 h-5 text-orange-500" />
+      default:
+        return <AlertCircle className="w-5 h-5 text-gray-500" />
     }
   }
 
   const getMetricStatusColor = (status: string) => {
     switch (status) {
-      case 'healthy': return 'text-green-600'
-      case 'warning': return 'text-yellow-600'
-      case 'critical': return 'text-red-600'
-      default: return 'text-gray-600'
+      case 'healthy':
+        return 'text-green-600'
+      case 'warning':
+        return 'text-yellow-600'
+      case 'critical':
+        return 'text-red-600'
+      default:
+        return 'text-gray-600'
     }
   }
 
@@ -283,7 +382,7 @@ export default function SecurityCenterPage() {
               { id: 'events', label: 'Security Events', icon: AlertTriangle },
               { id: 'diagnostics', label: 'System Diagnostics', icon: Server },
               { id: 'blocked', label: 'Blocked IPs', icon: Lock },
-            ].map((tab) => {
+            ].map(tab => {
               const Icon = tab.icon
               return (
                 <button
@@ -315,7 +414,10 @@ export default function SecurityCenterPage() {
             <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-3" />
             <h3 className="text-lg font-bold text-red-800 mb-1">Failed to Load</h3>
             <p className="text-red-600 mb-4">{error}</p>
-            <button onClick={handleRefresh} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+            <button
+              onClick={handleRefresh}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+            >
               Retry
             </button>
           </div>
@@ -329,8 +431,12 @@ export default function SecurityCenterPage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm text-gray-600">Total Access</p>
-                        <h3 className="text-3xl font-bold text-gray-900 mt-1">{(overview?.total_access || 0).toLocaleString()}</h3>
-                        <p className="text-sm text-green-600 mt-2">{overview?.today_access || 0} today</p>
+                        <h3 className="text-3xl font-bold text-gray-900 mt-1">
+                          {(overview?.total_access || 0).toLocaleString()}
+                        </h3>
+                        <p className="text-sm text-green-600 mt-2">
+                          {overview?.today_access || 0} today
+                        </p>
                       </div>
                       <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
                         <Users className="w-6 h-6 text-blue-600" />
@@ -342,8 +448,12 @@ export default function SecurityCenterPage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm text-gray-600">Failed Logins</p>
-                        <h3 className="text-3xl font-bold text-gray-900 mt-1">{(overview?.failed_logins || 0).toLocaleString()}</h3>
-                        <p className="text-sm text-red-600 mt-2">{overview?.today_failed_logins || 0} today</p>
+                        <h3 className="text-3xl font-bold text-gray-900 mt-1">
+                          {(overview?.failed_logins || 0).toLocaleString()}
+                        </h3>
+                        <p className="text-sm text-red-600 mt-2">
+                          {overview?.today_failed_logins || 0} today
+                        </p>
                       </div>
                       <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
                         <XCircle className="w-6 h-6 text-red-600" />
@@ -355,7 +465,9 @@ export default function SecurityCenterPage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm text-gray-600">Active Sessions</p>
-                        <h3 className="text-3xl font-bold text-gray-900 mt-1">{overview?.active_sessions || 0}</h3>
+                        <h3 className="text-3xl font-bold text-gray-900 mt-1">
+                          {overview?.active_sessions || 0}
+                        </h3>
                         <p className="text-sm text-green-600 mt-2">Current exams running</p>
                       </div>
                       <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -368,8 +480,12 @@ export default function SecurityCenterPage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm text-gray-600">Blocked IPs</p>
-                        <h3 className="text-3xl font-bold text-gray-900 mt-1">{overview?.blocked_ips || 0}</h3>
-                        <p className="text-sm text-orange-600 mt-2">{overview?.blocked_today || 0} blocked today</p>
+                        <h3 className="text-3xl font-bold text-gray-900 mt-1">
+                          {overview?.blocked_ips || 0}
+                        </h3>
+                        <p className="text-sm text-orange-600 mt-2">
+                          {overview?.blocked_today || 0} blocked today
+                        </p>
                       </div>
                       <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
                         <Lock className="w-6 h-6 text-orange-600" />
@@ -388,8 +504,22 @@ export default function SecurityCenterPage() {
                         <YAxis />
                         <Tooltip />
                         <Legend />
-                        <Area type="monotone" dataKey="logins" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.3} name="Logins" />
-                        <Area type="monotone" dataKey="failures" stroke="#ef4444" fill="#ef4444" fillOpacity={0.3} name="Failures" />
+                        <Area
+                          type="monotone"
+                          dataKey="logins"
+                          stroke="#3b82f6"
+                          fill="#3b82f6"
+                          fillOpacity={0.3}
+                          name="Logins"
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="failures"
+                          stroke="#ef4444"
+                          fill="#ef4444"
+                          fillOpacity={0.3}
+                          name="Failures"
+                        />
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
@@ -401,9 +531,10 @@ export default function SecurityCenterPage() {
                         <PieChart>
                           <Pie
                             data={threatData}
-                            cx="50%" cy="50%"
+                            cx="50%"
+                            cy="50%"
                             labelLine={false}
-                            label={(entry) => `${entry.name}: ${entry.value}`}
+                            label={entry => `${entry.name}: ${entry.value}`}
                             outerRadius={100}
                             dataKey="value"
                           >
@@ -414,7 +545,9 @@ export default function SecurityCenterPage() {
                           <Tooltip />
                         </PieChart>
                       ) : (
-                        <div className="flex items-center justify-center h-full text-gray-400">No threat data</div>
+                        <div className="flex items-center justify-center h-full text-gray-400">
+                          No threat data
+                        </div>
                       )}
                     </ResponsiveContainer>
                   </div>
@@ -430,21 +563,27 @@ export default function SecurityCenterPage() {
                     )}
                   </h3>
                   <div className="space-y-3">
-                    {events.slice(0, 5).map((event) => (
-                      <div key={event.id} className={`flex items-center justify-between p-4 border rounded-lg ${SEVERITY_COLORS[event.severity] || 'bg-gray-100'}`}>
+                    {events.slice(0, 5).map(event => (
+                      <div
+                        key={event.id}
+                        className={`flex items-center justify-between p-4 border rounded-lg ${SEVERITY_COLORS[event.severity] || 'bg-gray-100'}`}
+                      >
                         <div className="flex items-center space-x-4">
                           <AlertTriangle className="w-5 h-5" />
                           <div>
                             <h4 className="font-semibold">{event.description}</h4>
                             <p className="text-sm opacity-80">
-                              User: {event.user} &middot; {new Date(event.timestamp).toLocaleString()}
+                              User: {event.user} &middot;{' '}
+                              {new Date(event.timestamp).toLocaleString()}
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center space-x-3">
                           <span className="text-xs font-semibold uppercase">{event.severity}</span>
                           {event.resolved ? (
-                            <span className="text-xs bg-green-500 text-white px-2 py-1 rounded">Resolved</span>
+                            <span className="text-xs bg-green-500 text-white px-2 py-1 rounded">
+                              Resolved
+                            </span>
                           ) : (
                             <button
                               onClick={() => handleResolveEvent(event.id)}
@@ -475,13 +614,19 @@ export default function SecurityCenterPage() {
                         type="text"
                         placeholder="Search by user, IP, or action..."
                         value={searchQuery}
-                        onChange={(e) => { setSearchQuery(e.target.value); setLogsPage(1) }}
+                        onChange={e => {
+                          setSearchQuery(e.target.value)
+                          setLogsPage(1)
+                        }}
                         className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
                     <select
                       value={logStatusFilter}
-                      onChange={(e) => { setLogStatusFilter(e.target.value); setLogsPage(1) }}
+                      onChange={e => {
+                        setLogStatusFilter(e.target.value)
+                        setLogsPage(1)
+                      }}
                       className="px-4 py-2 border border-gray-200 rounded-lg"
                     >
                       <option value="all">All Status</option>
@@ -491,7 +636,10 @@ export default function SecurityCenterPage() {
                     </select>
                     <select
                       value={timeRange}
-                      onChange={(e) => { setTimeRange(e.target.value); setLogsPage(1) }}
+                      onChange={e => {
+                        setTimeRange(e.target.value)
+                        setLogsPage(1)
+                      }}
                       className="px-4 py-2 border border-gray-200 rounded-lg"
                     >
                       <option value="24h">Last 24 Hours</option>
@@ -506,22 +654,38 @@ export default function SecurityCenterPage() {
                     <table className="w-full">
                       <thead className="bg-gray-50 border-b border-gray-200">
                         <tr>
-                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
-                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">User</th>
-                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Action</th>
-                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">IP Address</th>
-                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Location</th>
-                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Device</th>
-                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Time</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">
+                            Status
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">
+                            User
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">
+                            Action
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">
+                            IP Address
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">
+                            Location
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">
+                            Device
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">
+                            Time
+                          </th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
                         {logs.length === 0 ? (
                           <tr>
-                            <td colSpan={7} className="px-6 py-12 text-center text-gray-400">No access logs found</td>
+                            <td colSpan={7} className="px-6 py-12 text-center text-gray-400">
+                              No access logs found
+                            </td>
                           </tr>
                         ) : (
-                          logs.map((log) => (
+                          logs.map(log => (
                             <tr key={log.id} className="hover:bg-gray-50">
                               <td className="px-6 py-4">{getStatusIcon(log.status)}</td>
                               <td className="px-6 py-4">
@@ -531,10 +695,19 @@ export default function SecurityCenterPage() {
                                 </div>
                               </td>
                               <td className="px-6 py-4 font-medium">{log.action}</td>
-                              <td className="px-6 py-4 text-sm text-gray-900 font-mono">{log.ipAddress}</td>
+                              <td className="px-6 py-4 text-sm text-gray-900 font-mono">
+                                {log.ipAddress}
+                              </td>
                               <td className="px-6 py-4 text-sm text-gray-600">{log.location}</td>
-                              <td className="px-6 py-4 text-sm text-gray-600 max-w-[200px] truncate" title={log.device}>{log.device}</td>
-                              <td className="px-6 py-4 text-sm text-gray-600">{new Date(log.timestamp).toLocaleString()}</td>
+                              <td
+                                className="px-6 py-4 text-sm text-gray-600 max-w-[200px] truncate"
+                                title={log.device}
+                              >
+                                {log.device}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-600">
+                                {new Date(log.timestamp).toLocaleString()}
+                              </td>
                             </tr>
                           ))
                         )}
@@ -552,7 +725,9 @@ export default function SecurityCenterPage() {
                         >
                           Previous
                         </button>
-                        <span className="text-sm text-gray-600">Page {logsPage} of {logsPages}</span>
+                        <span className="text-sm text-gray-600">
+                          Page {logsPage} of {logsPages}
+                        </span>
                         <button
                           disabled={logsPage >= logsPages}
                           onClick={() => setLogsPage(p => Math.min(logsPages, p + 1))}
@@ -574,7 +749,10 @@ export default function SecurityCenterPage() {
                   {['all', 'low', 'medium', 'high', 'critical'].map(s => (
                     <button
                       key={s}
-                      onClick={() => { setEventSeverityFilter(s); setEventsPage(1) }}
+                      onClick={() => {
+                        setEventSeverityFilter(s)
+                        setEventsPage(1)
+                      }}
                       className={`px-4 py-2 text-sm rounded-lg font-medium transition ${
                         eventSeverityFilter === s
                           ? 'bg-red-600 text-white'
@@ -593,32 +771,55 @@ export default function SecurityCenterPage() {
                     <p className="text-gray-500">No security events match the current filter</p>
                   </div>
                 ) : (
-                  events.map((event) => (
+                  events.map(event => (
                     <div key={event.id} className="bg-white rounded-xl shadow-sm p-6">
                       <div className="flex items-start justify-between">
                         <div className="flex items-start space-x-4">
-                          <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
-                            event.severity === 'critical' ? 'bg-red-100' :
-                            event.severity === 'high' ? 'bg-orange-100' :
-                            event.severity === 'medium' ? 'bg-yellow-100' : 'bg-blue-100'
-                          }`}>
-                            <AlertTriangle className={`w-6 h-6 ${
-                              event.severity === 'critical' ? 'text-red-600' :
-                              event.severity === 'high' ? 'text-orange-600' :
-                              event.severity === 'medium' ? 'text-yellow-600' : 'text-blue-600'
-                            }`} />
+                          <div
+                            className={`w-12 h-12 rounded-lg flex items-center justify-center ${
+                              event.severity === 'critical'
+                                ? 'bg-red-100'
+                                : event.severity === 'high'
+                                  ? 'bg-orange-100'
+                                  : event.severity === 'medium'
+                                    ? 'bg-yellow-100'
+                                    : 'bg-blue-100'
+                            }`}
+                          >
+                            <AlertTriangle
+                              className={`w-6 h-6 ${
+                                event.severity === 'critical'
+                                  ? 'text-red-600'
+                                  : event.severity === 'high'
+                                    ? 'text-orange-600'
+                                    : event.severity === 'medium'
+                                      ? 'text-yellow-600'
+                                      : 'text-blue-600'
+                              }`}
+                            />
                           </div>
                           <div>
                             <div className="flex items-center space-x-3 mb-2">
                               <h3 className="text-lg font-bold">{event.description}</h3>
-                              <span className={`px-3 py-1 text-xs font-semibold rounded-full border ${SEVERITY_COLORS[event.severity] || ''}`}>
+                              <span
+                                className={`px-3 py-1 text-xs font-semibold rounded-full border ${SEVERITY_COLORS[event.severity] || ''}`}
+                              >
                                 {event.severity.toUpperCase()}
                               </span>
                             </div>
                             <div className="flex items-center space-x-4 text-sm text-gray-600">
-                              <span className="flex items-center"><Users className="w-4 h-4 mr-1" />{event.user}</span>
-                              <span className="flex items-center"><Clock className="w-4 h-4 mr-1" />{new Date(event.timestamp).toLocaleString()}</span>
-                              <span className="flex items-center"><Shield className="w-4 h-4 mr-1" />{event.type.replace(/_/g, ' ').toUpperCase()}</span>
+                              <span className="flex items-center">
+                                <Users className="w-4 h-4 mr-1" />
+                                {event.user}
+                              </span>
+                              <span className="flex items-center">
+                                <Clock className="w-4 h-4 mr-1" />
+                                {new Date(event.timestamp).toLocaleString()}
+                              </span>
+                              <span className="flex items-center">
+                                <Shield className="w-4 h-4 mr-1" />
+                                {event.type.replace(/_/g, ' ').toUpperCase()}
+                              </span>
                               {event.ip_address && (
                                 <span className="font-mono text-xs">{event.ip_address}</span>
                               )}
@@ -653,7 +854,9 @@ export default function SecurityCenterPage() {
                     >
                       Previous
                     </button>
-                    <span className="text-sm text-gray-600">Page {eventsPage} of {eventsPages}</span>
+                    <span className="text-sm text-gray-600">
+                      Page {eventsPage} of {eventsPages}
+                    </span>
                     <button
                       disabled={eventsPage >= eventsPages}
                       onClick={() => setEventsPage(p => Math.min(eventsPages, p + 1))}
@@ -670,7 +873,7 @@ export default function SecurityCenterPage() {
             {activeTab === 'diagnostics' && (
               <div className="space-y-6">
                 <div className="grid md:grid-cols-3 gap-6">
-                  {systemMetrics.map((metric) => (
+                  {systemMetrics.map(metric => (
                     <div key={metric.name} className="bg-white rounded-xl shadow-sm p-6">
                       <div className="flex items-center justify-between mb-3">
                         <h4 className="font-semibold text-gray-700">{metric.name}</h4>
@@ -682,20 +885,34 @@ export default function SecurityCenterPage() {
                       </div>
                       <div className="flex items-end space-x-2">
                         <h3 className={`text-3xl font-bold ${getMetricStatusColor(metric.status)}`}>
-                          {metric.value}{metric.name.includes('Usage') ? '%' : metric.name.includes('Time') ? 'ms' : ''}
+                          {metric.value}
+                          {metric.name.includes('Usage')
+                            ? '%'
+                            : metric.name.includes('Time')
+                              ? 'ms'
+                              : ''}
                         </h3>
-                        <span className={`text-sm mb-1 ${metric.change > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                          {metric.change > 0 ? '+' : ''}{metric.change}{metric.name.includes('Usage') ? '%' : ''}
+                        <span
+                          className={`text-sm mb-1 ${metric.change > 0 ? 'text-red-600' : 'text-green-600'}`}
+                        >
+                          {metric.change > 0 ? '+' : ''}
+                          {metric.change}
+                          {metric.name.includes('Usage') ? '%' : ''}
                         </span>
                       </div>
                       <div className="mt-3">
                         <div className="w-full bg-gray-200 rounded-full h-2">
                           <div
                             className={`h-2 rounded-full ${
-                              metric.status === 'healthy' ? 'bg-green-600' :
-                              metric.status === 'warning' ? 'bg-yellow-600' : 'bg-red-600'
+                              metric.status === 'healthy'
+                                ? 'bg-green-600'
+                                : metric.status === 'warning'
+                                  ? 'bg-yellow-600'
+                                  : 'bg-red-600'
                             }`}
-                            style={{ width: `${metric.name.includes('Usage') ? metric.value : Math.min(metric.value / 2, 100)}%` }}
+                            style={{
+                              width: `${metric.name.includes('Usage') ? metric.value : Math.min(metric.value / 2, 100)}%`,
+                            }}
                           />
                         </div>
                       </div>
@@ -712,9 +929,27 @@ export default function SecurityCenterPage() {
                       <YAxis />
                       <Tooltip />
                       <Legend />
-                      <Line type="monotone" dataKey="cpu" stroke="#3b82f6" strokeWidth={2} name="CPU %" />
-                      <Line type="monotone" dataKey="memory" stroke="#ef4444" strokeWidth={2} name="Memory %" />
-                      <Line type="monotone" dataKey="db" stroke="#10b981" strokeWidth={2} name="DB Connections" />
+                      <Line
+                        type="monotone"
+                        dataKey="cpu"
+                        stroke="#3b82f6"
+                        strokeWidth={2}
+                        name="CPU %"
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="memory"
+                        stroke="#ef4444"
+                        strokeWidth={2}
+                        name="Memory %"
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="db"
+                        stroke="#10b981"
+                        strokeWidth={2}
+                        name="DB Connections"
+                      />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -722,8 +957,11 @@ export default function SecurityCenterPage() {
                 <div className="bg-white rounded-xl shadow-sm p-6">
                   <h3 className="text-lg font-bold mb-4">Service Status</h3>
                   <div className="grid md:grid-cols-2 gap-4">
-                    {serviceStatus.map((service) => (
-                      <div key={service.name} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                    {serviceStatus.map(service => (
+                      <div
+                        key={service.name}
+                        className="flex items-center justify-between p-4 border border-gray-200 rounded-lg"
+                      >
                         <div className="flex items-center space-x-3">
                           {service.status === 'operational' ? (
                             <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
@@ -735,9 +973,13 @@ export default function SecurityCenterPage() {
                             <p className="text-sm text-gray-600">Latency: {service.latency}</p>
                           </div>
                         </div>
-                        <span className={`text-xs font-semibold px-3 py-1 rounded-full ${
-                          service.status === 'operational' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                        }`}>
+                        <span
+                          className={`text-xs font-semibold px-3 py-1 rounded-full ${
+                            service.status === 'operational'
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-yellow-100 text-yellow-800'
+                          }`}
+                        >
                           {service.status.toUpperCase()}
                         </span>
                       </div>
@@ -770,14 +1012,14 @@ export default function SecurityCenterPage() {
                           type="text"
                           placeholder="IP address (e.g. 192.168.1.1)"
                           value={newBlockIP}
-                          onChange={(e) => setNewBlockIP(e.target.value)}
+                          onChange={e => setNewBlockIP(e.target.value)}
                           className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
                         />
                         <input
                           type="text"
                           placeholder="Reason for blocking"
                           value={newBlockReason}
-                          onChange={(e) => setNewBlockReason(e.target.value)}
+                          onChange={e => setNewBlockReason(e.target.value)}
                           className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
                         />
                         <button
@@ -798,8 +1040,11 @@ export default function SecurityCenterPage() {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {blockedIPs.map((ip) => (
-                        <div key={ip.ip} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:shadow-md transition">
+                      {blockedIPs.map(ip => (
+                        <div
+                          key={ip.ip}
+                          className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:shadow-md transition"
+                        >
                           <div className="flex items-center space-x-4">
                             <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
                               <Lock className="w-6 h-6 text-red-600" />
@@ -834,18 +1079,38 @@ export default function SecurityCenterPage() {
                   <h3 className="text-lg font-bold mb-4">Auto-Block Rules</h3>
                   <div className="space-y-3">
                     {[
-                      { rule: 'Failed login attempts', threshold: '5 attempts in 10 minutes', enabled: true },
+                      {
+                        rule: 'Failed login attempts',
+                        threshold: '5 attempts in 10 minutes',
+                        enabled: true,
+                      },
                       { rule: 'SQL injection detection', threshold: 'Any attempt', enabled: true },
-                      { rule: 'Suspicious user agent', threshold: 'Known bot patterns', enabled: true },
-                      { rule: 'Rate limiting', threshold: '100 requests per minute', enabled: false },
+                      {
+                        rule: 'Suspicious user agent',
+                        threshold: 'Known bot patterns',
+                        enabled: true,
+                      },
+                      {
+                        rule: 'Rate limiting',
+                        threshold: '100 requests per minute',
+                        enabled: false,
+                      },
                     ].map((rule, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-4 border border-gray-200 rounded-lg"
+                      >
                         <div>
                           <h4 className="font-semibold">{rule.rule}</h4>
                           <p className="text-sm text-gray-600">Threshold: {rule.threshold}</p>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer">
-                          <input type="checkbox" checked={rule.enabled} className="sr-only peer" readOnly />
+                          <input
+                            type="checkbox"
+                            checked={rule.enabled}
+                            className="sr-only peer"
+                            readOnly
+                          />
                           <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                         </label>
                       </div>

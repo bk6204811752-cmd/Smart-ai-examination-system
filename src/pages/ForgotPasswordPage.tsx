@@ -4,8 +4,16 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { authAPI } from '../lib/api'
 import { toast } from 'sonner'
 import {
-  GraduationCap, Mail, Lock, Eye, EyeOff,
-  ArrowLeft, Sparkles, KeyRound, CheckCircle, Smartphone
+  GraduationCap,
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  ArrowLeft,
+  Sparkles,
+  KeyRound,
+  CheckCircle,
+  Smartphone,
 } from 'lucide-react'
 
 const OTP_COUNTDOWN = 60
@@ -23,7 +31,6 @@ export default function ForgotPasswordPage() {
 
   const [otp, setOtp] = useState(['', '', '', '', '', ''])
   const [otpResendTimer, setOtpResendTimer] = useState(0)
-  const [otpVerifying, setOtpVerifying] = useState(false)
   const otpRefs = useRef<(HTMLInputElement | null)[]>([])
 
   const [newPassword, setNewPassword] = useState('')
@@ -39,7 +46,10 @@ export default function ForgotPasswordPage() {
     setOtpResendTimer(OTP_COUNTDOWN)
     const interval = setInterval(() => {
       setOtpResendTimer(prev => {
-        if (prev <= 1) { clearInterval(interval); return 0 }
+        if (prev <= 1) {
+          clearInterval(interval)
+          return 0
+        }
         return prev - 1
       })
     }, 1000)
@@ -63,8 +73,14 @@ export default function ForgotPasswordPage() {
   const handleSendOTP = async () => {
     setEmailError('')
     const normalizedEmail = email.trim().toLowerCase()
-    if (!normalizedEmail) { setEmailError('Email is required'); return }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) { setEmailError('Enter a valid email address'); return }
+    if (!normalizedEmail) {
+      setEmailError('Email is required')
+      return
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      setEmailError('Enter a valid email address')
+      return
+    }
 
     setIsSending(true)
     try {
@@ -72,7 +88,8 @@ export default function ForgotPasswordPage() {
       setIsSandbox(!!response.is_sandbox)
       if (response.is_sandbox) {
         toast.warning('📬 [Sandbox Mode] SMTP not configured. Use OTP: 123456', {
-          description: 'Check backend terminal logs for the actual generated OTP, or use 123456 as bypass.',
+          description:
+            'Check backend terminal logs for the actual generated OTP, or use 123456 as bypass.',
           duration: 10000,
         })
       } else {
@@ -99,7 +116,8 @@ export default function ForgotPasswordPage() {
       setIsSandbox(!!response.is_sandbox)
       if (response.is_sandbox) {
         toast.warning('📬 [Sandbox Mode] SMTP not configured. Use OTP: 123456', {
-          description: 'Check backend terminal logs for the actual generated OTP, or use 123456 as bypass.',
+          description:
+            'Check backend terminal logs for the actual generated OTP, or use 123456 as bypass.',
           duration: 10000,
         })
       } else {
@@ -167,7 +185,10 @@ export default function ForgotPasswordPage() {
   const strengthColor = ['', 'bg-red-500', 'bg-amber-500', 'bg-blue-500', 'bg-green-500'][strength]
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
+    <div
+      className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4"
+      style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
+    >
       {/* Background orbs */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <motion.div
@@ -222,27 +243,39 @@ export default function ForgotPasswordPage() {
               <div className="flex items-center gap-2 mb-4">
                 {[0, 1, 2].map(i => (
                   <div key={i} className="flex items-center gap-2">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                      i < step ? 'bg-green-500 text-white' :
-                      i === step ? 'bg-indigo-600 text-white' :
-                      'bg-gray-100 text-gray-400'
-                    }`}>
+                    <div
+                      className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                        i < step
+                          ? 'bg-green-500 text-white'
+                          : i === step
+                            ? 'bg-indigo-600 text-white'
+                            : 'bg-gray-100 text-gray-400'
+                      }`}
+                    >
                       {i < step ? <CheckCircle className="w-4 h-4" /> : i + 1}
                     </div>
-                    {i < 2 && <div className={`w-8 h-0.5 rounded transition-all ${i < step ? 'bg-green-400' : 'bg-gray-200'}`} />}
+                    {i < 2 && (
+                      <div
+                        className={`w-8 h-0.5 rounded transition-all ${i < step ? 'bg-green-400' : 'bg-gray-200'}`}
+                      />
+                    )}
                   </div>
                 ))}
               </div>
 
               <h2 className="text-2xl font-black text-gray-900 mb-1">
-                {step === 0 ? 'Forgot Your Password?' :
-                 step === 1 ? 'Enter the OTP' :
-                 'Set New Password'}
+                {step === 0
+                  ? 'Forgot Your Password?'
+                  : step === 1
+                    ? 'Enter the OTP'
+                    : 'Set New Password'}
               </h2>
               <p className="text-gray-400 text-sm">
-                {step === 0 ? "Enter your registered email and we'll send an OTP." :
-                 step === 1 ? `OTP sent to ${email}` :
-                 'Choose a strong new password.'}
+                {step === 0
+                  ? "Enter your registered email and we'll send an OTP."
+                  : step === 1
+                    ? `OTP sent to ${email}`
+                    : 'Choose a strong new password.'}
               </p>
             </div>
 
@@ -250,14 +283,19 @@ export default function ForgotPasswordPage() {
             {step === 0 && (
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Email Address
+                  </label>
                   <div className="relative">
                     <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
                       id="forgot-email"
                       type="email"
                       value={email}
-                      onChange={e => { setEmail(e.target.value); setEmailError('') }}
+                      onChange={e => {
+                        setEmail(e.target.value)
+                        setEmailError('')
+                      }}
                       onKeyDown={e => e.key === 'Enter' && handleSendOTP()}
                       className={`w-full pl-10 pr-4 py-3.5 border-2 rounded-xl text-sm transition-all outline-none ${
                         emailError
@@ -269,7 +307,9 @@ export default function ForgotPasswordPage() {
                       autoFocus
                     />
                   </div>
-                  {emailError && <p className="mt-1.5 text-xs text-red-500 font-medium">{emailError}</p>}
+                  {emailError && (
+                    <p className="mt-1.5 text-xs text-red-500 font-medium">{emailError}</p>
+                  )}
                 </div>
 
                 <motion.button
@@ -302,13 +342,15 @@ export default function ForgotPasswordPage() {
                     <Smartphone className="w-8 h-8 text-indigo-600" />
                   </div>
                   <p className="text-sm text-gray-500 mb-2">
-                    Enter the 6-digit code sent to<br />
+                    Enter the 6-digit code sent to
+                    <br />
                     <span className="font-semibold text-gray-700">{email}</span>
                   </p>
                   {isSandbox && (
                     <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-left mb-4 mt-2">
                       <p className="text-xs text-amber-800 leading-relaxed">
-                        ⚠️ <strong>Sandbox Mode:</strong> Email service is inactive/unconfigured. Please use the dummy OTP code below to verify:
+                        ⚠️ <strong>Sandbox Mode:</strong> Email service is inactive/unconfigured.
+                        Please use the dummy OTP code below to verify:
                       </p>
                       <div className="mt-1.5 text-center font-mono font-bold text-base text-amber-700 bg-amber-100/50 py-1 rounded">
                         123456
@@ -322,7 +364,9 @@ export default function ForgotPasswordPage() {
                   {otp.map((digit, i) => (
                     <input
                       key={i}
-                      ref={el => { otpRefs.current[i] = el }}
+                      ref={el => {
+                        otpRefs.current[i] = el
+                      }}
                       type="text"
                       inputMode="numeric"
                       maxLength={1}
@@ -342,7 +386,8 @@ export default function ForgotPasswordPage() {
                 <div className="text-center">
                   {otpResendTimer > 0 ? (
                     <p className="text-sm text-gray-400">
-                      Resend code in <span className="font-semibold text-gray-600">{otpResendTimer}s</span>
+                      Resend code in{' '}
+                      <span className="font-semibold text-gray-600">{otpResendTimer}s</span>
                     </p>
                   ) : (
                     <button
@@ -373,14 +418,19 @@ export default function ForgotPasswordPage() {
               <div className="space-y-4">
                 {/* New password */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">New Password</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    New Password
+                  </label>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
                       id="new-password"
                       type={showNewPwd ? 'text' : 'password'}
                       value={newPassword}
-                      onChange={e => { setNewPassword(e.target.value); setPwdErrors(p => ({ ...p, newPassword: '' })) }}
+                      onChange={e => {
+                        setNewPassword(e.target.value)
+                        setPwdErrors(p => ({ ...p, newPassword: '' }))
+                      }}
                       className={`w-full pl-10 pr-12 py-3.5 border-2 rounded-xl text-sm transition-all outline-none ${
                         pwdErrors.newPassword
                           ? 'border-red-300 bg-red-50 focus:border-red-400'
@@ -402,33 +452,55 @@ export default function ForgotPasswordPage() {
                     <div className="mt-2 flex items-center gap-2">
                       <div className="flex-1 flex gap-1">
                         {[1, 2, 3, 4].map(i => (
-                          <div key={i} className={`flex-1 h-1.5 rounded-full transition-all ${i <= strength ? strengthColor : 'bg-gray-200'}`} />
+                          <div
+                            key={i}
+                            className={`flex-1 h-1.5 rounded-full transition-all ${i <= strength ? strengthColor : 'bg-gray-200'}`}
+                          />
                         ))}
                       </div>
-                      <span className={`text-xs font-medium ${
-                        strength <= 1 ? 'text-red-500' : strength === 2 ? 'text-amber-500' : strength === 3 ? 'text-blue-500' : 'text-green-500'
-                      }`}>{strengthLabel}</span>
+                      <span
+                        className={`text-xs font-medium ${
+                          strength <= 1
+                            ? 'text-red-500'
+                            : strength === 2
+                              ? 'text-amber-500'
+                              : strength === 3
+                                ? 'text-blue-500'
+                                : 'text-green-500'
+                        }`}
+                      >
+                        {strengthLabel}
+                      </span>
                     </div>
                   )}
-                  {pwdErrors.newPassword && <p className="mt-1.5 text-xs text-red-500 font-medium">{pwdErrors.newPassword}</p>}
+                  {pwdErrors.newPassword && (
+                    <p className="mt-1.5 text-xs text-red-500 font-medium">
+                      {pwdErrors.newPassword}
+                    </p>
+                  )}
                 </div>
 
                 {/* Confirm password */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Confirm Password</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Confirm Password
+                  </label>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
                       id="confirm-password"
                       type={showConfirmPwd ? 'text' : 'password'}
                       value={confirmPassword}
-                      onChange={e => { setConfirmPassword(e.target.value); setPwdErrors(p => ({ ...p, confirmPassword: '' })) }}
+                      onChange={e => {
+                        setConfirmPassword(e.target.value)
+                        setPwdErrors(p => ({ ...p, confirmPassword: '' }))
+                      }}
                       className={`w-full pl-10 pr-12 py-3.5 border-2 rounded-xl text-sm transition-all outline-none ${
                         pwdErrors.confirmPassword
                           ? 'border-red-300 bg-red-50 focus:border-red-400'
                           : confirmPassword && confirmPassword === newPassword
-                          ? 'border-green-400 bg-green-50 focus:border-green-500'
-                          : 'border-gray-200 bg-gray-50 focus:border-indigo-500 focus:bg-white'
+                            ? 'border-green-400 bg-green-50 focus:border-green-500'
+                            : 'border-gray-200 bg-gray-50 focus:border-indigo-500 focus:bg-white'
                       }`}
                       placeholder="Repeat your new password"
                       autoComplete="new-password"
@@ -438,10 +510,18 @@ export default function ForgotPasswordPage() {
                       onClick={() => setShowConfirmPwd(!showConfirmPwd)}
                       className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                     >
-                      {showConfirmPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      {showConfirmPwd ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
                     </button>
                   </div>
-                  {pwdErrors.confirmPassword && <p className="mt-1.5 text-xs text-red-500 font-medium">{pwdErrors.confirmPassword}</p>}
+                  {pwdErrors.confirmPassword && (
+                    <p className="mt-1.5 text-xs text-red-500 font-medium">
+                      {pwdErrors.confirmPassword}
+                    </p>
+                  )}
                 </div>
 
                 {/* Password rules hint */}
@@ -454,7 +534,10 @@ export default function ForgotPasswordPage() {
                       ['One number (0-9)', /[0-9]/.test(newPassword)],
                       ['One special character (!@#...)', /[^A-Za-z0-9]/.test(newPassword)],
                     ].map(([text, met]) => (
-                      <li key={text as string} className={`flex items-center gap-1.5 ${met ? 'text-green-600' : ''}`}>
+                      <li
+                        key={text as string}
+                        className={`flex items-center gap-1.5 ${met ? 'text-green-600' : ''}`}
+                      >
                         <span>{met ? '✓' : '○'}</span> {text as string}
                       </li>
                     ))}
@@ -487,7 +570,10 @@ export default function ForgotPasswordPage() {
 
         <p className="text-center text-sm text-gray-400 mt-6">
           Remember your password?{' '}
-          <Link to="/login" className="text-blue-600 font-semibold hover:text-blue-700 transition-colors">
+          <Link
+            to="/login"
+            className="text-blue-600 font-semibold hover:text-blue-700 transition-colors"
+          >
             Sign in
           </Link>
         </p>

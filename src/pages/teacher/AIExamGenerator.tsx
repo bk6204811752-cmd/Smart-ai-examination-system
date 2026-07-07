@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { smartExamAPI } from '../../lib/advancedAPIs'
-import { Brain, Sparkles, Target, Clock, BarChart3, TrendingUp, CheckCircle, AlertCircle } from 'lucide-react'
+import { Brain, Sparkles, Target, BarChart3, CheckCircle } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface ExamBlueprint {
@@ -18,8 +18,6 @@ interface ExamBlueprint {
 export default function AIExamGenerator() {
   const [generating, setGenerating] = useState(false)
   const [blueprint, setBlueprint] = useState<ExamBlueprint | null>(null)
-  const [generatedExam, setGeneratedExam] = useState<any>(null)
-
   const [config, setConfig] = useState({
     title: '',
     subject: '',
@@ -28,7 +26,7 @@ export default function AIExamGenerator() {
     duration: 90,
     difficulty_level: 'medium' as 'easy' | 'medium' | 'hard',
     bloom_focus: [] as string[],
-    target_pass_rate: 0.70
+    target_pass_rate: 0.7,
   })
 
   const [topicInput, setTopicInput] = useState('')
@@ -39,7 +37,7 @@ export default function AIExamGenerator() {
     { value: 'application', label: 'Application', desc: 'Apply knowledge' },
     { value: 'analysis', label: 'Analysis', desc: 'Analyze information' },
     { value: 'synthesis', label: 'Synthesis', desc: 'Create new ideas' },
-    { value: 'evaluation', label: 'Evaluation', desc: 'Make judgments' }
+    { value: 'evaluation', label: 'Evaluation', desc: 'Make judgments' },
   ]
 
   const handleAddTopic = () => {
@@ -58,7 +56,7 @@ export default function AIExamGenerator() {
       ...config,
       bloom_focus: config.bloom_focus.includes(level)
         ? config.bloom_focus.filter(l => l !== level)
-        : [...config.bloom_focus, level]
+        : [...config.bloom_focus, level],
     })
   }
 
@@ -118,7 +116,7 @@ export default function AIExamGenerator() {
                     <input
                       type="text"
                       value={config.title}
-                      onChange={(e) => setConfig({ ...config, title: e.target.value })}
+                      onChange={e => setConfig({ ...config, title: e.target.value })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       placeholder="e.g., Mid-Term Examination"
                     />
@@ -130,7 +128,7 @@ export default function AIExamGenerator() {
                     <input
                       type="text"
                       value={config.subject}
-                      onChange={(e) => setConfig({ ...config, subject: e.target.value })}
+                      onChange={e => setConfig({ ...config, subject: e.target.value })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       placeholder="e.g., Computer Science"
                     />
@@ -146,8 +144,8 @@ export default function AIExamGenerator() {
                     <input
                       type="text"
                       value={topicInput}
-                      onChange={(e) => setTopicInput(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && handleAddTopic()}
+                      onChange={e => setTopicInput(e.target.value)}
+                      onKeyPress={e => e.key === 'Enter' && handleAddTopic()}
                       className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       placeholder="Add topic and press Enter"
                     />
@@ -159,7 +157,7 @@ export default function AIExamGenerator() {
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {config.topics.map((topic) => (
+                    {config.topics.map(topic => (
                       <span
                         key={topic}
                         className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm flex items-center gap-2"
@@ -185,7 +183,9 @@ export default function AIExamGenerator() {
                     <input
                       type="number"
                       value={config.num_questions}
-                      onChange={(e) => setConfig({ ...config, num_questions: parseInt(e.target.value) })}
+                      onChange={e =>
+                        setConfig({ ...config, num_questions: parseInt(e.target.value) })
+                      }
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       min="5"
                       max="100"
@@ -198,7 +198,7 @@ export default function AIExamGenerator() {
                     <input
                       type="number"
                       value={config.duration}
-                      onChange={(e) => setConfig({ ...config, duration: parseInt(e.target.value) })}
+                      onChange={e => setConfig({ ...config, duration: parseInt(e.target.value) })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       min="15"
                       max="300"
@@ -210,7 +210,9 @@ export default function AIExamGenerator() {
                     </label>
                     <select
                       value={config.difficulty_level}
-                      onChange={(e) => setConfig({ ...config, difficulty_level: e.target.value as any })}
+                      onChange={e =>
+                        setConfig({ ...config, difficulty_level: e.target.value as any })
+                      }
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     >
                       <option value="easy">Easy</option>
@@ -228,7 +230,9 @@ export default function AIExamGenerator() {
                   <input
                     type="range"
                     value={config.target_pass_rate}
-                    onChange={(e) => setConfig({ ...config, target_pass_rate: parseFloat(e.target.value) })}
+                    onChange={e =>
+                      setConfig({ ...config, target_pass_rate: parseFloat(e.target.value) })
+                    }
                     min="0.4"
                     max="0.9"
                     step="0.05"
@@ -247,7 +251,7 @@ export default function AIExamGenerator() {
                     Bloom's Taxonomy Focus (Optional)
                   </label>
                   <div className="grid grid-cols-2 gap-3">
-                    {bloomLevels.map((level) => (
+                    {bloomLevels.map(level => (
                       <button
                         key={level.value}
                         onClick={() => toggleBloomFocus(level.value)}
@@ -296,7 +300,9 @@ export default function AIExamGenerator() {
                     <h3 className="font-medium">Quality Score</h3>
                     <Target className="w-5 h-5" />
                   </div>
-                  <div className="text-5xl font-bold mb-2">{blueprint.quality_score.toFixed(1)}</div>
+                  <div className="text-5xl font-bold mb-2">
+                    {blueprint.quality_score.toFixed(1)}
+                  </div>
                   <div className="text-sm opacity-90">Out of 100</div>
                   <div className="mt-4 bg-white/20 rounded-full h-2">
                     <div
@@ -323,7 +329,9 @@ export default function AIExamGenerator() {
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-600">Duration</span>
-                      <span className="font-bold text-gray-900">{blueprint.estimated_duration} min</span>
+                      <span className="font-bold text-gray-900">
+                        {blueprint.estimated_duration} min
+                      </span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-600">Pass Rate</span>
@@ -354,20 +362,22 @@ export default function AIExamGenerator() {
                 <div className="bg-white rounded-xl shadow-lg p-6">
                   <h3 className="font-bold text-gray-900 mb-4">Difficulty Distribution</h3>
                   <div className="space-y-2">
-                    {Object.entries(blueprint.difficulty_distribution).map(([level, percentage]) => (
-                      <div key={level}>
-                        <div className="flex justify-between text-xs mb-1">
-                          <span className="capitalize text-gray-600">{level}</span>
-                          <span className="font-medium text-gray-900">{percentage}%</span>
+                    {Object.entries(blueprint.difficulty_distribution).map(
+                      ([level, percentage]) => (
+                        <div key={level}>
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="capitalize text-gray-600">{level}</span>
+                            <span className="font-medium text-gray-900">{percentage}%</span>
+                          </div>
+                          <div className="bg-gray-200 rounded-full h-2">
+                            <div
+                              className="bg-purple-600 h-full rounded-full transition-all"
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
                         </div>
-                        <div className="bg-gray-200 rounded-full h-2">
-                          <div
-                            className="bg-purple-600 h-full rounded-full transition-all"
-                            style={{ width: `${percentage}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
+                      )
+                    )}
                   </div>
                 </div>
               </>

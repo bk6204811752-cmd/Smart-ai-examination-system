@@ -14,6 +14,7 @@ from typing import List, Optional
 from bson import ObjectId
 from datetime import datetime
 import httpx
+import hashlib
 
 from database import get_db
 from middleware.auth import require_admin
@@ -68,7 +69,7 @@ async def register_webhook(
         "name": data.name,
         "url": data.url,
         "events": data.events,
-        "secret": data.secret,
+        "secret_hash": hashlib.sha256(data.secret.encode()).hexdigest(),
         "active": data.active,
         "created_by": str(current_user["_id"]),
         "created_at": datetime.utcnow().isoformat(),
@@ -95,6 +96,10 @@ async def update_webhook(
     updates = {k: v for k, v in data.dict().items() if v is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="No updates provided")
+
+    # Hash the secret if it's being updated
+    if "secret" in updates:
+        updates["secret_hash"] = hashlib.sha256(updates.pop("secret").encode()).hexdigest()
 
     result = await db.webhooks.update_one({"_id": oid}, {"$set": updates})
     if result.matched_count == 0:

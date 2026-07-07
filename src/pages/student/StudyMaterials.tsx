@@ -1,9 +1,20 @@
 import { useState, useEffect } from 'react'
-import { useAuthStore } from '../../store/globalStore'
-import { 
-  BookOpen, Video, FileText, Download, Search, Filter, 
-  Star, BookmarkPlus, BookmarkCheck, Play, FileCode,
-  Brain, Clock, TrendingUp, Award, ChevronRight, X
+import {
+  BookOpen,
+  Video,
+  FileText,
+  Download,
+  Search,
+  Filter,
+  Star,
+  BookmarkPlus,
+  BookmarkCheck,
+  Play,
+  FileCode,
+  Brain,
+  Clock,
+  Award,
+  X,
 } from 'lucide-react'
 
 interface Material {
@@ -25,7 +36,6 @@ interface Material {
 }
 
 export default function StudyMaterialsPage() {
-  const { user } = useAuthStore()
   const [materials, setMaterials] = useState<Material[]>([])
   const [filteredMaterials, setFilteredMaterials] = useState<Material[]>([])
   const [searchQuery, setSearchQuery] = useState('')
@@ -42,6 +52,7 @@ export default function StudyMaterialsPage() {
 
   useEffect(() => {
     filterMaterials()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, selectedType, selectedSubject, selectedCategory, materials])
 
   const loadMaterials = async () => {
@@ -53,14 +64,15 @@ export default function StudyMaterialsPage() {
         type: 'document',
         subject: 'Data Structures',
         category: 'Notes',
-        description: 'Comprehensive notes covering arrays, linked lists, stacks, queues, trees, and graphs',
+        description:
+          'Comprehensive notes covering arrays, linked lists, stacks, queues, trees, and graphs',
         url: '/materials/ds-notes.pdf',
         downloads: 1234,
         rating: 4.8,
         bookmarked: false,
         tags: ['DSA', 'Algorithms', 'Trees', 'Graphs'],
         uploadedBy: 'Dr. Sharma',
-        uploadDate: '2024-10-15'
+        uploadDate: '2024-10-15',
       },
       {
         _id: '2',
@@ -77,7 +89,7 @@ export default function StudyMaterialsPage() {
         thumbnail: 'https://via.placeholder.com/300x169',
         tags: ['BST', 'Trees', 'Video'],
         uploadedBy: 'Prof. Kumar',
-        uploadDate: '2024-10-20'
+        uploadDate: '2024-10-20',
       },
       {
         _id: '3',
@@ -91,7 +103,7 @@ export default function StudyMaterialsPage() {
         bookmarked: true,
         tags: ['SQL', 'Queries', 'Practice'],
         uploadedBy: 'Dr. Patel',
-        uploadDate: '2024-10-18'
+        uploadDate: '2024-10-18',
       },
       {
         _id: '4',
@@ -105,7 +117,7 @@ export default function StudyMaterialsPage() {
         bookmarked: false,
         tags: ['Sorting', 'Algorithms', 'Flashcards'],
         uploadedBy: 'Prof. Singh',
-        uploadDate: '2024-10-22'
+        uploadDate: '2024-10-22',
       },
       {
         _id: '5',
@@ -120,7 +132,7 @@ export default function StudyMaterialsPage() {
         bookmarked: false,
         tags: ['React', 'Hooks', 'JavaScript'],
         uploadedBy: 'Dr. Verma',
-        uploadDate: '2024-10-25'
+        uploadDate: '2024-10-25',
       },
       {
         _id: '6',
@@ -135,7 +147,7 @@ export default function StudyMaterialsPage() {
         bookmarked: true,
         tags: ['Java', 'OOP', 'Programming'],
         uploadedBy: 'Prof. Gupta',
-        uploadDate: '2024-10-12'
+        uploadDate: '2024-10-12',
       },
       {
         _id: '7',
@@ -152,7 +164,7 @@ export default function StudyMaterialsPage() {
         thumbnail: 'https://via.placeholder.com/300x169',
         tags: ['Python', 'Data Science', 'NumPy', 'Pandas'],
         uploadedBy: 'Dr. Reddy',
-        uploadDate: '2024-10-28'
+        uploadDate: '2024-10-28',
       },
       {
         _id: '8',
@@ -166,8 +178,8 @@ export default function StudyMaterialsPage() {
         bookmarked: true,
         tags: ['OS', 'MCQ', 'Exam Prep'],
         uploadedBy: 'Prof. Joshi',
-        uploadDate: '2024-10-30'
-      }
+        uploadDate: '2024-10-30',
+      },
     ]
 
     setMaterials(mockMaterials)
@@ -180,10 +192,11 @@ export default function StudyMaterialsPage() {
 
     // Search filter
     if (searchQuery) {
-      filtered = filtered.filter(m => 
-        m.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        m.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        m.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
+      filtered = filtered.filter(
+        m =>
+          m.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          m.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          m.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
       )
     }
 
@@ -206,38 +219,50 @@ export default function StudyMaterialsPage() {
   }
 
   const toggleBookmark = (materialId: string) => {
-    setMaterials(materials.map(m => 
-      m._id === materialId ? { ...m, bookmarked: !m.bookmarked } : m
-    ))
+    setMaterials(
+      materials.map(m => (m._id === materialId ? { ...m, bookmarked: !m.bookmarked } : m))
+    )
   }
 
   const handleDownload = (material: Material) => {
     // Implement download logic
     console.log('Downloading:', material.title)
-    setMaterials(materials.map(m => 
-      m._id === material._id ? { ...m, downloads: m.downloads + 1 } : m
-    ))
+    setMaterials(
+      materials.map(m => (m._id === material._id ? { ...m, downloads: m.downloads + 1 } : m))
+    )
   }
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'document': return <FileText className="w-5 h-5" />
-      case 'video': return <Video className="w-5 h-5" />
-      case 'flashcard': return <Brain className="w-5 h-5" />
-      case 'quiz': return <Award className="w-5 h-5" />
-      case 'code': return <FileCode className="w-5 h-5" />
-      default: return <BookOpen className="w-5 h-5" />
+      case 'document':
+        return <FileText className="w-5 h-5" />
+      case 'video':
+        return <Video className="w-5 h-5" />
+      case 'flashcard':
+        return <Brain className="w-5 h-5" />
+      case 'quiz':
+        return <Award className="w-5 h-5" />
+      case 'code':
+        return <FileCode className="w-5 h-5" />
+      default:
+        return <BookOpen className="w-5 h-5" />
     }
   }
 
   const getTypeColor = (type: string) => {
     switch (type) {
-      case 'document': return 'bg-blue-100 text-blue-600'
-      case 'video': return 'bg-red-100 text-red-600'
-      case 'flashcard': return 'bg-purple-100 text-purple-600'
-      case 'quiz': return 'bg-green-100 text-green-600'
-      case 'code': return 'bg-orange-100 text-orange-600'
-      default: return 'bg-gray-100 text-gray-600'
+      case 'document':
+        return 'bg-blue-100 text-blue-600'
+      case 'video':
+        return 'bg-red-100 text-red-600'
+      case 'flashcard':
+        return 'bg-purple-100 text-purple-600'
+      case 'quiz':
+        return 'bg-green-100 text-green-600'
+      case 'code':
+        return 'bg-orange-100 text-orange-600'
+      default:
+        return 'bg-gray-100 text-gray-600'
     }
   }
 
@@ -249,7 +274,7 @@ export default function StudyMaterialsPage() {
     bookmarked: materials.filter(m => m.bookmarked).length,
     documents: materials.filter(m => m.type === 'document').length,
     videos: materials.filter(m => m.type === 'video').length,
-    quizzes: materials.filter(m => m.type === 'quiz').length
+    quizzes: materials.filter(m => m.type === 'quiz').length,
   }
 
   return (
@@ -311,7 +336,7 @@ export default function StudyMaterialsPage() {
               type="text"
               placeholder="Search materials by title, description, or tags..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={e => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
@@ -334,7 +359,7 @@ export default function StudyMaterialsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
                 <select
                   value={selectedType}
-                  onChange={(e) => setSelectedType(e.target.value)}
+                  onChange={e => setSelectedType(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="all">All Types</option>
@@ -349,7 +374,7 @@ export default function StudyMaterialsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Subject</label>
                 <select
                   value={selectedSubject}
-                  onChange={(e) => setSelectedSubject(e.target.value)}
+                  onChange={e => setSelectedSubject(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   {subjects.map(subject => (
@@ -363,7 +388,7 @@ export default function StudyMaterialsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
                 <select
                   value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  onChange={e => setSelectedCategory(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   {categories.map(category => (
@@ -404,7 +429,7 @@ export default function StudyMaterialsPage() {
           </div>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredMaterials.map((material) => (
+            {filteredMaterials.map(material => (
               <div
                 key={material._id}
                 className="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow overflow-hidden"
@@ -447,7 +472,9 @@ export default function StudyMaterialsPage() {
                   </div>
 
                   {/* Title & Description */}
-                  <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2">{material.title}</h3>
+                  <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2">
+                    {material.title}
+                  </h3>
                   <p className="text-sm text-gray-600 mb-3 line-clamp-2">{material.description}</p>
 
                   {/* Meta Info */}

@@ -1,18 +1,39 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useAuthStore } from '../store/globalStore'
 import { authAPI } from '../lib/api'
 import { toast } from 'sonner'
 import {
-  GraduationCap, Mail, Lock, Eye, EyeOff, User, BookOpen,
-  ChevronRight, Sparkles, Shield, CheckCircle, Building,
-  ArrowLeft, Camera, BarChart3, Smartphone
+  GraduationCap,
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  User,
+  BookOpen,
+  ChevronRight,
+  Sparkles,
+  Shield,
+  CheckCircle,
+  Building,
+  ArrowLeft,
+  Camera,
+  BarChart3,
+  Smartphone,
 } from 'lucide-react'
 
 const PROGRAMS = ['BCA', 'BBA', 'B.Tech', 'MBA', 'MCA', 'B.Sc', 'M.Sc', 'Other']
 const SEMESTERS = [1, 2, 3, 4, 5, 6, 7, 8]
-const DEPARTMENTS = ['Computer Science', 'Business Administration', 'Engineering', 'Medical Technology', 'Science', 'Arts', 'Commerce']
+const DEPARTMENTS = [
+  'Computer Science',
+  'Business Administration',
+  'Engineering',
+  'Medical Technology',
+  'Science',
+  'Arts',
+  'Commerce',
+]
 
 const BENEFITS = [
   { icon: Camera, text: 'AI Proctored Exams', desc: 'Real-time facial recognition monitoring' },
@@ -32,13 +53,13 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [confirmPassword, setConfirmPassword] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const [needsOTP, setNeedsOTP] = useState(false)
   const [registrationEmail, setRegistrationEmail] = useState('')
   const [otp, setOtp] = useState(['', '', '', '', '', ''])
   const [otpResendTimer, setOtpResendTimer] = useState(0)
   const [otpVerifying, setOtpVerifying] = useState(false)
-  const [otpSent, setOtpSent] = useState(false)
   const [isSandbox, setIsSandbox] = useState(false)
+  const [, setNeedsOTP] = useState(false)
+  const [, setOtpSent] = useState(false)
   const otpRefs = useRef<(HTMLInputElement | null)[]>([])
 
   const [formData, setFormData] = useState({
@@ -60,7 +81,8 @@ export default function RegisterPage() {
     const e: Record<string, string> = {}
     if (!formData.full_name.trim()) e.full_name = 'Full name is required'
     if (!formData.email.trim()) e.email = 'Email is required'
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) e.email = 'Enter a valid email address'
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
+      e.email = 'Enter a valid email address'
     if (!formData.password) e.password = 'Password is required'
     else if (formData.password.length < 8) e.password = 'Password must be at least 8 characters'
     if (!confirmPassword) e.confirmPassword = 'Please confirm your password'
@@ -140,7 +162,8 @@ export default function RegisterPage() {
       } else {
         toast.success('✅ Email verified successfully!', {
           duration: 6000,
-          description: 'Your account is pending admin approval. You will receive an email once approved.',
+          description:
+            'Your account is pending admin approval. You will receive an email once approved.',
         })
       }
       setTimeout(() => navigate('/login'), 3000)
@@ -169,7 +192,8 @@ export default function RegisterPage() {
           if (response.is_sandbox) {
             toast.warning('📬 [Sandbox Mode] SMTP not configured. Use OTP: 123456', {
               duration: 10000,
-              description: 'Check backend terminal logs for the actual generated OTP, or use 123456 as bypass.',
+              description:
+                'Check backend terminal logs for the actual generated OTP, or use 123456 as bypass.',
             })
           } else {
             toast.success('📧 OTP sent to your email!', {
@@ -241,12 +265,17 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
             <h2 className="text-4xl font-black text-white leading-tight mb-4">
               Join the Future of Academic Excellence
             </h2>
             <p className="text-blue-100/70 text-base leading-relaxed mb-10">
-              Create your PCMT account and access AI-powered exams, analytics, and adaptive learning tools.
+              Create your PCMT account and access AI-powered exams, analytics, and adaptive learning
+              tools.
             </p>
 
             <div className="space-y-4">
@@ -276,14 +305,22 @@ export default function RegisterPage() {
           <div className="flex items-center gap-3 mb-3">
             {STEPS.map((s, i) => (
               <div key={s} className="flex items-center gap-2">
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                  i < step ? 'bg-green-400 text-white' :
-                  i === step ? 'bg-white text-blue-700' :
-                  'bg-white/20 text-white/50'
-                }`}>
+                <div
+                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                    i < step
+                      ? 'bg-green-400 text-white'
+                      : i === step
+                        ? 'bg-white text-blue-700'
+                        : 'bg-white/20 text-white/50'
+                  }`}
+                >
                   {i < step ? <CheckCircle className="w-4 h-4" /> : i + 1}
                 </div>
-                <span className={`text-xs font-medium hidden sm:block ${i === step ? 'text-white' : 'text-white/50'}`}>{s}</span>
+                <span
+                  className={`text-xs font-medium hidden sm:block ${i === step ? 'text-white' : 'text-white/50'}`}
+                >
+                  {s}
+                </span>
                 {i < STEPS.length - 1 && <div className="w-8 h-px bg-white/20" />}
               </div>
             ))}
@@ -332,19 +369,29 @@ export default function RegisterPage() {
                 {step === 3 ? 'Verification' : STEPS[step]}
               </div>
               <h2 className="text-2xl font-black text-gray-900 mb-1">
-                {step === 0 ? 'Create Your Account' :
-                 step === 1 ? 'Academic Details' :
-                 step === 2 ? 'Review & Submit' :
-                 'Verify Your Email'}
+                {step === 0
+                  ? 'Create Your Account'
+                  : step === 1
+                    ? 'Academic Details'
+                    : step === 2
+                      ? 'Review & Submit'
+                      : 'Verify Your Email'}
               </h2>
               <p className="text-gray-400 text-sm">
-                {step === 0
-                  ? <>Already have an account? <Link to="/login" className="text-blue-600 font-semibold hover:text-blue-700">Sign in</Link></>
-                  : step === 1
-                  ? 'Tell us about your academic background'
-                  : step === 2
-                  ? 'Review your information before submitting'
-                  : 'Enter the verification code sent to your email'}
+                {step === 0 ? (
+                  <>
+                    Already have an account?{' '}
+                    <Link to="/login" className="text-blue-600 font-semibold hover:text-blue-700">
+                      Sign in
+                    </Link>
+                  </>
+                ) : step === 1 ? (
+                  'Tell us about your academic background'
+                ) : step === 2 ? (
+                  'Review your information before submitting'
+                ) : (
+                  'Enter the verification code sent to your email'
+                )}
               </p>
             </div>
 
@@ -371,7 +418,9 @@ export default function RegisterPage() {
 
                 {/* Full Name */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Full Name</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Full Name
+                  </label>
                   <div className="relative">
                     <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
@@ -387,12 +436,16 @@ export default function RegisterPage() {
                       autoComplete="name"
                     />
                   </div>
-                  {errors.full_name && <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.full_name}</p>}
+                  {errors.full_name && (
+                    <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.full_name}</p>
+                  )}
                 </div>
 
                 {/* Email */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Email Address
+                  </label>
                   <div className="relative">
                     <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
@@ -408,7 +461,9 @@ export default function RegisterPage() {
                       autoComplete="email"
                     />
                   </div>
-                  {errors.email && <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.email}</p>}
+                  {errors.email && (
+                    <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.email}</p>
+                  )}
                 </div>
 
                 {/* Password */}
@@ -441,32 +496,52 @@ export default function RegisterPage() {
                     <div className="mt-2 flex items-center gap-2">
                       <div className="flex-1 flex gap-1">
                         {[1, 2, 3, 4].map(i => (
-                          <div key={i} className={`flex-1 h-1.5 rounded-full transition-all ${i <= strength ? strengthColor : 'bg-gray-200'}`} />
+                          <div
+                            key={i}
+                            className={`flex-1 h-1.5 rounded-full transition-all ${i <= strength ? strengthColor : 'bg-gray-200'}`}
+                          />
                         ))}
                       </div>
-                      <span className={`text-xs font-medium ${
-                        strength <= 1 ? 'text-red-500' : strength === 2 ? 'text-amber-500' : strength === 3 ? 'text-blue-500' : 'text-green-500'
-                      }`}>{strengthLabel}</span>
+                      <span
+                        className={`text-xs font-medium ${
+                          strength <= 1
+                            ? 'text-red-500'
+                            : strength === 2
+                              ? 'text-amber-500'
+                              : strength === 3
+                                ? 'text-blue-500'
+                                : 'text-green-500'
+                        }`}
+                      >
+                        {strengthLabel}
+                      </span>
                     </div>
                   )}
-                  {errors.password && <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.password}</p>}
+                  {errors.password && (
+                    <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.password}</p>
+                  )}
                 </div>
 
                 {/* Confirm Password */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Confirm Password</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Confirm Password
+                  </label>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
                       type={showConfirmPassword ? 'text' : 'password'}
                       value={confirmPassword}
-                      onChange={e => { setConfirmPassword(e.target.value); setErrors(prev => ({ ...prev, confirmPassword: '' })) }}
+                      onChange={e => {
+                        setConfirmPassword(e.target.value)
+                        setErrors(prev => ({ ...prev, confirmPassword: '' }))
+                      }}
                       className={`w-full pl-10 pr-12 py-3.5 border-2 rounded-xl text-sm transition-all outline-none ${
                         errors.confirmPassword
                           ? 'border-red-300 bg-red-50 focus:border-red-400'
                           : confirmPassword && confirmPassword === formData.password
-                          ? 'border-green-400 bg-green-50 focus:border-green-500'
-                          : 'border-gray-200 bg-gray-50 focus:border-blue-500 focus:bg-white'
+                            ? 'border-green-400 bg-green-50 focus:border-green-500'
+                            : 'border-gray-200 bg-gray-50 focus:border-blue-500 focus:bg-white'
                       }`}
                       placeholder="Repeat your password"
                       autoComplete="new-password"
@@ -476,10 +551,18 @@ export default function RegisterPage() {
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                       className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
                     >
-                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      {showConfirmPassword ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
                     </button>
                   </div>
-                  {errors.confirmPassword && <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.confirmPassword}</p>}
+                  {errors.confirmPassword && (
+                    <p className="mt-1.5 text-xs text-red-500 font-medium">
+                      {errors.confirmPassword}
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -491,7 +574,9 @@ export default function RegisterPage() {
                   <>
                     {/* Program */}
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Program</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Program
+                      </label>
                       <div className="grid grid-cols-4 gap-2">
                         {PROGRAMS.map(prog => (
                           <button
@@ -512,7 +597,9 @@ export default function RegisterPage() {
 
                     {/* Semester */}
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Current Semester</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Current Semester
+                      </label>
                       <div className="grid grid-cols-8 gap-1.5">
                         {SEMESTERS.map(sem => (
                           <button
@@ -535,7 +622,9 @@ export default function RegisterPage() {
                   <>
                     {/* Department for teachers */}
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Department</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Department
+                      </label>
                       <div className="space-y-2">
                         {DEPARTMENTS.map(dept => (
                           <button
@@ -553,7 +642,11 @@ export default function RegisterPage() {
                           </button>
                         ))}
                       </div>
-                      {errors.department && <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.department}</p>}
+                      {errors.department && (
+                        <p className="mt-1.5 text-xs text-red-500 font-medium">
+                          {errors.department}
+                        </p>
+                      )}
                     </div>
                   </>
                 )}
@@ -567,8 +660,19 @@ export default function RegisterPage() {
                   {[
                     { label: 'Full Name', value: formData.full_name, icon: User },
                     { label: 'Email', value: formData.email, icon: Mail },
-                    { label: 'Role', value: formData.role.charAt(0).toUpperCase() + formData.role.slice(1), icon: BookOpen },
-                    { label: formData.role === 'student' ? 'Program' : 'Department', value: formData.role === 'student' ? `${formData.program} — Semester ${formData.semester}` : formData.department, icon: Building },
+                    {
+                      label: 'Role',
+                      value: formData.role.charAt(0).toUpperCase() + formData.role.slice(1),
+                      icon: BookOpen,
+                    },
+                    {
+                      label: formData.role === 'student' ? 'Program' : 'Department',
+                      value:
+                        formData.role === 'student'
+                          ? `${formData.program} — Semester ${formData.semester}`
+                          : formData.department,
+                      icon: Building,
+                    },
                   ].map(item => (
                     <div key={item.label} className="flex items-center gap-3">
                       <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center shrink-0">
@@ -585,7 +689,8 @@ export default function RegisterPage() {
                 <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-2">
                   <CheckCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
                   <p className="text-xs text-amber-700 leading-relaxed">
-                    Your account requires <strong>email verification</strong> (OTP sent after submission) plus <strong>admin approval</strong> before you can log in.
+                    Your account requires <strong>email verification</strong> (OTP sent after
+                    submission) plus <strong>admin approval</strong> before you can log in.
                   </p>
                 </div>
               </div>
@@ -600,13 +705,15 @@ export default function RegisterPage() {
                   </div>
                   <h3 className="text-xl font-bold text-gray-900 mb-1">Verify Your Email</h3>
                   <p className="text-sm text-gray-500 mb-2">
-                    Enter the 6-digit code sent to<br />
+                    Enter the 6-digit code sent to
+                    <br />
                     <span className="font-semibold text-gray-700">{registrationEmail}</span>
                   </p>
                   {isSandbox && (
                     <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-left mb-4 mt-2">
                       <p className="text-xs text-amber-800 leading-relaxed">
-                        ⚠️ <strong>Sandbox Mode:</strong> Email service is inactive/unconfigured. Please use the dummy OTP code below to verify:
+                        ⚠️ <strong>Sandbox Mode:</strong> Email service is inactive/unconfigured.
+                        Please use the dummy OTP code below to verify:
                       </p>
                       <div className="mt-1.5 text-center font-mono font-bold text-base text-amber-700 bg-amber-100/50 py-1 rounded">
                         123456
@@ -620,7 +727,9 @@ export default function RegisterPage() {
                   {otp.map((digit, i) => (
                     <input
                       key={i}
-                      ref={el => { otpRefs.current[i] = el }}
+                      ref={el => {
+                        otpRefs.current[i] = el
+                      }}
                       type="text"
                       inputMode="numeric"
                       maxLength={1}
@@ -640,7 +749,8 @@ export default function RegisterPage() {
                 <div className="text-center">
                   {otpResendTimer > 0 ? (
                     <p className="text-sm text-gray-400">
-                      Resend code in <span className="font-semibold text-gray-600">{otpResendTimer}s</span>
+                      Resend code in{' '}
+                      <span className="font-semibold text-gray-600">{otpResendTimer}s</span>
                     </p>
                   ) : (
                     <button

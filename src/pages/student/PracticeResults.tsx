@@ -1,17 +1,58 @@
 import { useLocation, useNavigate } from 'react-router-dom'
-import { 
-  Trophy, CheckCircle, XCircle, Clock, Target, TrendingUp,
-  Award, Star, AlertTriangle, Eye, ArrowRight, BarChart, Brain,
-  ChevronDown, ChevronUp
+import { useEffect } from 'react'
+import {
+  Trophy,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Target,
+  TrendingUp,
+  Award,
+  Star,
+  AlertTriangle,
+  Eye,
+  ArrowRight,
+  BarChart,
+  Brain,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 import { useState } from 'react'
 import LearningPathRecommendations from '../../components/LearningPathRecommendations'
-import { LearningPathRecommendation, WeakArea, PerformanceMetrics, DifficultyLevel } from '../../utils/adaptiveExamEngine'
+import {
+  LearningPathRecommendation,
+  WeakArea,
+  PerformanceMetrics,
+  DifficultyLevel,
+} from '../../utils/adaptiveExamEngine'
 
 export default function PracticeResults() {
   const location = useLocation()
   const navigate = useNavigate()
-  
+
+  const STORAGE_KEY = 'pcmt_practice_results'
+
+  const loadFromStorage = (): any => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      return stored ? JSON.parse(stored) : null
+    } catch {
+      return null
+    }
+  }
+
+  const stateData = location.state || loadFromStorage()
+
+  const saveToStorage = (data: any) => {
+    if (data && data.testId) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+      } catch {
+        /* quota exceeded — ignore */
+      }
+    }
+  }
+
   const {
     testId,
     testTitle,
@@ -21,15 +62,14 @@ export default function PracticeResults() {
     violations,
     tabSwitches,
     timeTaken,
-    // Adaptive exam data
     weakAreas,
     learningPath,
     performanceMetrics,
     performanceTrend,
     difficultyHistory,
     questions,
-    userAnswers
-  } = location.state || {
+    userAnswers,
+  } = stateData || {
     testId: '',
     testTitle: 'Practice Test',
     totalQuestions: 0,
@@ -44,8 +84,14 @@ export default function PracticeResults() {
     performanceTrend: 'Stable' as 'Improving' | 'Declining' | 'Stable',
     difficultyHistory: [] as DifficultyLevel[],
     questions: [] as any[],
-    userAnswers: {} as Record<number, any>
+    userAnswers: {} as Record<number, any>,
   }
+
+  useEffect(() => {
+    if (location.state) {
+      saveToStorage(location.state)
+    }
+  }, [location.state])
 
   const [showReview, setShowReview] = useState(false)
 
@@ -56,7 +102,8 @@ export default function PracticeResults() {
   }
 
   const getPerformanceLevel = () => {
-    if (percentage >= 90) return { label: 'Outstanding', color: 'text-purple-600', bg: 'bg-purple-50' }
+    if (percentage >= 90)
+      return { label: 'Outstanding', color: 'text-purple-600', bg: 'bg-purple-50' }
     if (percentage >= 75) return { label: 'Excellent', color: 'text-green-600', bg: 'bg-green-50' }
     if (percentage >= 60) return { label: 'Good', color: 'text-blue-600', bg: 'bg-blue-50' }
     if (percentage >= 40) return { label: 'Fair', color: 'text-yellow-600', bg: 'bg-yellow-50' }
@@ -86,11 +133,15 @@ export default function PracticeResults() {
 
       <div className="max-w-6xl mx-auto px-4 py-8">
         {/* Score Card */}
-        <div className={`${performance.bg} border-2 ${performance.color.replace('text-', 'border-')} rounded-2xl p-8 mb-8 text-center`}>
+        <div
+          className={`${performance.bg} border-2 ${performance.color.replace('text-', 'border-')} rounded-2xl p-8 mb-8 text-center`}
+        >
           <div className="flex justify-center mb-4">
             <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-full bg-white shadow-lg flex items-center justify-center">
               <div>
-                <p className={`text-5xl sm:text-6xl font-bold ${performance.color}`}>{percentage}%</p>
+                <p className={`text-5xl sm:text-6xl font-bold ${performance.color}`}>
+                  {percentage}%
+                </p>
                 <p className="text-sm text-gray-600 mt-1">Score</p>
               </div>
             </div>
@@ -111,7 +162,7 @@ export default function PracticeResults() {
               <BarChart className="w-6 h-6 mr-2 text-blue-600" />
               Performance Statistics
             </h3>
-            
+
             <div className="space-y-4">
               <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg">
                 <div className="flex items-center space-x-3">
@@ -126,7 +177,9 @@ export default function PracticeResults() {
                   <XCircle className="w-6 h-6 text-red-600" />
                   <span className="font-semibold">Incorrect Answers</span>
                 </div>
-                <span className="text-2xl font-bold text-red-600">{totalQuestions - correctAnswers}</span>
+                <span className="text-2xl font-bold text-red-600">
+                  {totalQuestions - correctAnswers}
+                </span>
               </div>
 
               <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
@@ -155,26 +208,38 @@ export default function PracticeResults() {
             </h3>
 
             <div className="space-y-4">
-              <div className={`flex items-center justify-between p-4 rounded-lg ${
-                tabSwitches === 0 ? 'bg-green-50' : 'bg-yellow-50'
-              }`}>
+              <div
+                className={`flex items-center justify-between p-4 rounded-lg ${
+                  tabSwitches === 0 ? 'bg-green-50' : 'bg-yellow-50'
+                }`}
+              >
                 <div className="flex items-center space-x-3">
-                  <AlertTriangle className={`w-6 h-6 ${tabSwitches === 0 ? 'text-green-600' : 'text-yellow-600'}`} />
+                  <AlertTriangle
+                    className={`w-6 h-6 ${tabSwitches === 0 ? 'text-green-600' : 'text-yellow-600'}`}
+                  />
                   <span className="font-semibold">Tab Switches</span>
                 </div>
-                <span className={`text-2xl font-bold ${tabSwitches === 0 ? 'text-green-600' : 'text-yellow-600'}`}>
+                <span
+                  className={`text-2xl font-bold ${tabSwitches === 0 ? 'text-green-600' : 'text-yellow-600'}`}
+                >
                   {tabSwitches}
                 </span>
               </div>
 
-              <div className={`flex items-center justify-between p-4 rounded-lg ${
-                violations.length === 0 ? 'bg-green-50' : 'bg-red-50'
-              }`}>
+              <div
+                className={`flex items-center justify-between p-4 rounded-lg ${
+                  violations.length === 0 ? 'bg-green-50' : 'bg-red-50'
+                }`}
+              >
                 <div className="flex items-center space-x-3">
-                  <XCircle className={`w-6 h-6 ${violations.length === 0 ? 'text-green-600' : 'text-red-600'}`} />
+                  <XCircle
+                    className={`w-6 h-6 ${violations.length === 0 ? 'text-green-600' : 'text-red-600'}`}
+                  />
                   <span className="font-semibold">Violations Detected</span>
                 </div>
-                <span className={`text-2xl font-bold ${violations.length === 0 ? 'text-green-600' : 'text-red-600'}`}>
+                <span
+                  className={`text-2xl font-bold ${violations.length === 0 ? 'text-green-600' : 'text-red-600'}`}
+                >
                   {violations.length}
                 </span>
               </div>
@@ -224,7 +289,7 @@ export default function PracticeResults() {
             <TrendingUp className="w-6 h-6 mr-2 text-green-600" />
             Recommendations
           </h3>
-          
+
           <div className="space-y-3">
             {percentage < 60 && (
               <div className="flex items-start space-x-3 p-4 bg-yellow-50 rounded-lg">
@@ -237,7 +302,7 @@ export default function PracticeResults() {
                 </div>
               </div>
             )}
-            
+
             {percentage >= 60 && percentage < 90 && (
               <div className="flex items-start space-x-3 p-4 bg-blue-50 rounded-lg">
                 <Star className="w-5 h-5 text-blue-600 mt-1 flex-shrink-0" />
@@ -249,7 +314,7 @@ export default function PracticeResults() {
                 </div>
               </div>
             )}
-            
+
             {percentage >= 90 && (
               <div className="flex items-start space-x-3 p-4 bg-purple-50 rounded-lg">
                 <Star className="w-5 h-5 text-purple-600 mt-1 flex-shrink-0" />
@@ -286,24 +351,36 @@ export default function PracticeResults() {
 
             {/* Performance Trend */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <div className={`p-4 rounded-lg ${
-                performanceTrend === 'Improving' ? 'bg-green-50 border-2 border-green-200' :
-                performanceTrend === 'Declining' ? 'bg-red-50 border-2 border-red-200' :
-                'bg-blue-50 border-2 border-blue-200'
-              }`}>
+              <div
+                className={`p-4 rounded-lg ${
+                  performanceTrend === 'Improving'
+                    ? 'bg-green-50 border-2 border-green-200'
+                    : performanceTrend === 'Declining'
+                      ? 'bg-red-50 border-2 border-red-200'
+                      : 'bg-blue-50 border-2 border-blue-200'
+                }`}
+              >
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-gray-700">Performance Trend</span>
-                  <TrendingUp className={`w-5 h-5 ${
-                    performanceTrend === 'Improving' ? 'text-green-600' :
-                    performanceTrend === 'Declining' ? 'text-red-600' :
-                    'text-blue-600'
-                  }`} />
+                  <TrendingUp
+                    className={`w-5 h-5 ${
+                      performanceTrend === 'Improving'
+                        ? 'text-green-600'
+                        : performanceTrend === 'Declining'
+                          ? 'text-red-600'
+                          : 'text-blue-600'
+                    }`}
+                  />
                 </div>
-                <p className={`text-2xl font-bold mt-2 ${
-                  performanceTrend === 'Improving' ? 'text-green-600' :
-                  performanceTrend === 'Declining' ? 'text-red-600' :
-                  'text-blue-600'
-                }`}>
+                <p
+                  className={`text-2xl font-bold mt-2 ${
+                    performanceTrend === 'Improving'
+                      ? 'text-green-600'
+                      : performanceTrend === 'Declining'
+                        ? 'text-red-600'
+                        : 'text-blue-600'
+                  }`}
+                >
                   {performanceTrend}
                 </p>
               </div>
@@ -335,9 +412,15 @@ export default function PracticeResults() {
               <div className="bg-gray-50 rounded-lg p-4">
                 <div className="flex items-end space-x-1 h-32">
                   {difficultyHistory.map((difficulty: DifficultyLevel, index: number) => {
-                    const height = difficulty === 'Easy' ? '33%' : difficulty === 'Medium' ? '66%' : '100%'
-                    const color = difficulty === 'Easy' ? 'bg-emerald-400' : difficulty === 'Medium' ? 'bg-yellow-400' : 'bg-red-400'
-                    
+                    const height =
+                      difficulty === 'Easy' ? '33%' : difficulty === 'Medium' ? '66%' : '100%'
+                    const color =
+                      difficulty === 'Easy'
+                        ? 'bg-emerald-400'
+                        : difficulty === 'Medium'
+                          ? 'bg-yellow-400'
+                          : 'bg-red-400'
+
                     return (
                       <div
                         key={index}
@@ -380,16 +463,21 @@ export default function PracticeResults() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {(['Easy', 'Medium', 'Hard'] as const).map(difficulty => {
                   const stats = performanceMetrics.performanceByDifficulty[difficulty]
-                  const accuracy = stats.total > 0 ? (stats.correct / stats.total * 100).toFixed(1) : '0'
-                  
+                  const accuracy =
+                    stats.total > 0 ? ((stats.correct / stats.total) * 100).toFixed(1) : '0'
+
                   return (
                     <div key={difficulty} className="bg-gray-50 rounded-lg p-4">
                       <div className="flex items-center justify-between mb-2">
-                        <span className={`font-bold ${
-                          difficulty === 'Easy' ? 'text-emerald-600' :
-                          difficulty === 'Medium' ? 'text-yellow-600' :
-                          'text-red-600'
-                        }`}>
+                        <span
+                          className={`font-bold ${
+                            difficulty === 'Easy'
+                              ? 'text-emerald-600'
+                              : difficulty === 'Medium'
+                                ? 'text-yellow-600'
+                                : 'text-red-600'
+                          }`}
+                        >
                           {difficulty}
                         </span>
                         <span className="text-sm text-gray-600">
@@ -399,9 +487,11 @@ export default function PracticeResults() {
                       <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
                         <div
                           className={`h-2 rounded-full ${
-                            difficulty === 'Easy' ? 'bg-emerald-500' :
-                            difficulty === 'Medium' ? 'bg-yellow-500' :
-                            'bg-red-500'
+                            difficulty === 'Easy'
+                              ? 'bg-emerald-500'
+                              : difficulty === 'Medium'
+                                ? 'bg-yellow-500'
+                                : 'bg-red-500'
                           }`}
                           style={{ width: `${accuracy}%` }}
                         />
@@ -418,10 +508,7 @@ export default function PracticeResults() {
         {/* Learning Path Recommendations */}
         {weakAreas && learningPath && (
           <div className="mb-8">
-            <LearningPathRecommendations 
-              learningPath={learningPath}
-              weakAreas={weakAreas}
-            />
+            <LearningPathRecommendations learningPath={learningPath} weakAreas={weakAreas} />
           </div>
         )}
 
@@ -436,29 +523,49 @@ export default function PracticeResults() {
                 <Eye className="w-6 h-6 mr-2 text-blue-600" />
                 Question Review
               </h3>
-              {showReview ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+              {showReview ? (
+                <ChevronUp className="w-5 h-5 text-gray-400" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-gray-400" />
+              )}
             </button>
-            <p className="text-sm text-gray-500 mt-1">Review your answers and see correct answers for each question</p>
-            
+            <p className="text-sm text-gray-500 mt-1">
+              Review your answers and see correct answers for each question
+            </p>
+
             {showReview && (
               <div className="mt-6 space-y-6">
                 {questions.map((q: any, idx: number) => {
                   const userAns = userAnswers[idx]
-                  const isCorrect = q.type === 'multiple-answer'
-                    ? Array.isArray(q.correctAnswer) && JSON.stringify(userAns?.sort()) === JSON.stringify([...q.correctAnswer].sort())
-                    : userAns === q.correctAnswer
-                  
+                  const isCorrect =
+                    q.type === 'multiple-answer'
+                      ? Array.isArray(q.correctAnswer) &&
+                        JSON.stringify(userAns?.sort()) ===
+                          JSON.stringify([...q.correctAnswer].sort())
+                      : userAns === q.correctAnswer
+
                   return (
-                    <div key={idx} className={`border-2 rounded-xl p-5 ${
-                      isCorrect ? 'border-green-200 bg-green-50/50' : 'border-red-200 bg-red-50/50'
-                    }`}>
+                    <div
+                      key={idx}
+                      className={`border-2 rounded-xl p-5 ${
+                        isCorrect
+                          ? 'border-green-200 bg-green-50/50'
+                          : 'border-red-200 bg-red-50/50'
+                      }`}
+                    >
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex items-center gap-2">
                           <span className="bg-gray-800 text-white text-xs font-bold px-2.5 py-1 rounded-lg">
                             Q{idx + 1}
                           </span>
-                          <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-lg">{q.type}</span>
-                          {q.points && <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-lg">{q.points} pt</span>}
+                          <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-lg">
+                            {q.type}
+                          </span>
+                          {q.points && (
+                            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-lg">
+                              {q.points} pt
+                            </span>
+                          )}
                         </div>
                         {isCorrect ? (
                           <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
@@ -467,35 +574,55 @@ export default function PracticeResults() {
                         )}
                       </div>
 
-                      <p className="text-sm font-medium text-gray-900 mb-4">{q.question || q.question_text}</p>
+                      <p className="text-sm font-medium text-gray-900 mb-4">
+                        {q.question || q.question_text}
+                      </p>
 
                       {/* Render answers based on question type */}
-                      {(q.type === 'mcq' || q.type === 'single_choice' || (!q.type && q.options)) && (
+                      {(q.type === 'mcq' ||
+                        q.type === 'single_choice' ||
+                        (!q.type && q.options)) && (
                         <div className="space-y-2">
                           {q.options?.map((opt: string, oi: number) => {
                             const isUserAns = userAns === opt
                             const isCorrectAns = q.correctAnswer === opt
                             return (
-                              <div key={oi} className={`flex items-center gap-3 p-3 rounded-lg border-2 text-sm ${
-                                isCorrectAns && isUserAns ? 'border-green-400 bg-green-100' :
-                                isCorrectAns ? 'border-green-300 bg-green-50' :
-                                isUserAns ? 'border-red-400 bg-red-100' :
-                                'border-gray-200 bg-gray-50'
-                              }`}>
-                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                                  isCorrectAns ? 'border-green-500 bg-green-500' :
-                                  isUserAns ? 'border-red-500 bg-red-500' :
-                                  'border-gray-300'
-                                }`}>
+                              <div
+                                key={oi}
+                                className={`flex items-center gap-3 p-3 rounded-lg border-2 text-sm ${
+                                  isCorrectAns && isUserAns
+                                    ? 'border-green-400 bg-green-100'
+                                    : isCorrectAns
+                                      ? 'border-green-300 bg-green-50'
+                                      : isUserAns
+                                        ? 'border-red-400 bg-red-100'
+                                        : 'border-gray-200 bg-gray-50'
+                                }`}
+                              >
+                                <div
+                                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                                    isCorrectAns
+                                      ? 'border-green-500 bg-green-500'
+                                      : isUserAns
+                                        ? 'border-red-500 bg-red-500'
+                                        : 'border-gray-300'
+                                  }`}
+                                >
                                   {(isUserAns || isCorrectAns) && (
                                     <div className="w-2 h-2 bg-white rounded-full" />
                                   )}
                                 </div>
-                                <span className={`flex-1 ${isCorrectAns ? 'font-semibold text-green-800' : isUserAns ? 'font-semibold text-red-800' : 'text-gray-700'}`}>
+                                <span
+                                  className={`flex-1 ${isCorrectAns ? 'font-semibold text-green-800' : isUserAns ? 'font-semibold text-red-800' : 'text-gray-700'}`}
+                                >
                                   {opt}
                                 </span>
-                                {isCorrectAns && <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />}
-                                {isUserAns && !isCorrectAns && <XCircle className="w-4 h-4 text-red-600 shrink-0" />}
+                                {isCorrectAns && (
+                                  <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />
+                                )}
+                                {isUserAns && !isCorrectAns && (
+                                  <XCircle className="w-4 h-4 text-red-600 shrink-0" />
+                                )}
                               </div>
                             )
                           })}
@@ -506,28 +633,48 @@ export default function PracticeResults() {
                         <div className="space-y-2">
                           {q.options?.map((opt: string, oi: number) => {
                             const userSelected = Array.isArray(userAns) && userAns.includes(opt)
-                            const correctSelected = Array.isArray(q.correctAnswer) && q.correctAnswer.includes(opt)
+                            const correctSelected =
+                              Array.isArray(q.correctAnswer) && q.correctAnswer.includes(opt)
                             return (
-                              <div key={oi} className={`flex items-center gap-3 p-3 rounded-lg border-2 text-sm ${
-                                correctSelected && userSelected ? 'border-green-400 bg-green-100' :
-                                correctSelected ? 'border-green-300 bg-green-50' :
-                                userSelected ? 'border-red-400 bg-red-100' :
-                                'border-gray-200 bg-gray-50'
-                              }`}>
-                                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${
-                                  correctSelected ? 'border-green-500 bg-green-500' :
-                                  userSelected ? 'border-red-500 bg-red-500' :
-                                  'border-gray-300'
-                                }`}>
+                              <div
+                                key={oi}
+                                className={`flex items-center gap-3 p-3 rounded-lg border-2 text-sm ${
+                                  correctSelected && userSelected
+                                    ? 'border-green-400 bg-green-100'
+                                    : correctSelected
+                                      ? 'border-green-300 bg-green-50'
+                                      : userSelected
+                                        ? 'border-red-400 bg-red-100'
+                                        : 'border-gray-200 bg-gray-50'
+                                }`}
+                              >
+                                <div
+                                  className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${
+                                    correctSelected
+                                      ? 'border-green-500 bg-green-500'
+                                      : userSelected
+                                        ? 'border-red-500 bg-red-500'
+                                        : 'border-gray-300'
+                                  }`}
+                                >
                                   {(userSelected || correctSelected) && (
-                                    <CheckCircle className="w-3.5 h-3.5 text-white" strokeWidth={3} />
+                                    <CheckCircle
+                                      className="w-3.5 h-3.5 text-white"
+                                      strokeWidth={3}
+                                    />
                                   )}
                                 </div>
-                                <span className={`flex-1 ${correctSelected ? 'font-semibold text-green-800' : userSelected ? 'font-semibold text-red-800' : 'text-gray-700'}`}>
+                                <span
+                                  className={`flex-1 ${correctSelected ? 'font-semibold text-green-800' : userSelected ? 'font-semibold text-red-800' : 'text-gray-700'}`}
+                                >
                                   {opt}
                                 </span>
-                                {correctSelected && <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />}
-                                {userSelected && !correctSelected && <XCircle className="w-4 h-4 text-red-600 shrink-0" />}
+                                {correctSelected && (
+                                  <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />
+                                )}
+                                {userSelected && !correctSelected && (
+                                  <XCircle className="w-4 h-4 text-red-600 shrink-0" />
+                                )}
                               </div>
                             )
                           })}
@@ -536,34 +683,54 @@ export default function PracticeResults() {
 
                       {q.type === 'true_false' && (
                         <div className="flex gap-4">
-                          {['True', 'False'].map((opt) => {
+                          {['True', 'False'].map(opt => {
                             const isUserAns = userAns === opt
                             const isCorrectAns = q.correctAnswer === opt
                             return (
-                              <div key={opt} className={`flex-1 flex items-center justify-center gap-2 p-4 rounded-xl border-2 text-sm ${
-                                isCorrectAns ? 'border-green-400 bg-green-100 font-semibold text-green-800' :
-                                isUserAns ? 'border-red-400 bg-red-100 font-semibold text-red-800' :
-                                'border-gray-200 bg-gray-50 text-gray-600'
-                              }`}>
+                              <div
+                                key={opt}
+                                className={`flex-1 flex items-center justify-center gap-2 p-4 rounded-xl border-2 text-sm ${
+                                  isCorrectAns
+                                    ? 'border-green-400 bg-green-100 font-semibold text-green-800'
+                                    : isUserAns
+                                      ? 'border-red-400 bg-red-100 font-semibold text-red-800'
+                                      : 'border-gray-200 bg-gray-50 text-gray-600'
+                                }`}
+                              >
                                 <span className="text-lg">{opt === 'True' ? '✓' : '✗'}</span>
                                 {opt}
                                 {isCorrectAns && <CheckCircle className="w-4 h-4 text-green-600" />}
-                                {isUserAns && !isCorrectAns && <XCircle className="w-4 h-4 text-red-600" />}
+                                {isUserAns && !isCorrectAns && (
+                                  <XCircle className="w-4 h-4 text-red-600" />
+                                )}
                               </div>
                             )
                           })}
                         </div>
                       )}
 
-                      {(q.type === 'short_answer' || q.type === 'essay' || q.type === 'code' || q.type === 'descriptive') && (
+                      {(q.type === 'short_answer' ||
+                        q.type === 'essay' ||
+                        q.type === 'code' ||
+                        q.type === 'descriptive') && (
                         <div className="space-y-4">
                           <div className="bg-white border-2 border-red-200 rounded-lg p-4">
-                            <p className="text-xs font-bold text-red-600 uppercase mb-1">Your Answer</p>
-                            <p className="text-sm text-gray-800 whitespace-pre-wrap">{userAns || <span className="italic text-gray-400">No answer provided</span>}</p>
+                            <p className="text-xs font-bold text-red-600 uppercase mb-1">
+                              Your Answer
+                            </p>
+                            <p className="text-sm text-gray-800 whitespace-pre-wrap">
+                              {userAns || (
+                                <span className="italic text-gray-400">No answer provided</span>
+                              )}
+                            </p>
                           </div>
                           <div className="bg-white border-2 border-green-200 rounded-lg p-4">
-                            <p className="text-xs font-bold text-green-600 uppercase mb-1">Correct Answer</p>
-                            <p className="text-sm text-gray-800 whitespace-pre-wrap">{q.correctAnswer || q.correct_answer || 'N/A'}</p>
+                            <p className="text-xs font-bold text-green-600 uppercase mb-1">
+                              Correct Answer
+                            </p>
+                            <p className="text-sm text-gray-800 whitespace-pre-wrap">
+                              {q.correctAnswer || q.correct_answer || 'N/A'}
+                            </p>
                           </div>
                         </div>
                       )}

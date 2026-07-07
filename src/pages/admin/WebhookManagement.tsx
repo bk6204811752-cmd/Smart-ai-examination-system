@@ -2,9 +2,19 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/globalStore'
 import { webhooksAPI } from '../../lib/api'
-import { 
-  Webhook, Plus, Edit, Trash2, TestTube, CheckCircle, XCircle, 
-  Clock, Activity, ArrowLeft, Eye, Copy, AlertTriangle, Globe
+import {
+  Webhook,
+  Plus,
+  Trash2,
+  TestTube,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Activity,
+  ArrowLeft,
+  Eye,
+  Copy,
+  Globe,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
@@ -44,16 +54,24 @@ export default function WebhookManagement() {
     url: '',
     events: [] as string[],
     secret: '',
-    active: true
+    active: true,
   })
 
   const availableEvents = [
     { value: 'exam.created', label: 'Exam Created', description: 'When a new exam is scheduled' },
     { value: 'exam.started', label: 'Exam Started', description: 'When an exam begins' },
-    { value: 'exam.submitted', label: 'Exam Submitted', description: 'When a student submits an exam' },
+    {
+      value: 'exam.submitted',
+      label: 'Exam Submitted',
+      description: 'When a student submits an exam',
+    },
     { value: 'exam.ended', label: 'Exam Ended', description: 'When an exam concludes' },
-    { value: 'violation.detected', label: 'Violation Detected', description: 'When proctoring violation occurs' },
-    { value: 'webhook.test', label: 'Test Event', description: 'Test webhook delivery' }
+    {
+      value: 'violation.detected',
+      label: 'Violation Detected',
+      description: 'When proctoring violation occurs',
+    },
+    { value: 'webhook.test', label: 'Test Event', description: 'Test webhook delivery' },
   ]
 
   useEffect(() => {
@@ -62,7 +80,8 @@ export default function WebhookManagement() {
       return
     }
     loadWebhooks()
-  }, [user])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, navigate])
 
   const loadWebhooks = async () => {
     try {
@@ -78,7 +97,7 @@ export default function WebhookManagement() {
 
   const handleCreateWebhook = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!newWebhook.name || !newWebhook.url || newWebhook.events.length === 0) {
       toast.error('Please fill in all required fields')
       return
@@ -87,7 +106,7 @@ export default function WebhookManagement() {
     try {
       await webhooksAPI.registerWebhook({
         ...newWebhook,
-        secret: newWebhook.secret || generateSecret()
+        secret: newWebhook.secret || generateSecret(),
       })
       toast.success('Webhook registered successfully')
       setShowCreateModal(false)
@@ -101,9 +120,7 @@ export default function WebhookManagement() {
   const handleToggleActive = async (webhookId: string, active: boolean) => {
     try {
       await webhooksAPI.updateWebhook(webhookId, { active: !active })
-      setWebhooks(prev =>
-        prev.map(w => w._id === webhookId ? { ...w, active: !active } : w)
-      )
+      setWebhooks(prev => prev.map(w => (w._id === webhookId ? { ...w, active: !active } : w)))
       toast.success(`Webhook ${!active ? 'enabled' : 'disabled'}`)
     } catch (error) {
       toast.error('Failed to update webhook')
@@ -162,7 +179,7 @@ export default function WebhookManagement() {
       ...prev,
       events: prev.events.includes(event)
         ? prev.events.filter(e => e !== event)
-        : [...prev.events, event]
+        : [...prev.events, event],
     }))
   }
 
@@ -267,7 +284,9 @@ export default function WebhookManagement() {
             <div className="p-12 text-center">
               <Webhook className="w-16 h-16 mx-auto text-gray-300 mb-4" />
               <h3 className="text-lg font-semibold text-gray-900 mb-2">No webhooks yet</h3>
-              <p className="text-gray-600 mb-6">Get started by creating your first webhook integration</p>
+              <p className="text-gray-600 mb-6">
+                Get started by creating your first webhook integration
+              </p>
               <button
                 onClick={() => setShowCreateModal(true)}
                 className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
@@ -277,28 +296,30 @@ export default function WebhookManagement() {
             </div>
           ) : (
             <div className="divide-y divide-gray-200">
-              {webhooks.map((webhook) => (
+              {webhooks.map(webhook => (
                 <div key={webhook._id} className="p-6 hover:bg-gray-50 transition">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center space-x-3">
                         <h3 className="text-lg font-semibold text-gray-900">{webhook.name}</h3>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          webhook.active
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-gray-100 text-gray-700'
-                        }`}>
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            webhook.active
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-gray-100 text-gray-700'
+                          }`}
+                        >
                           {webhook.active ? 'Active' : 'Disabled'}
                         </span>
                       </div>
-                      
+
                       <div className="flex items-center space-x-2 mt-2 text-sm text-gray-600">
                         <Globe className="w-4 h-4" />
                         <code className="bg-gray-100 px-2 py-1 rounded">{webhook.url}</code>
                       </div>
 
                       <div className="flex flex-wrap gap-2 mt-3">
-                        {webhook.events.map((event) => (
+                        {webhook.events.map(event => (
                           <span
                             key={event}
                             className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full"
@@ -311,13 +332,17 @@ export default function WebhookManagement() {
                       <div className="grid grid-cols-3 gap-4 mt-4 text-sm">
                         <div>
                           <p className="text-gray-500">Triggered</p>
-                          <p className="font-semibold text-gray-900">{webhook.trigger_count} times</p>
+                          <p className="font-semibold text-gray-900">
+                            {webhook.trigger_count} times
+                          </p>
                         </div>
                         <div>
                           <p className="text-gray-500">Failures</p>
-                          <p className={`font-semibold ${
-                            webhook.failure_count > 0 ? 'text-red-600' : 'text-gray-900'
-                          }`}>
+                          <p
+                            className={`font-semibold ${
+                              webhook.failure_count > 0 ? 'text-red-600' : 'text-gray-900'
+                            }`}
+                          >
                             {webhook.failure_count}
                           </p>
                         </div>
@@ -356,7 +381,11 @@ export default function WebhookManagement() {
                         }`}
                         title={webhook.active ? 'Disable' : 'Enable'}
                       >
-                        {webhook.active ? <XCircle className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
+                        {webhook.active ? (
+                          <XCircle className="w-5 h-5" />
+                        ) : (
+                          <CheckCircle className="w-5 h-5" />
+                        )}
                       </button>
                       <button
                         onClick={() => handleDeleteWebhook(webhook._id)}
@@ -395,7 +424,7 @@ export default function WebhookManagement() {
                 <input
                   type="text"
                   value={newWebhook.name}
-                  onChange={(e) => setNewWebhook({ ...newWebhook, name: e.target.value })}
+                  onChange={e => setNewWebhook({ ...newWebhook, name: e.target.value })}
                   placeholder="Slack Integration"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
                   required
@@ -409,7 +438,7 @@ export default function WebhookManagement() {
                 <input
                   type="url"
                   value={newWebhook.url}
-                  onChange={(e) => setNewWebhook({ ...newWebhook, url: e.target.value })}
+                  onChange={e => setNewWebhook({ ...newWebhook, url: e.target.value })}
                   placeholder="https://hooks.slack.com/..."
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
                   required
@@ -421,7 +450,7 @@ export default function WebhookManagement() {
                   Events to Subscribe *
                 </label>
                 <div className="space-y-2">
-                  {availableEvents.map((event) => (
+                  {availableEvents.map(event => (
                     <label
                       key={event.value}
                       className="flex items-start space-x-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
@@ -442,14 +471,12 @@ export default function WebhookManagement() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Secret Key
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Secret Key</label>
                 <div className="flex space-x-2">
                   <input
                     type="text"
                     value={newWebhook.secret}
-                    onChange={(e) => setNewWebhook({ ...newWebhook, secret: e.target.value })}
+                    onChange={e => setNewWebhook({ ...newWebhook, secret: e.target.value })}
                     placeholder="Auto-generated if left empty"
                     className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 font-mono text-sm"
                   />
@@ -470,9 +497,7 @@ export default function WebhookManagement() {
                     </button>
                   )}
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Used for HMAC signature verification
-                </p>
+                <p className="text-xs text-gray-500 mt-1">Used for HMAC signature verification</p>
               </div>
 
               <div className="flex items-center space-x-2">
@@ -480,7 +505,7 @@ export default function WebhookManagement() {
                   type="checkbox"
                   id="active"
                   checked={newWebhook.active}
-                  onChange={(e) => setNewWebhook({ ...newWebhook, active: e.target.checked })}
+                  onChange={e => setNewWebhook({ ...newWebhook, active: e.target.checked })}
                   className="rounded"
                 />
                 <label htmlFor="active" className="text-sm text-gray-700">
@@ -542,13 +567,11 @@ export default function WebhookManagement() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {logs.map((log) => (
+                  {logs.map(log => (
                     <div
                       key={log._id}
                       className={`p-4 rounded-lg border-2 ${
-                        log.success
-                          ? 'bg-green-50 border-green-200'
-                          : 'bg-red-50 border-red-200'
+                        log.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
                       }`}
                     >
                       <div className="flex items-center justify-between">

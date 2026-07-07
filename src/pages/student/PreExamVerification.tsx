@@ -1,11 +1,29 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+﻿import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
-import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision'
+import { motion } from 'framer-motion'
+import { FaceLandmarker, ObjectDetector, FilesetResolver } from '@mediapipe/tasks-vision'
 import {
-  Camera, Mic, Monitor, CheckCircle, XCircle, AlertTriangle,
-  Wifi, Cpu, Upload, Shield, Eye, Sun, Smartphone, Chrome,
-  RefreshCw, ChevronRight, Lock, Activity
+  Camera,
+  Mic,
+  Monitor,
+  CheckCircle,
+  XCircle,
+  AlertTriangle,
+  Wifi,
+  Cpu,
+  Upload,
+  Shield,
+  Eye,
+  Sun,
+  Smartphone,
+  Chrome,
+  RefreshCw,
+  ChevronRight,
+  Lock,
+  Activity,
+  Headphones,
+  Scan,
+  MonitorSmartphone,
 } from 'lucide-react'
 
 interface VerificationCheck {
@@ -20,7 +38,10 @@ interface VerificationCheck {
 }
 
 const MEDIAPIPE_WASM_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm'
-const FACE_LANDMARKER_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task'
+const FACE_LANDMARKER_MODEL =
+  'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task'
+const OBJECT_DETECTOR_MODEL =
+  'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/latest/efficientdet_lite0.task'
 
 export default function PreExamVerification() {
   const params = useParams<{ examId?: string; testId?: string }>()
@@ -42,7 +63,6 @@ export default function PreExamVerification() {
   const [audioLevel, setAudioLevel] = useState(0)
   const [faceDetected, setFaceDetected] = useState<boolean | null>(null)
   const [audioWaveData, setAudioWaveData] = useState<number[]>(Array(32).fill(0))
-  const [checksRunning, setChecksRunning] = useState(false)
   const [allDone, setAllDone] = useState(false)
 
   const [checks, setChecks] = useState<VerificationCheck[]>([
@@ -53,7 +73,7 @@ export default function PreExamVerification() {
       message: 'Checking camera access...',
       icon: Camera,
       required: true,
-      category: 'hardware'
+      category: 'hardware',
     },
     {
       id: 'microphone',
@@ -62,7 +82,7 @@ export default function PreExamVerification() {
       message: 'Checking microphone...',
       icon: Mic,
       required: true,
-      category: 'hardware'
+      category: 'hardware',
     },
     {
       id: 'lighting',
@@ -70,8 +90,8 @@ export default function PreExamVerification() {
       status: 'pending',
       message: 'Analyzing room brightness...',
       icon: Sun,
-      required: true,  // FIX: lighting is required — exam must not start in dark room
-      category: 'environment'
+      required: true, // FIX: lighting is required â€” exam must not start in dark room
+      category: 'environment',
     },
     {
       id: 'face',
@@ -80,7 +100,7 @@ export default function PreExamVerification() {
       message: 'Detecting your face...',
       icon: Eye,
       required: true,
-      category: 'identity'
+      category: 'identity',
     },
     {
       id: 'screen',
@@ -89,7 +109,7 @@ export default function PreExamVerification() {
       message: 'Checking screen capture API...',
       icon: Monitor,
       required: false,
-      category: 'software'
+      category: 'software',
     },
     {
       id: 'browser',
@@ -98,7 +118,7 @@ export default function PreExamVerification() {
       message: 'Checking browser version...',
       icon: Chrome,
       required: true,
-      category: 'software'
+      category: 'software',
     },
     {
       id: 'internet',
@@ -107,7 +127,7 @@ export default function PreExamVerification() {
       message: 'Testing connection speed...',
       icon: Wifi,
       required: true,
-      category: 'software'
+      category: 'software',
     },
     {
       id: 'system',
@@ -116,7 +136,7 @@ export default function PreExamVerification() {
       message: 'Verifying system specs...',
       icon: Cpu,
       required: true,
-      category: 'software'
+      category: 'software',
     },
     {
       id: 'devtools',
@@ -125,7 +145,7 @@ export default function PreExamVerification() {
       message: 'Checking browser extensions...',
       icon: Lock,
       required: false,
-      category: 'software'
+      category: 'software',
     },
     {
       id: 'phone',
@@ -134,8 +154,44 @@ export default function PreExamVerification() {
       message: 'Scanning for unauthorized devices...',
       icon: Smartphone,
       required: false,
-      category: 'environment'
-    }
+      category: 'environment',
+    },
+    {
+      id: 'headphone_test',
+      name: 'Headphone Detection',
+      status: 'pending',
+      message: 'Testing for headphones/earbuds...',
+      icon: Headphones,
+      required: true,
+      category: 'hardware',
+    },
+    {
+      id: 'room_scan',
+      name: 'Room Scan',
+      status: 'pending',
+      message: 'Scanning your environment...',
+      icon: Scan,
+      required: false,
+      category: 'environment',
+    },
+    {
+      id: 'screen_devices',
+      name: 'Screen Share & Devices',
+      status: 'pending',
+      message: 'Checking for virtual devices...',
+      icon: Monitor,
+      required: false,
+      category: 'software',
+    },
+    {
+      id: 'multi_monitor',
+      name: 'Multiple Monitors',
+      status: 'pending',
+      message: 'Checking display configuration...',
+      icon: MonitorSmartphone,
+      required: false,
+      category: 'software',
+    },
   ])
 
   useEffect(() => {
@@ -144,6 +200,7 @@ export default function PreExamVerification() {
       cleanup()
       delete (window as any).__preExamStream
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Live brightness monitoring
@@ -192,8 +249,13 @@ export default function PreExamVerification() {
     }
   }
 
-  const updateCheck = (id: string, status: VerificationCheck['status'], message: string, detail?: string) => {
-    setChecks(prev => prev.map(c => c.id === id ? { ...c, status, message, detail } : c))
+  const updateCheck = (
+    id: string,
+    status: VerificationCheck['status'],
+    message: string,
+    detail?: string
+  ) => {
+    setChecks(prev => prev.map(c => (c.id === id ? { ...c, status, message, detail } : c)))
   }
 
   const delay = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -233,6 +295,14 @@ export default function PreExamVerification() {
     await checkDevTools()
     await delay(300)
     await checkExternalDevices()
+    await delay(300)
+    await checkHeadphones()
+    await delay(400)
+    await checkRoomScan()
+    await delay(300)
+    await checkScreenDevices()
+    await delay(300)
+    await checkMultiMonitor()
 
     setChecksRunning(false)
     setAllDone(true)
@@ -247,13 +317,13 @@ export default function PreExamVerification() {
           width: { ideal: 1280, min: 320 },
           height: { ideal: 720, min: 240 },
           facingMode: 'user',
-          frameRate: { ideal: 30, min: 10 }
+          frameRate: { ideal: 30, min: 10 },
         },
         audio: {
           echoCancellation: false,
           noiseSuppression: false,
-          autoGainControl: false
-        }
+          autoGainControl: false,
+        },
       })
 
       if (videoRef.current) {
@@ -267,14 +337,19 @@ export default function PreExamVerification() {
 
       const videoTrack = mediaStream.getVideoTracks()[0]
       const settings = videoTrack.getSettings()
-      updateCheck('webcam', 'passed', 'Camera connected ✓',
-        `${settings.width}×${settings.height} @ ${settings.frameRate?.toFixed(0) || '?'}fps · ${videoTrack.label}`)
+      updateCheck(
+        'webcam',
+        'passed',
+        'Camera connected âœ“',
+        `${settings.width}Ã—${settings.height} @ ${settings.frameRate?.toFixed(0) || '?'}fps Â· ${videoTrack.label}`
+      )
     } catch (error: any) {
-      const msg = error?.name === 'NotAllowedError'
-        ? 'Camera permission denied — please click Allow'
-        : error?.name === 'NotFoundError'
-          ? 'No camera found — please connect a camera'
-          : 'Camera initialization failed'
+      const msg =
+        error?.name === 'NotAllowedError'
+          ? 'Camera permission denied â€” please click Allow'
+          : error?.name === 'NotFoundError'
+            ? 'No camera found â€” please connect a camera'
+            : 'Camera initialization failed'
       updateCheck('webcam', 'failed', msg)
     }
   }
@@ -297,14 +372,21 @@ export default function PreExamVerification() {
         animFrameRef.current = requestAnimationFrame(draw)
       }
       draw()
-    } catch { /* noop */ }
+    } catch {
+      /* noop */
+    }
   }
 
   const checkMicrophone = async () => {
     updateCheck('microphone', 'checking', 'Testing microphone sensitivity...')
     await delay(1200)
     if (audioLevel > 0) {
-      updateCheck('microphone', 'passed', 'Microphone working ✓', `Audio monitoring active (level: ${audioLevel})`)
+      updateCheck(
+        'microphone',
+        'passed',
+        'Microphone working âœ“',
+        `Audio monitoring active (level: ${audioLevel})`
+      )
     } else {
       updateCheck('microphone', 'warning', 'Microphone detected but silent', 'Try speaking to test')
     }
@@ -333,7 +415,10 @@ export default function PreExamVerification() {
             sum += (data[i] * 299 + data[i + 1] * 587 + data[i + 2] * 114) / 1000
           }
           const reading = Math.round(sum / (data.length / 4))
-          if (reading > 5) { stabilized = true; break } // Camera has warmed up
+          if (reading > 5) {
+            stabilized = true
+            break
+          } // Camera has warmed up
         }
       }
     }
@@ -362,19 +447,34 @@ export default function PreExamVerification() {
     }
 
     if (brightness === 0) {
-      updateCheck('lighting', 'failed', 'No video signal — camera may be blocked or not working', 'Ensure camera is uncovered and active')
-    } else if (brightness < 35) {
-      // HARD FAIL: Room too dark for face detection — exam must not start
       updateCheck(
         'lighting',
         'failed',
-        `Room too dark (${brightness}/255) — turn on lights before exam`,
-        `Minimum required: 35/255 · Face detection requires adequate lighting`
+        'No video signal â€” camera may be blocked or not working',
+        'Ensure camera is uncovered and active'
+      )
+    } else if (brightness < 35) {
+      // HARD FAIL: Room too dark for face detection â€” exam must not start
+      updateCheck(
+        'lighting',
+        'failed',
+        `Room too dark (${brightness}/255) â€” turn on lights before exam`,
+        `Minimum required: 35/255 Â· Face detection requires adequate lighting`
       )
     } else if (brightness < 60) {
-      updateCheck('lighting', 'warning', `Low lighting (${brightness}/255) — improve for best accuracy`, 'Recommended: 60+ for optimal face detection')
+      updateCheck(
+        'lighting',
+        'warning',
+        `Low lighting (${brightness}/255) â€” improve for best accuracy`,
+        'Recommended: 60+ for optimal face detection'
+      )
     } else {
-      updateCheck('lighting', 'passed', `Room lighting is good (${brightness}/255) ✓`, 'Face detection will work optimally')
+      updateCheck(
+        'lighting',
+        'passed',
+        `Room lighting is good (${brightness}/255) âœ“`,
+        'Face detection will work optimally'
+      )
     }
   }
 
@@ -385,20 +485,35 @@ export default function PreExamVerification() {
     const brightness = brightnessLevel
     if (brightness < 35) {
       setFaceDetected(false)
-      updateCheck('face', 'failed', 'Cannot detect face — room too dark', 'Fix lighting first, then re-run checks')
+      updateCheck(
+        'face',
+        'failed',
+        'Cannot detect face â€” room too dark',
+        'Fix lighting first, then re-run checks'
+      )
       return
     }
 
     if (!videoRef.current || videoRef.current.readyState < 2) {
       setFaceDetected(false)
-      updateCheck('face', 'failed', 'Camera not ready for face detection', 'Please wait for camera to load')
+      updateCheck(
+        'face',
+        'failed',
+        'Camera not ready for face detection',
+        'Please wait for camera to load'
+      )
       return
     }
 
     const videoReady = await waitForVideoReady()
     if (!videoReady) {
       setFaceDetected(false)
-      updateCheck('face', 'failed', 'Camera frame not ready for face detection', 'Keep the camera uncovered and try again')
+      updateCheck(
+        'face',
+        'failed',
+        'Camera frame not ready for face detection',
+        'Keep the camera uncovered and try again'
+      )
       return
     }
 
@@ -407,7 +522,9 @@ export default function PreExamVerification() {
       updateCheck('face', 'checking', 'Loading face detection AI model...')
       const vision = await Promise.race([
         FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_CDN),
-        new Promise<any>((_, reject) => setTimeout(() => reject(new Error('MediaPipe WASM load timeout')), 20000)),
+        new Promise<any>((_, reject) =>
+          setTimeout(() => reject(new Error('MediaPipe WASM load timeout')), 20000)
+        ),
       ])
 
       faceLandmarker = await Promise.race([
@@ -416,7 +533,9 @@ export default function PreExamVerification() {
           runningMode: 'VIDEO',
           numFaces: 3,
         }),
-        new Promise<FaceLandmarker>((_, reject) => setTimeout(() => reject(new Error('FaceLandmarker model load timeout')), 20000)),
+        new Promise<FaceLandmarker>((_, reject) =>
+          setTimeout(() => reject(new Error('FaceLandmarker model load timeout')), 20000)
+        ),
       ])
 
       updateCheck('face', 'checking', 'Scanning for your face...')
@@ -432,17 +551,32 @@ export default function PreExamVerification() {
 
         if (faceCount > 0 && samples.filter(count => count > 0).length >= 2) {
           setFaceDetected(true)
-          updateCheck('face', 'passed', `Face detected ✓ (${faceCount} face${faceCount > 1 ? 's' : ''})`, 'Keep face centered and well-lit during exam')
+          updateCheck(
+            'face',
+            'passed',
+            `Face detected âœ“ (${faceCount} face${faceCount > 1 ? 's' : ''})`,
+            'Keep face centered and well-lit during exam'
+          )
           return
         }
       }
 
       setFaceDetected(false)
-      updateCheck('face', 'failed', 'No face detected — position yourself in front of the camera', 'Face the camera directly · Ensure your face is visible and well-lit')
+      updateCheck(
+        'face',
+        'failed',
+        'No face detected â€” position yourself in front of the camera',
+        'Face the camera directly Â· Ensure your face is visible and well-lit'
+      )
     } catch (err) {
       console.warn('Face detection error:', err)
       setFaceDetected(false)
-      updateCheck('face', 'failed', 'Face detection failed — try again after the camera loads', 'Turn on lights, face the camera, and rerun verification')
+      updateCheck(
+        'face',
+        'failed',
+        'Face detection failed â€” try again after the camera loads',
+        'Turn on lights, face the camera, and rerun verification'
+      )
     } finally {
       faceLandmarker?.close()
     }
@@ -452,9 +586,19 @@ export default function PreExamVerification() {
     updateCheck('screen', 'checking', 'Checking screen capture API...')
     await delay(600)
     if (navigator.mediaDevices && 'getDisplayMedia' in navigator.mediaDevices) {
-      updateCheck('screen', 'passed', 'Screen sharing detection active ✓', 'Any screen sharing will be flagged')
+      updateCheck(
+        'screen',
+        'passed',
+        'Screen sharing detection active âœ“',
+        'Any screen sharing will be flagged'
+      )
     } else {
-      updateCheck('screen', 'warning', 'Screen share API limited on this browser', 'Recommended: Chrome or Edge')
+      updateCheck(
+        'screen',
+        'warning',
+        'Screen share API limited on this browser',
+        'Recommended: Chrome or Edge'
+      )
     }
   }
 
@@ -466,18 +610,37 @@ export default function PreExamVerification() {
     let browser = 'Unknown'
     let isSupported = false
 
-    if (ua.includes('Chrome') && !ua.includes('Edg')) { browser = 'Chrome'; isSupported = true }
-    else if (ua.includes('Edg')) { browser = 'Edge'; isSupported = true }
-    else if (ua.includes('Firefox')) { browser = 'Firefox'; isSupported = true }
-    else if (ua.includes('Safari') && !ua.includes('Chrome')) { browser = 'Safari'; isSupported = true }
+    if (ua.includes('Chrome') && !ua.includes('Edg')) {
+      browser = 'Chrome'
+      isSupported = true
+    } else if (ua.includes('Edg')) {
+      browser = 'Edge'
+      isSupported = true
+    } else if (ua.includes('Firefox')) {
+      browser = 'Firefox'
+      isSupported = true
+    } else if (ua.includes('Safari') && !ua.includes('Chrome')) {
+      browser = 'Safari'
+      isSupported = true
+    }
 
     // Check for WebRTC support
     const hasWebRTC = !!(window.RTCPeerConnection || (window as any).webkitRTCPeerConnection)
 
     if (isSupported && hasWebRTC) {
-      updateCheck('browser', 'passed', `${browser} — fully supported ✓`, `WebRTC: active · UserAgent verified`)
+      updateCheck(
+        'browser',
+        'passed',
+        `${browser} â€” fully supported âœ“`,
+        `WebRTC: active Â· UserAgent verified`
+      )
     } else {
-      updateCheck('browser', 'failed', `${browser} — not recommended`, 'Please use Chrome or Edge for best experience')
+      updateCheck(
+        'browser',
+        'failed',
+        `${browser} â€” not recommended`,
+        'Please use Chrome or Edge for best experience'
+      )
     }
   }
 
@@ -489,18 +652,43 @@ export default function PreExamVerification() {
       const latency = Date.now() - start
 
       if (latency < 500) {
-        updateCheck('internet', 'passed', `Excellent connection (${latency}ms) ✓`, 'Stable connection for video monitoring')
+        updateCheck(
+          'internet',
+          'passed',
+          `Excellent connection (${latency}ms) âœ“`,
+          'Stable connection for video monitoring'
+        )
       } else if (latency < 1500) {
-        updateCheck('internet', 'warning', `Good connection (${latency}ms)`, 'Video quality may vary slightly')
+        updateCheck(
+          'internet',
+          'warning',
+          `Good connection (${latency}ms)`,
+          'Video quality may vary slightly'
+        )
       } else {
-        updateCheck('internet', 'failed', `Slow connection (${latency}ms)`, 'Video streaming may be impacted')
+        updateCheck(
+          'internet',
+          'failed',
+          `Slow connection (${latency}ms)`,
+          'Video streaming may be impacted'
+        )
       }
     } catch {
       // Could be CORS issue, check navigator.onLine
       if (navigator.onLine) {
-        updateCheck('internet', 'passed', 'Connected to internet ✓', 'Connection verified via browser')
+        updateCheck(
+          'internet',
+          'passed',
+          'Connected to internet âœ“',
+          'Connection verified via browser'
+        )
       } else {
-        updateCheck('internet', 'failed', 'No internet connection detected', 'Connect to internet before starting')
+        updateCheck(
+          'internet',
+          'failed',
+          'No internet connection detected',
+          'Connect to internet before starting'
+        )
       }
     }
   }
@@ -511,19 +699,25 @@ export default function PreExamVerification() {
 
     const memory = (navigator as any).deviceMemory || null
     const cores = navigator.hardwareConcurrency || 1
-    const hasSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined'
     const hasWebGL = !!document.createElement('canvas').getContext('webgl')
 
-    updateCheck('system', 'passed',
-      `System meets requirements ✓`,
-      `${cores} CPU cores · ${memory ? memory + 'GB RAM' : 'RAM: OK'} · WebGL: ${hasWebGL ? 'Yes' : 'No'}`
+    updateCheck(
+      'system',
+      'passed',
+      `System meets requirements âœ“`,
+      `${cores} CPU cores Â· ${memory ? memory + 'GB RAM' : 'RAM: OK'} Â· WebGL: ${hasWebGL ? 'Yes' : 'No'}`
     )
   }
 
   const checkDevTools = async () => {
     updateCheck('devtools', 'checking', 'Checking for developer tools...')
     await delay(600)
-    updateCheck('devtools', 'passed', 'DevTools will be blocked during exam ✓', 'F12, Ctrl+Shift+I are disabled')
+    updateCheck(
+      'devtools',
+      'passed',
+      'DevTools will be blocked during exam âœ“',
+      'F12, Ctrl+Shift+I are disabled'
+    )
   }
 
   const checkExternalDevices = async () => {
@@ -537,12 +731,296 @@ export default function PreExamVerification() {
       const audioDevices = devices.filter(d => d.kind === 'audioinput')
 
       if (videoDevices.length > 1) {
-        updateCheck('phone', 'warning', `${videoDevices.length} cameras detected`, 'Only one camera should be active')
+        updateCheck(
+          'phone',
+          'warning',
+          `${videoDevices.length} cameras detected`,
+          'Only one camera should be active'
+        )
       } else {
-        updateCheck('phone', 'passed', 'No unauthorized devices detected ✓', `1 camera · ${audioDevices.length} microphone(s)`)
+        updateCheck(
+          'phone',
+          'passed',
+          'No unauthorized devices detected âœ“',
+          `1 camera Â· ${audioDevices.length} microphone(s)`
+        )
       }
     } catch {
-      updateCheck('phone', 'passed', 'Device scan complete ✓')
+      updateCheck('phone', 'passed', 'Device scan complete âœ“')
+    }
+  }
+
+  const checkHeadphones = async () => {
+    updateCheck('headphone_test', 'checking', 'Testing for headphones/earbuds...')
+    try {
+      if (!stream) {
+        updateCheck(
+          'headphone_test',
+          'failed',
+          'No microphone stream available',
+          'Headphone test requires active microphone'
+        )
+        return
+      }
+
+      const testCtx = new AudioContext()
+      const testSource = testCtx.createMediaStreamSource(stream)
+      const testAnalyser = testCtx.createAnalyser()
+      testAnalyser.fftSize = 128
+      testSource.connect(testAnalyser)
+      const dataArray = new Uint8Array(testAnalyser.frequencyBinCount)
+
+      const readLevel = () => {
+        testAnalyser.getByteFrequencyData(dataArray)
+        return dataArray.reduce((a, b) => a + b, 0) / dataArray.length
+      }
+
+      // Ambient noise baseline (5 samples over 500ms)
+      let baselineSum = 0
+      for (let i = 0; i < 5; i++) {
+        await delay(100)
+        baselineSum += readLevel()
+      }
+      const baseline = baselineSum / 5
+
+      // Play 800Hz test tone through speakers
+      const toneCtx = new AudioContext()
+      const osc = toneCtx.createOscillator()
+      const gain = toneCtx.createGain()
+      osc.connect(gain)
+      gain.connect(toneCtx.destination)
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(800, toneCtx.currentTime)
+      gain.gain.setValueAtTime(0.5, toneCtx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, toneCtx.currentTime + 1.5)
+      osc.start()
+
+      // Read 10 samples during tone playback
+      let toneSum = 0
+      for (let i = 0; i < 10; i++) {
+        await delay(100)
+        toneSum += readLevel()
+      }
+      const avgTone = toneSum / 10
+
+      osc.stop(toneCtx.currentTime + 0.1)
+      toneCtx.close()
+      testSource.disconnect()
+      testCtx.close()
+
+      const delta = avgTone - baseline
+      if (delta > 15) {
+        updateCheck(
+          'headphone_test',
+          'passed',
+          'No headphones detected âœ“',
+          `Test tone reached microphone (Î”${Math.round(delta)})`
+        )
+      } else if (delta > 5) {
+        updateCheck(
+          'headphone_test',
+          'warning',
+          'Weak tone response â€” ensure speakers are on',
+          `Î”${Math.round(delta)} â€” try increasing volume`
+        )
+      } else {
+        updateCheck(
+          'headphone_test',
+          'failed',
+          'Possible headphones/earbuds detected',
+          `Test tone not picked up by mic (Î”${Math.round(delta)}) â€” remove headphones`
+        )
+      }
+    } catch (err) {
+      console.warn('Headphone test failed:', err)
+      updateCheck(
+        'headphone_test',
+        'warning',
+        'Headphone test could not complete',
+        'Audio test skipped â€” ensure speakers work'
+      )
+    }
+  }
+
+  const checkRoomScan = async () => {
+    updateCheck('room_scan', 'checking', 'Loading AI model for room scan...')
+    try {
+      const vision = await Promise.race([
+        FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_CDN),
+        new Promise<any>((_, reject) =>
+          setTimeout(() => reject(new Error('WASM load timeout')), 20000)
+        ),
+      ])
+
+      const objectDetector = await ObjectDetector.createFromOptions(vision, {
+        baseOptions: { modelAssetPath: OBJECT_DETECTOR_MODEL, delegate: 'GPU' },
+        scoreThreshold: 0.4,
+        maxResults: 5,
+        runningMode: 'IMAGE',
+      })
+
+      updateCheck('room_scan', 'checking', 'Scanning your room â€” please pan camera slowly...')
+      const suspiciousCategories = [
+        'cell phone',
+        'book',
+        'laptop',
+        'tv',
+        'person',
+        'remote',
+        'keyboard',
+        'mouse',
+      ]
+      const detected: Record<string, number> = {}
+
+      // Take 6 frames with 500ms gaps â€” student should pan camera
+      for (let i = 0; i < 6; i++) {
+        await delay(500)
+        if (
+          videoRef.current &&
+          videoRef.current.readyState >= 2 &&
+          videoRef.current.videoWidth > 0
+        ) {
+          const result = objectDetector.detect(videoRef.current)
+          for (const detection of result.detections) {
+            const cat = detection.categories[0]
+            if (cat) {
+              const label = cat.categoryName.toLowerCase()
+              if (suspiciousCategories.includes(label)) {
+                detected[label] = (detected[label] || 0) + 1
+              }
+            }
+          }
+        }
+      }
+
+      objectDetector.close()
+
+      const found = Object.entries(detected).filter(([, count]) => count > 0)
+
+      if (found.length === 0) {
+        updateCheck(
+          'room_scan',
+          'passed',
+          'Room environment looks clear âœ“',
+          'No unauthorized items detected'
+        )
+      } else {
+        const items = found.map(([label, count]) => `${label} (${count}x)`).join(', ')
+        updateCheck(
+          'room_scan',
+          'warning',
+          `Suspicious items: ${items}`,
+          'Please remove these before starting the exam'
+        )
+      }
+    } catch (err) {
+      console.warn('Room scan failed:', err)
+      updateCheck(
+        'room_scan',
+        'warning',
+        'Room scan could not run',
+        'Ensure camera is working â€” skip if not needed'
+      )
+    }
+  }
+
+  const checkScreenDevices = async () => {
+    updateCheck('screen_devices', 'checking', 'Checking for virtual/screen capture devices...')
+    await delay(500)
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices()
+      const videoDevices = devices.filter(d => d.kind === 'videoinput')
+      const audioDevices = devices.filter(d => d.kind === 'audioinput')
+
+      const virtualKeywords = [
+        'virtual',
+        'obs',
+        'stream',
+        'cam',
+        'splitcam',
+        'manycam',
+        'droidcam',
+        'epoccam',
+        'ivcam',
+        'vmware',
+        'remote',
+        'display capture',
+        'screen capture',
+        'vcam',
+        'obs-virtual',
+        'ndi',
+        'sparkocam',
+      ]
+      const suspiciousVideo = videoDevices.filter(d =>
+        virtualKeywords.some(k => d.label.toLowerCase().includes(k))
+      )
+      const suspiciousAudio = audioDevices.filter(d =>
+        virtualKeywords.some(k => d.label.toLowerCase().includes(k))
+      )
+
+      if (suspiciousVideo.length > 0 || suspiciousAudio.length > 0) {
+        const items = [
+          ...suspiciousVideo.map(d => d.label),
+          ...suspiciousAudio.map(d => d.label),
+        ].join(', ')
+        updateCheck(
+          'screen_devices',
+          'warning',
+          `Suspicious devices: ${items}`,
+          'Virtual/screen capture devices detected â€” disable them'
+        )
+      } else {
+        updateCheck(
+          'screen_devices',
+          'passed',
+          'No virtual/screen capture devices âœ“',
+          `${videoDevices.length} camera(s) Â· ${audioDevices.length} microphone(s)`
+        )
+      }
+    } catch {
+      updateCheck(
+        'screen_devices',
+        'warning',
+        'Could not enumerate devices',
+        'Device check skipped'
+      )
+    }
+  }
+
+  const checkMultiMonitor = async () => {
+    updateCheck('multi_monitor', 'checking', 'Checking display configuration...')
+    await delay(400)
+
+    const screens = window.screen
+    const availWidth = screens.availWidth
+    const availHeight = screens.availHeight
+    const windowWidth = window.innerWidth
+    const ratio = (availWidth * availHeight) / (windowWidth * window.innerHeight)
+
+    const isMultiMonitor = availWidth > 2200
+    const isExtendedDesktop = ratio > 1.5
+
+    if (isMultiMonitor) {
+      updateCheck(
+        'multi_monitor',
+        'warning',
+        `Wide display (${availWidth}Ã—${availHeight})`,
+        'Multiple monitors or ultra-wide â€” disable extra displays for exam'
+      )
+    } else if (isExtendedDesktop) {
+      updateCheck(
+        'multi_monitor',
+        'warning',
+        'Extended desktop detected',
+        'Disable extended display mode before starting'
+      )
+    } else {
+      updateCheck(
+        'multi_monitor',
+        'passed',
+        `Single display âœ“ (${availWidth}Ã—${availHeight})`,
+        'No additional monitors detected'
+      )
     }
   }
 
@@ -560,14 +1038,34 @@ export default function PreExamVerification() {
     }
   }
 
-  const allRequiredPassed = checks.filter(c => c.required).every(c => c.status === 'passed' || c.status === 'warning')
-  // ID upload is now optional — shows warning but doesn't block exam start
+  const allRequiredPassed = checks
+    .filter(c => c.required)
+    .every(c => c.status === 'passed' || c.status === 'warning')
+  // ID upload is now optional â€” shows warning but doesn't block exam start
   const canProceed = allRequiredPassed && consentGiven
   const passedCount = checks.filter(c => c.status === 'passed').length
   const failedCount = checks.filter(c => c.status === 'failed').length
 
-  const handleProceed = () => {
+  const handleProceed = async () => {
     if (!canProceed) return
+
+    // Request fullscreen with the user's click gesture
+    try {
+      const el = document.documentElement as HTMLElement & {
+        webkitRequestFullscreen?: () => Promise<void>
+        msRequestFullscreen?: () => Promise<void>
+      }
+      if (el.requestFullscreen) {
+        await el.requestFullscreen({ navigationUI: 'hide' } as FullscreenOptions)
+      } else if (el.webkitRequestFullscreen) {
+        await el.webkitRequestFullscreen()
+      } else if (el.msRequestFullscreen) {
+        await el.msRequestFullscreen()
+      }
+    } catch {
+      // Fullscreen may be blocked â€” exam page will handle this
+    }
+
     if (stream) {
       (window as any).__preExamStream = stream
     }
@@ -580,26 +1078,61 @@ export default function PreExamVerification() {
 
   const getCategoryColor = (cat: string) => {
     switch (cat) {
-      case 'hardware': return 'text-blue-400'
-      case 'environment': return 'text-green-400'
-      case 'software': return 'text-purple-400'
-      case 'identity': return 'text-orange-400'
-      default: return 'text-gray-400'
+      case 'hardware':
+        return 'text-blue-400'
+      case 'environment':
+        return 'text-green-400'
+      case 'software':
+        return 'text-purple-400'
+      case 'identity':
+        return 'text-orange-400'
+      default:
+        return 'text-gray-400'
     }
   }
 
   const getStatusConfig = (status: VerificationCheck['status']) => {
     switch (status) {
-      case 'passed': return { border: 'border-emerald-500/40', bg: 'bg-emerald-950/20', icon: <CheckCircle className="w-5 h-5 text-emerald-400" /> }
-      case 'failed': return { border: 'border-red-500/40', bg: 'bg-red-950/20', icon: <XCircle className="w-5 h-5 text-red-400" /> }
-      case 'warning': return { border: 'border-yellow-500/40', bg: 'bg-yellow-950/20', icon: <AlertTriangle className="w-5 h-5 text-yellow-400" /> }
-      case 'checking': return { border: 'border-blue-500/40', bg: 'bg-blue-950/20', icon: <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" /> }
-      default: return { border: 'border-gray-700/40', bg: 'bg-gray-800/20', icon: <div className="w-5 h-5 border-2 border-gray-600 rounded-full" /> }
+      case 'passed':
+        return {
+          border: 'border-emerald-500/40',
+          bg: 'bg-emerald-950/20',
+          icon: <CheckCircle className="w-5 h-5 text-emerald-400" />,
+        }
+      case 'failed':
+        return {
+          border: 'border-red-500/40',
+          bg: 'bg-red-950/20',
+          icon: <XCircle className="w-5 h-5 text-red-400" />,
+        }
+      case 'warning':
+        return {
+          border: 'border-yellow-500/40',
+          bg: 'bg-yellow-950/20',
+          icon: <AlertTriangle className="w-5 h-5 text-yellow-400" />,
+        }
+      case 'checking':
+        return {
+          border: 'border-blue-500/40',
+          bg: 'bg-blue-950/20',
+          icon: (
+            <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+          ),
+        }
+      default:
+        return {
+          border: 'border-gray-700/40',
+          bg: 'bg-gray-800/20',
+          icon: <div className="w-5 h-5 border-2 border-gray-600 rounded-full" />,
+        }
     }
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white" style={{ fontFamily: "'Inter', sans-serif" }}>
+    <div
+      className="min-h-screen bg-gray-950 text-white"
+      style={{ fontFamily: "'Inter', sans-serif" }}
+    >
       {/* Background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-48 -left-48 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl" />
@@ -624,7 +1157,11 @@ export default function PreExamVerification() {
               <h1 className="text-3xl font-black bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
                 {mode === 'practice' ? 'Practice Exam Verification' : 'Pre-Exam Verification'}
               </h1>
-              <p className="text-gray-400 text-sm mt-0.5">{mode === 'practice' ? 'Verify your setup before starting the practice test' : 'Complete all checks before your exam begins'}</p>
+              <p className="text-gray-400 text-sm mt-0.5">
+                {mode === 'practice'
+                  ? 'Verify your setup before starting the practice test'
+                  : 'Complete all checks before your exam begins'}
+              </p>
             </div>
           </div>
 
@@ -633,8 +1170,10 @@ export default function PreExamVerification() {
             <div className="flex justify-between items-center mb-3">
               <span className="text-sm text-gray-400">Verification Progress</span>
               <div className="flex gap-4 text-sm">
-                <span className="text-emerald-400 font-semibold">✓ {passedCount} passed</span>
-                {failedCount > 0 && <span className="text-red-400 font-semibold">✗ {failedCount} failed</span>}
+                <span className="text-emerald-400 font-semibold">âœ“ {passedCount} passed</span>
+                {failedCount > 0 && (
+                  <span className="text-red-400 font-semibold">âœ— {failedCount} failed</span>
+                )}
                 <span className="text-gray-500">{checks.length} total</span>
               </div>
             </div>
@@ -687,7 +1226,8 @@ export default function PreExamVerification() {
 
                 {/* Face detection overlay */}
                 {stream && faceDetected !== null && (
-                  <div className={`absolute top-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border
+                  <div
+                    className={`absolute top-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border
                     ${faceDetected ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-400' : 'bg-red-950/80 border-red-500/50 text-red-400'}`}
                   >
                     <Eye className="w-3.5 h-3.5" />
@@ -720,16 +1260,26 @@ export default function PreExamVerification() {
                         <Sun className="w-3.5 h-3.5" />
                         <span>Brightness</span>
                       </div>
-                      <span className={`font-bold ${
-                        brightnessLevel < 30 ? 'text-red-400' :
-                        brightnessLevel < 60 ? 'text-yellow-400' : 'text-emerald-400'
-                      }`}>{brightnessLevel}/255</span>
+                      <span
+                        className={`font-bold ${
+                          brightnessLevel < 30
+                            ? 'text-red-400'
+                            : brightnessLevel < 60
+                              ? 'text-yellow-400'
+                              : 'text-emerald-400'
+                        }`}
+                      >
+                        {brightnessLevel}/255
+                      </span>
                     </div>
                     <div className="h-1.5 bg-black/50 rounded-full overflow-hidden">
                       <motion.div
                         className={`h-full rounded-full ${
-                          brightnessLevel < 30 ? 'bg-red-500' :
-                          brightnessLevel < 60 ? 'bg-yellow-500' : 'bg-emerald-500'
+                          brightnessLevel < 30
+                            ? 'bg-red-500'
+                            : brightnessLevel < 60
+                              ? 'bg-yellow-500'
+                              : 'bg-emerald-500'
                         }`}
                         animate={{ width: `${Math.min(100, (brightnessLevel / 200) * 100)}%` }}
                         transition={{ duration: 0.3 }}
@@ -753,10 +1303,15 @@ export default function PreExamVerification() {
                     <Mic className="w-4 h-4 text-green-400" />
                     <span className="text-sm font-semibold text-gray-200">Microphone</span>
                   </div>
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                    audioLevel > 30 ? 'text-yellow-400 bg-yellow-950/50' : 'text-green-400 bg-green-950/50'
-                  }`}>
-                    {audioLevel > 50 ? 'HIGH' : audioLevel > 20 ? 'MEDIUM' : 'LOW'} · {Math.round(audioLevel)}
+                  <span
+                    className={`text-xs font-bold px-2 py-0.5 rounded ${
+                      audioLevel > 30
+                        ? 'text-yellow-400 bg-yellow-950/50'
+                        : 'text-green-400 bg-green-950/50'
+                    }`}
+                  >
+                    {audioLevel > 50 ? 'HIGH' : audioLevel > 20 ? 'MEDIUM' : 'LOW'} Â·{' '}
+                    {Math.round(audioLevel)}
                   </span>
                 </div>
                 {/* Waveform bars */}
@@ -768,7 +1323,7 @@ export default function PreExamVerification() {
                       style={{
                         height: `${Math.max(2, (v / 255) * 100)}%`,
                         backgroundColor: v > 150 ? '#ef4444' : v > 80 ? '#f59e0b' : '#10b981',
-                        opacity: 0.8
+                        opacity: 0.8,
                       }}
                       animate={{ height: `${Math.max(2, (v / 255) * 100)}%` }}
                       transition={{ duration: 0.1 }}
@@ -779,7 +1334,7 @@ export default function PreExamVerification() {
               </motion.div>
             )}
 
-            {/* ID Verification — optional */}
+            {/* ID Verification â€” optional */}
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -791,20 +1346,26 @@ export default function PreExamVerification() {
                   <Upload className="w-4 h-4 text-purple-400" />
                   <span className="text-sm font-semibold text-gray-200">ID Verification</span>
                 </div>
-                <span className="text-xs px-1.5 py-0.5 bg-gray-700 text-gray-400 rounded">Optional</span>
+                <span className="text-xs px-1.5 py-0.5 bg-gray-700 text-gray-400 rounded">
+                  Optional
+                </span>
               </div>
-              <p className="text-xs text-gray-500 mb-3">Upload your student ID for identity verification (recommended)</p>
+              <p className="text-xs text-gray-500 mb-3">
+                Upload your student ID for identity verification (recommended)
+              </p>
               <label>
                 <input type="file" accept="image/*" onChange={handleIdUpload} className="hidden" />
-                <div className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all ${
-                  idVerified
-                    ? 'border-emerald-500/50 bg-emerald-950/20 text-emerald-400'
-                    : 'border-gray-600 hover:border-purple-500/50 hover:bg-purple-950/10 text-gray-500'
-                }`}>
+                <div
+                  className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all ${
+                    idVerified
+                      ? 'border-emerald-500/50 bg-emerald-950/20 text-emerald-400'
+                      : 'border-gray-600 hover:border-purple-500/50 hover:bg-purple-950/10 text-gray-500'
+                  }`}
+                >
                   {uploadedId ? (
                     <div>
                       <CheckCircle className="w-8 h-8 mx-auto mb-2 text-emerald-400" />
-                      <p className="text-sm font-semibold">ID Uploaded ✓</p>
+                      <p className="text-sm font-semibold">ID Uploaded âœ“</p>
                       <p className="text-xs mt-1 text-gray-500">{uploadedId.name}</p>
                     </div>
                   ) : (
@@ -832,16 +1393,20 @@ export default function PreExamVerification() {
                     onChange={e => setConsentGiven(e.target.checked)}
                     className="sr-only"
                   />
-                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
-                    consentGiven ? 'bg-blue-500 border-blue-500' : 'border-gray-600 bg-gray-800'
-                  }`}>
+                  <div
+                    className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+                      consentGiven ? 'bg-blue-500 border-blue-500' : 'border-gray-600 bg-gray-800'
+                    }`}
+                  >
                     {consentGiven && <CheckCircle className="w-3.5 h-3.5 text-white" />}
                   </div>
                 </div>
                 <span className="text-xs text-gray-400 leading-relaxed">
-                  I consent to <span className="text-white">video, audio, and screen monitoring</span> during this exam.
-                  I understand that all activity will be recorded and reviewed for academic integrity. Face, eye tracking,
-                  keyboard/mouse behavior and audio are monitored throughout.
+                  I consent to{' '}
+                  <span className="text-white">video, audio, and screen monitoring</span> during
+                  this exam. I understand that all activity will be recorded and reviewed for
+                  academic integrity. Face, eye tracking, keyboard/mouse behavior and audio are
+                  monitored throughout.
                 </span>
               </label>
             </motion.div>
@@ -882,25 +1447,31 @@ export default function PreExamVerification() {
                         <div className="flex items-center gap-2 mb-0.5">
                           <span className="font-semibold text-sm text-gray-200">{check.name}</span>
                           {check.required && (
-                            <span className="text-xs px-1.5 py-0.5 bg-red-950/50 text-red-400 border border-red-500/30 rounded">Required</span>
+                            <span className="text-xs px-1.5 py-0.5 bg-red-950/50 text-red-400 border border-red-500/30 rounded">
+                              Required
+                            </span>
                           )}
                         </div>
-                        <p className={`text-xs ${
-                          check.status === 'failed' ? 'text-red-400' :
-                          check.status === 'warning' ? 'text-yellow-400' :
-                          check.status === 'passed' ? 'text-emerald-400' :
-                          check.status === 'checking' ? 'text-blue-400' :
-                          'text-gray-500'
-                        }`}>
+                        <p
+                          className={`text-xs ${
+                            check.status === 'failed'
+                              ? 'text-red-400'
+                              : check.status === 'warning'
+                                ? 'text-yellow-400'
+                                : check.status === 'passed'
+                                  ? 'text-emerald-400'
+                                  : check.status === 'checking'
+                                    ? 'text-blue-400'
+                                    : 'text-gray-500'
+                          }`}
+                        >
                           {check.message}
                         </p>
                         {check.detail && check.status !== 'pending' && (
                           <p className="text-xs text-gray-600 mt-0.5">{check.detail}</p>
                         )}
                       </div>
-                      <div className="flex-shrink-0">
-                        {statusConfig.icon}
-                      </div>
+                      <div className="flex-shrink-0">{statusConfig.icon}</div>
                     </div>
                   </motion.div>
                 )
@@ -919,7 +1490,8 @@ export default function PreExamVerification() {
                   <div>
                     <h4 className="font-semibold text-red-400 mb-1">Action Required</h4>
                     <p className="text-sm text-red-300">
-                      {failedCount} required check{failedCount > 1 ? 's' : ''} failed. Please resolve them before proceeding.
+                      {failedCount} required check{failedCount > 1 ? 's' : ''} failed. Please
+                      resolve them before proceeding.
                     </p>
                   </div>
                 </div>
@@ -936,17 +1508,21 @@ export default function PreExamVerification() {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-bold text-gray-200 mb-1">
-                    {canProceed ? `✅ Ready to Start ${mode === 'practice' ? 'Practice' : 'Exam'}` : 'Complete All Requirements'}
+                    {canProceed
+                      ? `âœ… Ready to Start ${mode === 'practice' ? 'Practice' : 'Exam'}`
+                      : 'Complete All Requirements'}
                   </h3>
                   <p className="text-xs text-gray-500">
                     {!allRequiredPassed
-                      ? `${failedCount} required check${failedCount > 1 ? 's' : ''} need attention — click Re-run Checks after fixing`
+                      ? `${failedCount} required check${failedCount > 1 ? 's' : ''} need attention â€” click Re-run Checks after fixing`
                       : !consentGiven
                         ? 'Please accept the proctoring consent below'
-                        : 'All checks complete — you may proceed'}
+                        : 'All checks complete â€” you may proceed'}
                   </p>
                   {!idVerified && allRequiredPassed && consentGiven && (
-                    <p className="text-xs text-yellow-400/80 mt-1">💡 ID upload skipped — your session will be flagged for manual review</p>
+                    <p className="text-xs text-yellow-400/80 mt-1">
+                      ðŸ’¡ ID upload skipped â€” your session will be flagged for manual review
+                    </p>
                   )}
                 </div>
                 <motion.button
@@ -968,7 +1544,10 @@ export default function PreExamVerification() {
               {canProceed && (
                 <div className="mt-3 pt-3 border-t border-gray-700/50 flex items-center gap-2 text-xs text-gray-500">
                   <Activity className="w-3.5 h-3.5" />
-                  <span>Full proctoring will activate when exam begins: face tracking, audio monitoring, and screen recording</span>
+                  <span>
+                    Full proctoring will activate when exam begins: face tracking, audio monitoring,
+                    and screen recording
+                  </span>
                 </div>
               )}
             </motion.div>

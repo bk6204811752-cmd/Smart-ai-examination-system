@@ -1,9 +1,7 @@
-/**
+﻿/**
  * AI-Powered Student Insights and Recommendations
  * Analyzes performance and provides personalized learning suggestions
  */
-
-import { logger } from './logger'
 
 export interface PerformanceData {
   examId: string
@@ -95,9 +93,9 @@ class AIInsightsEngine {
           actionItems: [
             `Consider mentoring others in ${category}`,
             `Challenge yourself with advanced ${category} topics`,
-            `Maintain this strength with regular practice`
+            `Maintain this strength with regular practice`,
           ],
-          priority: 'low'
+          priority: 'low',
         })
       }
     }
@@ -117,7 +115,7 @@ class AIInsightsEngine {
     for (const [category, data] of Object.entries(categoryPerformance)) {
       if (data.accuracy < 0.6 && data.totalQuestions >= 3) {
         const weakTopics = Object.entries(topicPerformance)
-          .filter(([topic, perf]) => perf.category === category && perf.accuracy < 0.6)
+          .filter(([, perf]) => perf.category === category && perf.accuracy < 0.6)
           .map(([topic]) => topic)
 
         insights.push({
@@ -128,10 +126,12 @@ class AIInsightsEngine {
           actionItems: [
             `Review fundamentals of ${category}`,
             `Practice more ${category} questions`,
-            weakTopics.length > 0 ? `Focus on: ${weakTopics.slice(0, 3).join(', ')}` : 'Study core concepts',
-            `Allocate 30-45 minutes daily for ${category}`
+            weakTopics.length > 0
+              ? `Focus on: ${weakTopics.slice(0, 3).join(', ')}`
+              : 'Study core concepts',
+            `Allocate 30-45 minutes daily for ${category}`,
           ],
-          priority: data.accuracy < 0.5 ? 'high' : 'medium'
+          priority: data.accuracy < 0.5 ? 'high' : 'medium',
         })
       }
     }
@@ -148,8 +148,8 @@ class AIInsightsEngine {
     if (history.length < 3) return insights
 
     // Sort by time
-    const sorted = [...history].sort((a, b) => 
-      new Date(a.examId).getTime() - new Date(b.examId).getTime()
+    const sorted = [...history].sort(
+      (a, b) => new Date(a.examId).getTime() - new Date(b.examId).getTime()
     )
 
     // Calculate improvement rate
@@ -157,8 +157,12 @@ class AIInsightsEngine {
     const older = sorted.slice(0, -3)
 
     if (older.length > 0) {
-      const recentAvg = recent.reduce((sum, exam) => sum + (exam.correctAnswers / exam.totalQuestions), 0) / recent.length
-      const olderAvg = older.reduce((sum, exam) => sum + (exam.correctAnswers / exam.totalQuestions), 0) / older.length
+      const recentAvg =
+        recent.reduce((sum, exam) => sum + exam.correctAnswers / exam.totalQuestions, 0) /
+        recent.length
+      const olderAvg =
+        older.reduce((sum, exam) => sum + exam.correctAnswers / exam.totalQuestions, 0) /
+        older.length
 
       const improvement = recentAvg - olderAvg
 
@@ -171,9 +175,9 @@ class AIInsightsEngine {
           actionItems: [
             'Keep up the excellent work!',
             'Your study strategy is working',
-            'Consider increasing difficulty level'
+            'Consider increasing difficulty level',
           ],
-          priority: 'medium'
+          priority: 'medium',
         })
       } else if (improvement < -0.1) {
         insights.push({
@@ -185,9 +189,9 @@ class AIInsightsEngine {
             'Review recent study habits',
             'Ensure adequate rest before exams',
             'Focus on weak areas identified above',
-            'Consider taking a short break to avoid burnout'
+            'Consider taking a short break to avoid burnout',
           ],
-          priority: 'high'
+          priority: 'high',
         })
       }
     }
@@ -200,13 +204,14 @@ class AIInsightsEngine {
    */
   private generateStudyRecommendations(history: PerformanceData[]): StudentInsight[] {
     const insights: StudentInsight[] = []
-    const categoryPerformance = this.calculateCategoryPerformance(history)
+    this.calculateCategoryPerformance(history)
 
     // Time management recommendation
-    const avgTimePerQuestion = history.reduce((sum, exam) => 
-      sum + (exam.timeSpent / exam.totalQuestions), 0) / history.length
+    const avgTimePerQuestion =
+      history.reduce((sum, exam) => sum + exam.timeSpent / exam.totalQuestions, 0) / history.length
 
-    if (avgTimePerQuestion > 120) { // More than 2 minutes per question
+    if (avgTimePerQuestion > 120) {
+      // More than 2 minutes per question
       insights.push({
         type: 'recommendation',
         category: 'Time Management',
@@ -216,9 +221,9 @@ class AIInsightsEngine {
           'Practice timed mock exams',
           'Learn to eliminate wrong answers quickly',
           'Set time limits for each question',
-          'Practice mental math for faster calculations'
+          'Practice mental math for faster calculations',
         ],
-        priority: 'medium'
+        priority: 'medium',
       })
     }
 
@@ -228,14 +233,14 @@ class AIInsightsEngine {
       insights.push({
         type: 'recommendation',
         category: 'Challenge Level',
-        message: 'You\'re ready for harder questions to accelerate growth',
+        message: "You're ready for harder questions to accelerate growth",
         confidence: 0.85,
         actionItems: [
           'Attempt medium and hard difficulty questions',
           'Challenge yourself with advanced topics',
-          'Join study groups for peer learning'
+          'Join study groups for peer learning',
         ],
-        priority: 'low'
+        priority: 'low',
       })
     }
 
@@ -245,7 +250,7 @@ class AIInsightsEngine {
   /**
    * Generate personalized learning path
    */
-  generateLearningPath(insights: StudentInsight[], performanceHistory: PerformanceData[]): LearningRecommendation[] {
+  generateLearningPath(insights: StudentInsight[]): LearningRecommendation[] {
     const recommendations: LearningRecommendation[] = []
 
     // Get weak categories
@@ -260,12 +265,12 @@ class AIInsightsEngine {
       recommendations.push({
         title: `Master ${weakness.category}`,
         description: `Comprehensive study plan to improve your ${weakness.category} skills`,
-        topics: weakness.actionItems.filter(item => item.includes('Focus on:')).map(item => 
-          item.replace('Focus on: ', '')
-        ),
+        topics: weakness.actionItems
+          .filter(item => item.includes('Focus on:'))
+          .map(item => item.replace('Focus on: ', '')),
         estimatedTime: '2-3 weeks',
         difficulty: 'Beginner to Intermediate',
-        resources: this.generateResources(weakness.category)
+        resources: this.generateResources(weakness.category),
       })
     }
 
@@ -275,8 +280,10 @@ class AIInsightsEngine {
   /**
    * Calculate performance by category
    */
-  private calculateCategoryPerformance(history: PerformanceData[]): Record<string, { accuracy: number, totalQuestions: number }> {
-    const categoryStats: Record<string, { correct: number, total: number }> = {}
+  private calculateCategoryPerformance(
+    history: PerformanceData[]
+  ): Record<string, { accuracy: number; totalQuestions: number }> {
+    const categoryStats: Record<string, { correct: number; total: number }> = {}
 
     for (const exam of history) {
       if (!categoryStats[exam.category]) {
@@ -286,11 +293,11 @@ class AIInsightsEngine {
       categoryStats[exam.category].total += exam.totalQuestions
     }
 
-    const result: Record<string, { accuracy: number, totalQuestions: number }> = {}
+    const result: Record<string, { accuracy: number; totalQuestions: number }> = {}
     for (const [category, stats] of Object.entries(categoryStats)) {
       result[category] = {
         accuracy: stats.correct / stats.total,
-        totalQuestions: stats.total
+        totalQuestions: stats.total,
       }
     }
 
@@ -300,8 +307,10 @@ class AIInsightsEngine {
   /**
    * Calculate performance by topic
    */
-  private calculateTopicPerformance(history: PerformanceData[]): Record<string, { accuracy: number, category: string }> {
-    const topicStats: Record<string, { correct: number, total: number, category: string }> = {}
+  private calculateTopicPerformance(
+    history: PerformanceData[]
+  ): Record<string, { accuracy: number; category: string }> {
+    const topicStats: Record<string, { correct: number; total: number; category: string }> = {}
 
     for (const exam of history) {
       for (const answer of exam.answers) {
@@ -315,11 +324,11 @@ class AIInsightsEngine {
       }
     }
 
-    const result: Record<string, { accuracy: number, category: string }> = {}
+    const result: Record<string, { accuracy: number; category: string }> = {}
     for (const [topic, stats] of Object.entries(topicStats)) {
       result[topic] = {
         accuracy: stats.correct / stats.total,
-        category: stats.category
+        category: stats.category,
       }
     }
 
@@ -343,51 +352,56 @@ class AIInsightsEngine {
     return {
       easy: distribution.easy / total,
       medium: distribution.medium / total,
-      hard: distribution.hard / total
+      hard: distribution.hard / total,
     }
   }
 
   /**
    * Generate learning resources
    */
-  private generateResources(category: string): Array<{ type: 'video' | 'article' | 'practice' | 'quiz', title: string, url: string }> {
+  private generateResources(
+    category: string
+  ): Array<{ type: 'video' | 'article' | 'practice' | 'quiz'; title: string; url: string }> {
     // This would normally fetch from a database or API
     return [
       {
         type: 'video',
         title: `${category} Fundamentals - Complete Course`,
-        url: `/resources/videos/${category.toLowerCase()}-fundamentals`
+        url: `/resources/videos/${category.toLowerCase()}-fundamentals`,
       },
       {
         type: 'article',
         title: `Understanding ${category} - Study Guide`,
-        url: `/resources/guides/${category.toLowerCase()}`
+        url: `/resources/guides/${category.toLowerCase()}`,
       },
       {
         type: 'practice',
         title: `${category} Practice Questions (100+)`,
-        url: `/practice/${category.toLowerCase()}`
+        url: `/practice/${category.toLowerCase()}`,
       },
       {
         type: 'quiz',
         title: `${category} Quick Assessment`,
-        url: `/quiz/${category.toLowerCase()}`
-      }
+        url: `/quiz/${category.toLowerCase()}`,
+      },
     ]
   }
 
   /**
    * Calculate optimal study schedule
    */
-  calculateStudySchedule(insights: StudentInsight[], availableHoursPerWeek: number): Array<{
+  calculateStudySchedule(
+    insights: StudentInsight[],
+    availableHoursPerWeek: number
+  ): Array<{
     day: string
     topic: string
     duration: number
     priority: string
   }> {
-    const schedule: Array<{ day: string, topic: string, duration: number, priority: string }> = []
+    const schedule: Array<{ day: string; topic: string; duration: number; priority: string }> = []
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-    
+
     // Sort topics by priority
     const topics = insights
       .filter(i => i.type === 'weakness' || i.type === 'recommendation')
@@ -401,12 +415,12 @@ class AIInsightsEngine {
 
     for (const topic of topics) {
       const hours = topic.priority === 'high' ? 2 : topic.priority === 'medium' ? 1.5 : 1
-      
+
       schedule.push({
         day: days[dayIndex % 7],
         topic: topic.category,
         duration: Math.min(hours, hoursPerDay),
-        priority: topic.priority
+        priority: topic.priority,
       })
 
       dayIndex++

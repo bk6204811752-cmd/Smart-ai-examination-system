@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Brain, Target, TrendingUp, BookOpen, Award, Zap, CheckCircle, Lock } from 'lucide-react'
+import { Brain, Target, TrendingUp, Award, Zap, CheckCircle, Lock } from 'lucide-react'
 
 interface LearningPath {
   student_id: string
@@ -42,6 +42,7 @@ export default function AILearningPathGenerator({ studentId = 'current' }: { stu
 
   useEffect(() => {
     generateLearningPath()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentId])
 
   const generateLearningPath = async () => {
@@ -64,29 +65,29 @@ export default function AILearningPathGenerator({ studentId = 'current' }: { stu
                 type: 'video',
                 title: 'Binary Search Trees Explained',
                 duration: 25,
-                url: '#'
+                url: '#',
               },
               {
                 type: 'article',
                 title: 'AVL Trees: Complete Guide',
                 duration: 15,
-                url: '#'
+                url: '#',
               },
               {
                 type: 'practice',
                 title: 'Tree Traversal Exercises',
                 duration: 45,
-                url: '#'
+                url: '#',
               },
               {
                 type: 'quiz',
                 title: 'Trees Mastery Quiz',
                 duration: 20,
-                url: '#'
-              }
+                url: '#',
+              },
             ],
             skills: ['Tree Balancing', 'AVL Rotations', 'Tree Traversals'],
-            completed: false
+            completed: false,
           },
           {
             topic: 'Algorithm Optimization',
@@ -99,17 +100,17 @@ export default function AILearningPathGenerator({ studentId = 'current' }: { stu
                 type: 'video',
                 title: 'Dynamic Programming Fundamentals',
                 duration: 30,
-                url: '#'
+                url: '#',
               },
               {
                 type: 'practice',
                 title: 'DP Practice Problems',
                 duration: 60,
-                url: '#'
-              }
+                url: '#',
+              },
             ],
             skills: ['Dynamic Programming', 'Memoization', 'Optimization'],
-            completed: false
+            completed: false,
           },
           {
             topic: 'Graph Algorithms',
@@ -122,24 +123,24 @@ export default function AILearningPathGenerator({ studentId = 'current' }: { stu
                 type: 'video',
                 title: 'Graph Theory Basics',
                 duration: 40,
-                url: '#'
+                url: '#',
               },
               {
                 type: 'article',
-                title: 'Dijkstra\'s Algorithm',
+                title: "Dijkstra's Algorithm",
                 duration: 20,
-                url: '#'
+                url: '#',
               },
               {
                 type: 'practice',
                 title: 'Graph Traversal Practice',
                 duration: 60,
-                url: '#'
-              }
+                url: '#',
+              },
             ],
             skills: ['BFS', 'DFS', 'Shortest Path', 'MST'],
-            completed: false
-          }
+            completed: false,
+          },
         ],
         weak_areas: [
           {
@@ -149,8 +150,8 @@ export default function AILearningPathGenerator({ studentId = 'current' }: { stu
             improvement_plan: [
               'Review QuickSort implementation',
               'Practice MergeSort variations',
-              'Understand time complexity trade-offs'
-            ]
+              'Understand time complexity trade-offs',
+            ],
           },
           {
             topic: 'Recursion',
@@ -159,30 +160,26 @@ export default function AILearningPathGenerator({ studentId = 'current' }: { stu
             improvement_plan: [
               'Master base case identification',
               'Practice recursive tree problems',
-              'Learn tail recursion optimization'
-            ]
-          }
+              'Learn tail recursion optimization',
+            ],
+          },
         ],
-        strengths: [
-          'Arrays & Linked Lists',
-          'Basic Algorithms',
-          'Problem Solving'
-        ],
+        strengths: ['Arrays & Linked Lists', 'Basic Algorithms', 'Problem Solving'],
         next_milestone: {
           title: 'Advanced Data Structures Mastery',
           requirements: [
             'Complete all High Priority topics',
             'Score 80%+ on Tree algorithms',
-            'Solve 20 medium-level problems'
+            'Solve 20 medium-level problems',
           ],
-          reward: 'Unlock Advanced Algorithm Challenges'
+          reward: 'Unlock Advanced Algorithm Challenges',
         },
         ai_insights: [
-          '📈 You\'re improving fastest in tree-based problems. Keep practicing!',
+          "📈 You're improving fastest in tree-based problems. Keep practicing!",
           '🎯 Focus on algorithm optimization to bridge the gap to advanced level',
           '⚡ Your problem-solving speed is above average. Work on accuracy now',
-          '🔍 Pattern recognition is your strength - leverage it for complex problems'
-        ]
+          '🔍 Pattern recognition is your strength - leverage it for complex problems',
+        ],
       }
       setLearningPath(mockPath)
     } catch (error) {
@@ -214,12 +211,12 @@ export default function AILearningPathGenerator({ studentId = 'current' }: { stu
                 <Brain className="w-8 h-8" />
                 AI Learning Path
               </h1>
-              <p className="text-white/90 mt-2">
-                Personalized roadmap powered by machine learning
-              </p>
+              <p className="text-white/90 mt-2">Personalized roadmap powered by machine learning</p>
             </div>
             <div className="text-center bg-white/20 backdrop-blur-sm rounded-xl p-6">
-              <div className="text-4xl font-bold text-white mb-1">{learningPath.mastery_score}%</div>
+              <div className="text-4xl font-bold text-white mb-1">
+                {learningPath.mastery_score}%
+              </div>
               <div className="text-sm text-white/90">Overall Mastery</div>
               <div className="text-xs text-white/70 mt-1">{learningPath.current_level} Level</div>
             </div>
@@ -234,7 +231,10 @@ export default function AILearningPathGenerator({ studentId = 'current' }: { stu
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {learningPath.ai_insights.map((insight, index) => (
-              <div key={index} className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg p-4 border border-purple-200">
+              <div
+                key={index}
+                className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg p-4 border border-purple-200"
+              >
                 <p className="text-sm text-gray-700">{insight}</p>
               </div>
             ))}
@@ -268,31 +268,42 @@ export default function AILearningPathGenerator({ studentId = 'current' }: { stu
                             {topic.completed ? (
                               <CheckCircle className="w-5 h-5 text-green-600" />
                             ) : (
-                              <div className={`w-5 h-5 rounded-full border-2 ${
-                                topic.priority === 'high' ? 'border-red-500' :
-                                topic.priority === 'medium' ? 'border-yellow-500' :
-                                'border-blue-500'
-                              }`} />
+                              <div
+                                className={`w-5 h-5 rounded-full border-2 ${
+                                  topic.priority === 'high'
+                                    ? 'border-red-500'
+                                    : topic.priority === 'medium'
+                                      ? 'border-yellow-500'
+                                      : 'border-blue-500'
+                                }`}
+                              />
                             )}
                             <h4 className="font-bold text-gray-900">{topic.topic}</h4>
-                            <span className={`text-xs px-2 py-1 rounded-full ${
-                              topic.priority === 'high' ? 'bg-red-100 text-red-700' :
-                              topic.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                              'bg-blue-100 text-blue-700'
-                            }`}>
+                            <span
+                              className={`text-xs px-2 py-1 rounded-full ${
+                                topic.priority === 'high'
+                                  ? 'bg-red-100 text-red-700'
+                                  : topic.priority === 'medium'
+                                    ? 'bg-yellow-100 text-yellow-700'
+                                    : 'bg-blue-100 text-blue-700'
+                              }`}
+                            >
                               {topic.priority.toUpperCase()}
                             </span>
-                            <span className={`text-xs px-2 py-1 rounded-full ${
-                              topic.difficulty === 'hard' ? 'bg-purple-100 text-purple-700' :
-                              topic.difficulty === 'medium' ? 'bg-orange-100 text-orange-700' :
-                              'bg-green-100 text-green-700'
-                            }`}>
+                            <span
+                              className={`text-xs px-2 py-1 rounded-full ${
+                                topic.difficulty === 'hard'
+                                  ? 'bg-purple-100 text-purple-700'
+                                  : topic.difficulty === 'medium'
+                                    ? 'bg-orange-100 text-orange-700'
+                                    : 'bg-green-100 text-green-700'
+                              }`}
+                            >
                               {topic.difficulty}
                             </span>
                           </div>
                           <p className="text-sm text-gray-600">
-                            ⏱️ {topic.estimated_time} minutes • 
-                            🎯 {topic.skills.length} skills
+                            ⏱️ {topic.estimated_time} minutes • 🎯 {topic.skills.length} skills
                           </p>
                           {topic.prerequisites.length > 0 && (
                             <div className="mt-2 flex items-center gap-2">
@@ -311,10 +322,15 @@ export default function AILearningPathGenerator({ studentId = 'current' }: { stu
                       <div className="border-t border-gray-200 bg-gray-50 p-4 space-y-4">
                         {/* Skills */}
                         <div>
-                          <h5 className="text-sm font-semibold text-gray-700 mb-2">Skills You'll Learn</h5>
+                          <h5 className="text-sm font-semibold text-gray-700 mb-2">
+                            Skills You'll Learn
+                          </h5>
                           <div className="flex flex-wrap gap-2">
                             {topic.skills.map((skill, i) => (
-                              <span key={i} className="bg-purple-100 text-purple-700 text-xs px-3 py-1 rounded-full">
+                              <span
+                                key={i}
+                                className="bg-purple-100 text-purple-700 text-xs px-3 py-1 rounded-full"
+                              >
                                 {skill}
                               </span>
                             ))}
@@ -323,7 +339,9 @@ export default function AILearningPathGenerator({ studentId = 'current' }: { stu
 
                         {/* Resources */}
                         <div>
-                          <h5 className="text-sm font-semibold text-gray-700 mb-2">Learning Resources</h5>
+                          <h5 className="text-sm font-semibold text-gray-700 mb-2">
+                            Learning Resources
+                          </h5>
                           <div className="space-y-2">
                             {topic.resources.map((resource, i) => (
                               <a
@@ -331,19 +349,32 @@ export default function AILearningPathGenerator({ studentId = 'current' }: { stu
                                 href={resource.url}
                                 className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-purple-300 transition"
                               >
-                                <div className={`p-2 rounded-lg ${
-                                  resource.type === 'video' ? 'bg-red-100' :
-                                  resource.type === 'article' ? 'bg-blue-100' :
-                                  resource.type === 'practice' ? 'bg-green-100' :
-                                  'bg-purple-100'
-                                }`}>
-                                  {resource.type === 'video' ? '🎥' :
-                                   resource.type === 'article' ? '📄' :
-                                   resource.type === 'practice' ? '💪' : '📝'}
+                                <div
+                                  className={`p-2 rounded-lg ${
+                                    resource.type === 'video'
+                                      ? 'bg-red-100'
+                                      : resource.type === 'article'
+                                        ? 'bg-blue-100'
+                                        : resource.type === 'practice'
+                                          ? 'bg-green-100'
+                                          : 'bg-purple-100'
+                                  }`}
+                                >
+                                  {resource.type === 'video'
+                                    ? '🎥'
+                                    : resource.type === 'article'
+                                      ? '📄'
+                                      : resource.type === 'practice'
+                                        ? '💪'
+                                        : '📝'}
                                 </div>
                                 <div className="flex-1">
-                                  <p className="text-sm font-medium text-gray-900">{resource.title}</p>
-                                  <p className="text-xs text-gray-500">{resource.duration} minutes</p>
+                                  <p className="text-sm font-medium text-gray-900">
+                                    {resource.title}
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    {resource.duration} minutes
+                                  </p>
                                 </div>
                               </a>
                             ))}
@@ -410,7 +441,9 @@ export default function AILearningPathGenerator({ studentId = 'current' }: { stu
                   <div key={i}>
                     <div className="flex justify-between text-sm mb-2">
                       <span className="font-medium text-gray-900">{area.topic}</span>
-                      <span className="text-gray-600">{area.current_score}% → {area.target_score}%</span>
+                      <span className="text-gray-600">
+                        {area.current_score}% → {area.target_score}%
+                      </span>
                     </div>
                     <div className="bg-gray-200 rounded-full h-2 mb-2">
                       <div

@@ -1,9 +1,17 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuthStore } from '../../store/globalStore'
-import { 
-  Send, Bot, User, Sparkles, BookOpen, Code, 
-  Calculator, Brain, MessageSquare, Trash2, RotateCcw,
-  ChevronDown, Lightbulb, TrendingUp
+import {
+  Send,
+  Bot,
+  User,
+  Sparkles,
+  BookOpen,
+  Code,
+  Calculator,
+  Brain,
+  MessageSquare,
+  Trash2,
+  Lightbulb,
 } from 'lucide-react'
 
 interface Message {
@@ -51,9 +59,10 @@ export default function AITutorPage() {
         role: 'assistant',
         content: `Hello ${user?.full_name?.split(' ')[0] || 'there'}! 👋 I'm your AI tutor. I can help you with:\n\n• Programming concepts and code examples\n• Mathematical problems and explanations\n• Database queries and design\n• General academic questions\n• Exam preparation tips\n\nWhat would you like to learn about today?`,
         timestamp: new Date(),
-        type: 'text'
+        type: 'text',
       })
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -72,15 +81,15 @@ export default function AITutorPage() {
         title: 'Binary Search Trees',
         subject: 'programming',
         messages: [],
-        lastUpdated: new Date('2024-10-30')
+        lastUpdated: new Date('2024-10-30'),
       },
       {
         id: '2',
         title: 'SQL Joins Explained',
         subject: 'dbms',
         messages: [],
-        lastUpdated: new Date('2024-10-29')
-      }
+        lastUpdated: new Date('2024-10-29'),
+      },
     ]
     setConversations(mockHistory)
   }
@@ -97,7 +106,7 @@ export default function AITutorPage() {
       role: 'user',
       content: input,
       timestamp: new Date(),
-      type: 'text'
+      type: 'text',
     }
 
     addMessage(userMessage)
@@ -112,10 +121,10 @@ export default function AITutorPage() {
     }, 1500)
   }
 
-  const generateAIResponse = (query: string, subject: string): Message => {
+  const generateAIResponse = (query: string): Message => {
     // Mock AI responses based on query
     const lowerQuery = query.toLowerCase()
-    
+
     let response = ''
     let type: 'text' | 'code' | 'math' | 'concept' = 'text'
 
@@ -203,7 +212,11 @@ function useLocalStorage(key, initial) {
   return [value, setValue];
 }
 \`\`\`\n\nNeed help with a specific hook?`
-    } else if (lowerQuery.includes('exam') || lowerQuery.includes('preparation') || lowerQuery.includes('tips')) {
+    } else if (
+      lowerQuery.includes('exam') ||
+      lowerQuery.includes('preparation') ||
+      lowerQuery.includes('tips')
+    ) {
       response = `Exam Preparation Tips! 📚✨\n\n**Before the Exam:**\n✓ Review key concepts daily (30-45 mins)\n✓ Practice with previous year questions\n✓ Create mind maps for complex topics\n✓ Join study groups for discussions\n✓ Get 7-8 hours sleep before exam\n\n**During the Exam:**\n✓ Read all questions first\n✓ Answer easy questions first\n✓ Manage time: allocate per section\n✓ Double-check your answers\n✓ Stay calm and focused\n\n**Subject-Specific Tips:**\n• **Programming**: Practice code by hand\n• **DBMS**: Understand normalization & queries\n• **DSA**: Know time/space complexity\n• **Theory**: Use acronyms to remember\n\nWhich subject do you need help with?`
     } else {
       response = `I understand you're asking about "${query}". Let me help you with that!\n\nCould you provide more details? For example:\n• What specific aspect are you struggling with?\n• Do you need code examples or theoretical explanation?\n• Is this for an upcoming exam or general learning?\n\nFeel free to ask about:\n✓ Programming concepts (Python, Java, C++, JavaScript)\n✓ Data Structures & Algorithms\n✓ Database Management (SQL, normalization)\n✓ Web Development\n✓ Mathematics & Problem Solving\n\nI'm here to help! 😊`
@@ -214,7 +227,7 @@ function useLocalStorage(key, initial) {
       role: 'assistant',
       content: response,
       timestamp: new Date(),
-      type
+      type,
     }
   }
 
@@ -226,32 +239,36 @@ function useLocalStorage(key, initial) {
   }
 
   const clearChat = () => {
-    setMessages([{
-      id: Date.now().toString(),
-      role: 'assistant',
-      content: 'Chat cleared! How can I help you today?',
-      timestamp: new Date(),
-      type: 'text'
-    }])
+    setMessages([
+      {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: 'Chat cleared! How can I help you today?',
+        timestamp: new Date(),
+        type: 'text',
+      },
+    ])
   }
 
   const suggestedQuestions = [
-    "Explain binary search trees with code",
-    "What are SQL joins?",
-    "Time complexity of sorting algorithms",
-    "React hooks tutorial",
-    "Exam preparation tips"
+    'Explain binary search trees with code',
+    'What are SQL joins?',
+    'Time complexity of sorting algorithms',
+    'React hooks tutorial',
+    'Exam preparation tips',
   ]
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar - Conversation History */}
-      <div className={`${showHistory ? 'w-64' : 'w-0'} bg-white border-r transition-all duration-300 overflow-hidden`}>
+      <div
+        className={`${showHistory ? 'w-64' : 'w-0'} bg-white border-r transition-all duration-300 overflow-hidden`}
+      >
         <div className="p-4 border-b">
           <h3 className="font-semibold text-gray-900">Conversations</h3>
         </div>
         <div className="p-2 space-y-2">
-          {conversations.map((conv) => (
+          {conversations.map(conv => (
             <button
               key={conv.id}
               onClick={() => setCurrentConversationId(conv.id)}
@@ -301,7 +318,7 @@ function useLocalStorage(key, initial) {
 
           {/* Subject Selector */}
           <div className="flex items-center space-x-2 mt-4 overflow-x-auto pb-2">
-            {subjects.map((subject) => {
+            {subjects.map(subject => {
               const Icon = subject.icon
               return (
                 <button
@@ -323,18 +340,22 @@ function useLocalStorage(key, initial) {
 
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {messages.map((message) => (
+          {messages.map(message => (
             <div
               key={message.id}
               className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
-              <div className={`flex space-x-3 max-w-3xl ${message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}>
+              <div
+                className={`flex space-x-3 max-w-3xl ${message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}
+              >
                 {/* Avatar */}
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-                  message.role === 'user'
-                    ? 'bg-blue-600'
-                    : 'bg-gradient-to-br from-purple-600 to-blue-500'
-                }`}>
+                <div
+                  className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    message.role === 'user'
+                      ? 'bg-blue-600'
+                      : 'bg-gradient-to-br from-purple-600 to-blue-500'
+                  }`}
+                >
                   {message.role === 'user' ? (
                     <User className="w-5 h-5 text-white" />
                   ) : (
@@ -344,11 +365,13 @@ function useLocalStorage(key, initial) {
 
                 {/* Message Content */}
                 <div className={`flex-1 ${message.role === 'user' ? 'text-right' : ''}`}>
-                  <div className={`inline-block px-4 py-3 rounded-2xl ${
-                    message.role === 'user'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-white border border-gray-200'
-                  }`}>
+                  <div
+                    className={`inline-block px-4 py-3 rounded-2xl ${
+                      message.role === 'user'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white border border-gray-200'
+                    }`}
+                  >
                     <div className="whitespace-pre-wrap break-words">
                       {message.content.split('```').map((part, idx) => {
                         if (idx % 2 === 1) {
@@ -356,9 +379,14 @@ function useLocalStorage(key, initial) {
                           const [lang, ...codeLines] = part.split('\n')
                           const code = codeLines.join('\n')
                           return (
-                            <div key={idx} className="my-2 bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto">
+                            <div
+                              key={idx}
+                              className="my-2 bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto"
+                            >
                               <div className="text-xs text-gray-400 mb-2">{lang}</div>
-                              <pre className="text-sm"><code>{code}</code></pre>
+                              <pre className="text-sm">
+                                <code>{code}</code>
+                              </pre>
                             </div>
                           )
                         }
@@ -367,7 +395,10 @@ function useLocalStorage(key, initial) {
                     </div>
                   </div>
                   <p className="text-xs text-gray-500 mt-1 px-2">
-                    {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {message.timestamp.toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
                   </p>
                 </div>
               </div>
@@ -383,9 +414,18 @@ function useLocalStorage(key, initial) {
                 </div>
                 <div className="bg-white border border-gray-200 px-4 py-3 rounded-2xl">
                   <div className="flex space-x-2">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                    <div
+                      className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                      style={{ animationDelay: '0ms' }}
+                    ></div>
+                    <div
+                      className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                      style={{ animationDelay: '150ms' }}
+                    ></div>
+                    <div
+                      className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                      style={{ animationDelay: '300ms' }}
+                    ></div>
                   </div>
                 </div>
               </div>
@@ -424,7 +464,7 @@ function useLocalStorage(key, initial) {
                 <textarea
                   ref={inputRef}
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={e => setInput(e.target.value)}
                   onKeyPress={handleKeyPress}
                   placeholder="Ask me anything... (Press Enter to send, Shift+Enter for new line)"
                   className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
@@ -441,7 +481,8 @@ function useLocalStorage(key, initial) {
               </button>
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              AI responses are generated for educational purposes. Always verify important information.
+              AI responses are generated for educational purposes. Always verify important
+              information.
             </p>
           </div>
         </div>

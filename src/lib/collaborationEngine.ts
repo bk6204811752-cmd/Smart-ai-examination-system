@@ -116,7 +116,7 @@ class RealtimeCollaborationEngine {
   private reconnectAttempts = 0
   private maxReconnectAttempts = 5
   private eventHandlers = new Map<string, Set<(...args: any[]) => any>>()
-  
+
   /**
    * Connect to WebSocket server
    */
@@ -128,39 +128,39 @@ class RealtimeCollaborationEngine {
         reconnection: true,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
-        reconnectionAttempts: this.maxReconnectAttempts
+        reconnectionAttempts: this.maxReconnectAttempts,
       })
-      
+
       this.socket.on('connect', () => {
         console.log('✅ WebSocket connected')
         this.reconnectAttempts = 0
         this.emit('connection_status', { connected: true })
         resolve()
       })
-      
+
       this.socket.on('disconnect', (reason: string) => {
         console.log('❌ WebSocket disconnected:', reason)
         this.emit('connection_status', { connected: false, reason })
       })
-      
+
       this.socket.on('connect_error', (error: Error) => {
         console.error('Connection error:', error)
         this.reconnectAttempts++
-        
+
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
           reject(new Error('Failed to connect after multiple attempts'))
         }
       })
-      
+
       this.socket.on('error', (error: Error) => {
         console.error('Socket error:', error)
         this.emit('error', error)
       })
-      
+
       this.setupEventListeners()
     })
   }
-  
+
   /**
    * Disconnect from server
    */
@@ -170,95 +170,98 @@ class RealtimeCollaborationEngine {
       this.socket = null
     }
   }
-  
+
   /**
    * Setup internal event listeners
    */
   private setupEventListeners() {
     if (!this.socket) return
-    
+
     // Chat events
     this.socket.on('chat:message', (message: ChatMessage) => {
       this.emit('chat:message', message)
     })
-    
+
     this.socket.on('chat:typing', (data: { roomId: string; userId: string; userName: string }) => {
       this.emit('chat:typing', data)
     })
-    
+
     // Room events
     this.socket.on('room:user_joined', (data: { room: StudyRoom; user: CollaborationUser }) => {
       this.emit('room:user_joined', data)
     })
-    
+
     this.socket.on('room:user_left', (data: { roomId: string; userId: string }) => {
       this.emit('room:user_left', data)
     })
-    
+
     this.socket.on('room:updated', (room: StudyRoom) => {
       this.emit('room:updated', room)
     })
-    
+
     // Exam monitoring events
     this.socket.on('exam:student_update', (student: LiveStudent) => {
       this.emit('exam:student_update', student)
     })
-    
-    this.socket.on('exam:violation', (data: { examId: string; studentId: string; violation: any }) => {
-      this.emit('exam:violation', data)
-    })
-    
+
+    this.socket.on(
+      'exam:violation',
+      (data: { examId: string; studentId: string; violation: any }) => {
+        this.emit('exam:violation', data)
+      }
+    )
+
     this.socket.on('exam:alert', (alert: { type: string; message: string; severity: string }) => {
       this.emit('exam:alert', alert)
     })
-    
+
     // Whiteboard events
     this.socket.on('whiteboard:action', (action: WhiteboardAction) => {
       this.emit('whiteboard:action', action)
     })
-    
+
     // Code collaboration events
     this.socket.on('code:update', (data: CodeCollaboration) => {
       this.emit('code:update', data)
     })
-    
+
     // Poll events
     this.socket.on('poll:created', (poll: Poll) => {
       this.emit('poll:created', poll)
     })
-    
+
     this.socket.on('poll:voted', (data: { pollId: string; optionId: string; userId: string }) => {
       this.emit('poll:voted', data)
     })
-    
+
     this.socket.on('poll:ended', (pollId: string) => {
       this.emit('poll:ended', pollId)
     })
-    
+
     // Presence events
     this.socket.on('presence:update', (users: CollaborationUser[]) => {
       this.emit('presence:update', users)
     })
   }
-  
+
   // ============================================================================
   // CHAT METHODS
   // ============================================================================
-  
+
   /**
    * Join a chat room
    */
   joinRoom(roomId: string) {
     this.socket?.emit('room:join', { roomId })
   }
-  
+
   /**
    * Leave a chat room
    */
   leaveRoom(roomId: string) {
     this.socket?.emit('room:leave', { roomId })
   }
-  
+
   /**
    * Send a chat message
    */
@@ -267,167 +270,171 @@ class RealtimeCollaborationEngine {
       roomId,
       message,
       type,
-      metadata
+      metadata,
     })
   }
-  
+
   /**
    * Send typing indicator
    */
   sendTyping(roomId: string, isTyping: boolean) {
     this.socket?.emit('chat:typing', { roomId, isTyping })
   }
-  
+
   /**
    * Add reaction to message
    */
   addReaction(messageId: string, emoji: string) {
     this.socket?.emit('chat:react', { messageId, emoji })
   }
-  
+
   /**
    * Delete message
    */
   deleteMessage(messageId: string) {
     this.socket?.emit('chat:delete', { messageId })
   }
-  
+
   /**
    * Edit message
    */
   editMessage(messageId: string, newMessage: string) {
     this.socket?.emit('chat:edit', { messageId, newMessage })
   }
-  
+
   // ============================================================================
   // STUDY ROOM METHODS
   // ============================================================================
-  
+
   /**
    * Create a study room
    */
   createStudyRoom(room: Omit<StudyRoom, 'id' | 'participants' | 'createdAt'>) {
     this.socket?.emit('room:create', room)
   }
-  
+
   /**
    * Get active study rooms
    */
   getStudyRooms(subject?: string) {
     this.socket?.emit('room:list', { subject })
   }
-  
+
   /**
    * Update room settings
    */
   updateRoomSettings(roomId: string, settings: Partial<RoomSettings>) {
     this.socket?.emit('room:update_settings', { roomId, settings })
   }
-  
+
   /**
    * Kick user from room
    */
   kickUser(roomId: string, userId: string) {
     this.socket?.emit('room:kick', { roomId, userId })
   }
-  
+
   /**
    * Make user moderator
    */
   promoteToModerator(roomId: string, userId: string) {
     this.socket?.emit('room:promote', { roomId, userId })
   }
-  
+
   // ============================================================================
   // EXAM MONITORING METHODS
   // ============================================================================
-  
+
   /**
    * Start monitoring exam session
    */
   startExamMonitoring(examId: string) {
     this.socket?.emit('exam:monitor_start', { examId })
   }
-  
+
   /**
    * Stop monitoring exam session
    */
   stopExamMonitoring(examId: string) {
     this.socket?.emit('exam:monitor_stop', { examId })
   }
-  
+
   /**
    * Send student progress update
    */
   updateStudentProgress(examId: string, progress: Partial<LiveStudent>) {
     this.socket?.emit('exam:progress_update', { examId, progress })
   }
-  
+
   /**
    * Report violation
    */
   reportViolation(examId: string, violation: any) {
     this.socket?.emit('exam:violation_report', { examId, violation })
   }
-  
+
   /**
    * Send message to specific student
    */
   messageStudent(examId: string, studentId: string, message: string) {
     this.socket?.emit('exam:message_student', { examId, studentId, message })
   }
-  
+
   /**
    * Pause student's exam
    */
   pauseStudentExam(examId: string, studentId: string, reason: string) {
     this.socket?.emit('exam:pause_student', { examId, studentId, reason })
   }
-  
+
   /**
    * Resume student's exam
    */
   resumeStudentExam(examId: string, studentId: string) {
     this.socket?.emit('exam:resume_student', { examId, studentId })
   }
-  
+
   // ============================================================================
   // WHITEBOARD METHODS
   // ============================================================================
-  
+
   /**
    * Send whiteboard action
    */
   sendWhiteboardAction(roomId: string, action: Omit<WhiteboardAction, 'id' | 'timestamp'>) {
     this.socket?.emit('whiteboard:action', { roomId, action })
   }
-  
+
   /**
    * Clear whiteboard
    */
   clearWhiteboard(roomId: string) {
     this.socket?.emit('whiteboard:clear', { roomId })
   }
-  
+
   /**
    * Save whiteboard as image
    */
   saveWhiteboard(roomId: string): Promise<string> {
     return new Promise((resolve, reject) => {
-      this.socket?.emit('whiteboard:save', { roomId }, (response: { success: boolean; url?: string; error?: string }) => {
-        if (response.success && response.url) {
-          resolve(response.url)
-        } else {
-          reject(new Error(response.error || 'Failed to save whiteboard'))
+      this.socket?.emit(
+        'whiteboard:save',
+        { roomId },
+        (response: { success: boolean; url?: string; error?: string }) => {
+          if (response.success && response.url) {
+            resolve(response.url)
+          } else {
+            reject(new Error(response.error || 'Failed to save whiteboard'))
+          }
         }
-      })
+      )
     })
   }
-  
+
   // ============================================================================
   // CODE COLLABORATION METHODS
   // ============================================================================
-  
+
   /**
    * Update code in collaborative editor
    */
@@ -435,14 +442,18 @@ class RealtimeCollaborationEngine {
     this.socket?.emit('code:update', {
       roomId,
       code,
-      cursor: cursorPosition
+      cursor: cursorPosition,
     })
   }
-  
+
   /**
    * Run code remotely
    */
-  runCode(roomId: string, language: string, code: string): Promise<{ output: string; error?: string }> {
+  runCode(
+    roomId: string,
+    language: string,
+    code: string
+  ): Promise<{ output: string; error?: string }> {
     return new Promise((resolve, reject) => {
       this.socket?.emit('code:run', { roomId, language, code }, (response: any) => {
         if (response.error) {
@@ -453,112 +464,120 @@ class RealtimeCollaborationEngine {
       })
     })
   }
-  
+
   // ============================================================================
   // POLL METHODS
   // ============================================================================
-  
+
   /**
    * Create a poll
    */
   createPoll(poll: Omit<Poll, 'id' | 'createdAt'>) {
     this.socket?.emit('poll:create', poll)
   }
-  
+
   /**
    * Vote on poll
    */
   votePoll(pollId: string, optionIds: string[]) {
     this.socket?.emit('poll:vote', { pollId, optionIds })
   }
-  
+
   /**
    * End poll
    */
   endPoll(pollId: string) {
     this.socket?.emit('poll:end', { pollId })
   }
-  
+
   /**
    * Get poll results
    */
   getPollResults(pollId: string): Promise<Poll> {
     return new Promise((resolve, reject) => {
-      this.socket?.emit('poll:results', { pollId }, (response: { success: boolean; poll?: Poll; error?: string }) => {
-        if (response.success && response.poll) {
-          resolve(response.poll)
-        } else {
-          reject(new Error(response.error || 'Failed to get poll results'))
+      this.socket?.emit(
+        'poll:results',
+        { pollId },
+        (response: { success: boolean; poll?: Poll; error?: string }) => {
+          if (response.success && response.poll) {
+            resolve(response.poll)
+          } else {
+            reject(new Error(response.error || 'Failed to get poll results'))
+          }
         }
-      })
+      )
     })
   }
-  
+
   // ============================================================================
   // SCREEN SHARING METHODS
   // ============================================================================
-  
+
   /**
    * Start screen sharing
    */
   async startScreenShare(roomId: string): Promise<MediaStream> {
     try {
-      // @ts-ignore - getDisplayMedia vendor prefix
+      // @ts-expect-error - getDisplayMedia vendor prefix
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
-        audio: false
+        audio: false,
       })
-      
+
       this.socket?.emit('screen:share_start', { roomId })
-      
+
       // Stop sharing when user stops it
       stream.getVideoTracks()[0].addEventListener('ended', () => {
         this.stopScreenShare(roomId)
       })
-      
+
       return stream
     } catch (error) {
       throw new Error('Failed to start screen sharing')
     }
   }
-  
+
   /**
    * Stop screen sharing
    */
   stopScreenShare(roomId: string) {
     this.socket?.emit('screen:share_stop', { roomId })
   }
-  
+
   // ============================================================================
   // PRESENCE METHODS
   // ============================================================================
-  
+
   /**
    * Update user status
    */
   updateStatus(status: 'online' | 'away' | 'busy' | 'offline', activity?: string) {
     this.socket?.emit('presence:update', { status, activity })
   }
-  
+
   /**
    * Get online users
    */
   getOnlineUsers(roomId?: string): Promise<CollaborationUser[]> {
     return new Promise((resolve, reject) => {
-      this.socket?.emit('presence:list', { roomId }, (response: { success: boolean; users?: CollaborationUser[]; error?: string }) => {
-        if (response.success && response.users) {
-          resolve(response.users)
-        } else {
-          reject(new Error(response.error || 'Failed to get online users'))
+      this.socket?.emit(
+        'presence:list',
+        { roomId },
+        (response: { success: boolean; users?: CollaborationUser[]; error?: string }) => {
+          if (response.success && response.users) {
+            resolve(response.users)
+          } else {
+            reject(new Error(response.error || 'Failed to get online users'))
+          }
         }
-      })
+      )
     })
   }
-  
+
   // ============================================================================
   // EVENT HANDLING
   // ============================================================================
-  
+
   /**
    * Register event handler
    */
@@ -568,7 +587,7 @@ class RealtimeCollaborationEngine {
     }
     this.eventHandlers.get(event)!.add(handler)
   }
-  
+
   /**
    * Unregister event handler
    */
@@ -578,7 +597,7 @@ class RealtimeCollaborationEngine {
       handlers.delete(handler)
     }
   }
-  
+
   /**
    * Emit event to handlers
    */
@@ -594,14 +613,14 @@ class RealtimeCollaborationEngine {
       })
     }
   }
-  
+
   /**
    * Check connection status
    */
   isConnected(): boolean {
     return this.socket?.connected || false
   }
-  
+
   /**
    * Get socket ID
    */
@@ -625,16 +644,16 @@ import { useEffect, useState, useCallback } from 'react'
 export function useChat(roomId: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set())
-  
+
   useEffect(() => {
     collaborationEngine.joinRoom(roomId)
-    
+
     const handleMessage = (message: ChatMessage) => {
       if (message.roomId === roomId) {
         setMessages(prev => [...prev, message])
       }
     }
-    
+
     const handleTyping = (data: { roomId: string; userId: string; userName: string }) => {
       if (data.roomId === roomId) {
         setTypingUsers(prev => new Set(prev).add(data.userName))
@@ -647,25 +666,31 @@ export function useChat(roomId: string) {
         }, 3000)
       }
     }
-    
+
     collaborationEngine.on('chat:message', handleMessage)
     collaborationEngine.on('chat:typing', handleTyping)
-    
+
     return () => {
       collaborationEngine.off('chat:message', handleMessage)
       collaborationEngine.off('chat:typing', handleTyping)
       collaborationEngine.leaveRoom(roomId)
     }
   }, [roomId])
-  
-  const sendMessage = useCallback((message: string) => {
-    collaborationEngine.sendMessage(roomId, message)
-  }, [roomId])
-  
-  const sendTyping = useCallback((isTyping: boolean) => {
-    collaborationEngine.sendTyping(roomId, isTyping)
-  }, [roomId])
-  
+
+  const sendMessage = useCallback(
+    (message: string) => {
+      collaborationEngine.sendMessage(roomId, message)
+    },
+    [roomId]
+  )
+
+  const sendTyping = useCallback(
+    (isTyping: boolean) => {
+      collaborationEngine.sendTyping(roomId, isTyping)
+    },
+    [roomId]
+  )
+
   return { messages, typingUsers, sendMessage, sendTyping }
 }
 
@@ -675,10 +700,10 @@ export function useChat(roomId: string) {
 export function useExamMonitoring(examId: string) {
   const [students, setStudents] = useState<LiveStudent[]>([])
   const [violations, setViolations] = useState<any[]>([])
-  
+
   useEffect(() => {
     collaborationEngine.startExamMonitoring(examId)
-    
+
     const handleStudentUpdate = (student: LiveStudent) => {
       setStudents(prev => {
         const index = prev.findIndex(s => s.userId === student.userId)
@@ -690,23 +715,23 @@ export function useExamMonitoring(examId: string) {
         return [...prev, student]
       })
     }
-    
+
     const handleViolation = (data: any) => {
       if (data.examId === examId) {
         setViolations(prev => [...prev, data.violation])
       }
     }
-    
+
     collaborationEngine.on('exam:student_update', handleStudentUpdate)
     collaborationEngine.on('exam:violation', handleViolation)
-    
+
     return () => {
       collaborationEngine.off('exam:student_update', handleStudentUpdate)
       collaborationEngine.off('exam:violation', handleViolation)
       collaborationEngine.stopExamMonitoring(examId)
     }
   }, [examId])
-  
+
   return { students, violations }
 }
 
@@ -715,23 +740,26 @@ export function useExamMonitoring(examId: string) {
  */
 export function usePresence(roomId?: string) {
   const [onlineUsers, setOnlineUsers] = useState<CollaborationUser[]>([])
-  
+
   useEffect(() => {
     const handlePresenceUpdate = (users: CollaborationUser[]) => {
       setOnlineUsers(users)
     }
-    
+
     collaborationEngine.on('presence:update', handlePresenceUpdate)
     collaborationEngine.getOnlineUsers(roomId).then(setOnlineUsers)
-    
+
     return () => {
       collaborationEngine.off('presence:update', handlePresenceUpdate)
     }
   }, [roomId])
-  
-  const updateStatus = useCallback((status: 'online' | 'away' | 'busy' | 'offline', activity?: string) => {
-    collaborationEngine.updateStatus(status, activity)
-  }, [])
-  
+
+  const updateStatus = useCallback(
+    (status: 'online' | 'away' | 'busy' | 'offline', activity?: string) => {
+      collaborationEngine.updateStatus(status, activity)
+    },
+    []
+  )
+
   return { onlineUsers, updateStatus }
 }

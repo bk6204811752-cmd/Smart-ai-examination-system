@@ -15,21 +15,19 @@ export function ConnectionHealth({ videoStreams, lastFrameTime, wsStatus }: Conn
   useEffect(() => {
     const now = Date.now()
     const recentThreshold = 5000 // 5 seconds
-    
+
     // Count active streams (frames received in last 5 seconds)
     const active = Object.entries(lastFrameTime).filter(
-      ([_, timestamp]) => now - timestamp < recentThreshold
+      ([, timestamp]) => now - timestamp < recentThreshold
     ).length
-    
+
     setActiveStreams(active)
-    
+
     // Calculate average latency
     const latencies = Object.values(lastFrameTime).map(timestamp => now - timestamp)
-    const avg = latencies.length > 0 
-      ? latencies.reduce((a, b) => a + b, 0) / latencies.length 
-      : 0
+    const avg = latencies.length > 0 ? latencies.reduce((a, b) => a + b, 0) / latencies.length : 0
     setAvgLatency(Math.round(avg))
-    
+
     // Determine health status
     if (wsStatus !== 'connected') {
       setHealth('offline')
@@ -46,19 +44,27 @@ export function ConnectionHealth({ videoStreams, lastFrameTime, wsStatus }: Conn
 
   const getHealthColor = () => {
     switch (health) {
-      case 'excellent': return 'bg-green-100 text-green-800 border-green-300'
-      case 'good': return 'bg-yellow-100 text-yellow-800 border-yellow-300'
-      case 'poor': return 'bg-orange-100 text-orange-800 border-orange-300'
-      case 'offline': return 'bg-red-100 text-red-800 border-red-300'
+      case 'excellent':
+        return 'bg-green-100 text-green-800 border-green-300'
+      case 'good':
+        return 'bg-yellow-100 text-yellow-800 border-yellow-300'
+      case 'poor':
+        return 'bg-orange-100 text-orange-800 border-orange-300'
+      case 'offline':
+        return 'bg-red-100 text-red-800 border-red-300'
     }
   }
 
   const getHealthIcon = () => {
     switch (health) {
-      case 'excellent': return <Wifi className="w-5 h-5 text-green-600" />
-      case 'good': return <Wifi className="w-5 h-5 text-yellow-600" />
-      case 'poor': return <AlertCircle className="w-5 h-5 text-orange-600" />
-      case 'offline': return <WifiOff className="w-5 h-5 text-red-600" />
+      case 'excellent':
+        return <Wifi className="w-5 h-5 text-green-600" />
+      case 'good':
+        return <Wifi className="w-5 h-5 text-yellow-600" />
+      case 'poor':
+        return <AlertCircle className="w-5 h-5 text-orange-600" />
+      case 'offline':
+        return <WifiOff className="w-5 h-5 text-red-600" />
     }
   }
 
@@ -93,9 +99,11 @@ export function ConnectionHealth({ videoStreams, lastFrameTime, wsStatus }: Conn
         </div>
         <div className="flex items-center justify-between text-xs mt-1">
           <span>WebSocket:</span>
-          <span className={`font-semibold ${
-            wsStatus === 'connected' ? 'text-green-700' : 'text-red-700'
-          }`}>
+          <span
+            className={`font-semibold ${
+              wsStatus === 'connected' ? 'text-green-700' : 'text-red-700'
+            }`}
+          >
             {wsStatus.toUpperCase()}
           </span>
         </div>

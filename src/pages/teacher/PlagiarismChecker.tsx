@@ -1,7 +1,17 @@
 import { useState, useEffect } from 'react'
 import {
-  Search, Upload, FileText, Code, AlertTriangle,
-  Download, Filter, TrendingUp, Users, Eye, Copy, ExternalLink, Loader2
+  Search,
+  Upload,
+  FileText,
+  Code,
+  AlertTriangle,
+  Filter,
+  TrendingUp,
+  Users,
+  Eye,
+  Copy,
+  ExternalLink,
+  Loader2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { plagiarismAPI } from '../../lib/api'
@@ -93,7 +103,7 @@ export default function PlagiarismCheckerPage() {
     const file = e.target.files?.[0]
     if (file) {
       const reader = new FileReader()
-      reader.onload = (event) => {
+      reader.onload = event => {
         setInputText(event.target?.result as string)
       }
       reader.readAsText(file)
@@ -102,10 +112,14 @@ export default function PlagiarismCheckerPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'clean': return 'text-green-600 bg-green-100'
-      case 'suspicious': return 'text-yellow-600 bg-yellow-100'
-      case 'flagged': return 'text-red-600 bg-red-100'
-      default: return 'text-gray-600 bg-gray-100'
+      case 'clean':
+        return 'text-green-600 bg-green-100'
+      case 'suspicious':
+        return 'text-yellow-600 bg-yellow-100'
+      case 'flagged':
+        return 'text-red-600 bg-red-100'
+      default:
+        return 'text-gray-600 bg-gray-100'
     }
   }
 
@@ -126,7 +140,9 @@ export default function PlagiarismCheckerPage() {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">Plagiarism Checker</h1>
-                <p className="text-sm text-gray-600">Detect similarities in text and code submissions</p>
+                <p className="text-sm text-gray-600">
+                  Detect similarities in text and code submissions
+                </p>
               </div>
             </div>
           </div>
@@ -134,12 +150,15 @@ export default function PlagiarismCheckerPage() {
             {[
               { id: 'check', label: 'New Check', icon: Search },
               { id: 'results', label: 'Results', icon: FileText },
-              { id: 'batch', label: 'Batch Process', icon: Users }
-            ].map((tab) => {
+              { id: 'batch', label: 'Batch Process', icon: Users },
+            ].map(tab => {
               const Icon = tab.icon
               return (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center space-x-2 px-4 py-2 border-b-2 transition ${activeTab === tab.id ? 'border-red-600 text-red-600' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={`flex items-center space-x-2 px-4 py-2 border-b-2 transition ${activeTab === tab.id ? 'border-red-600 text-red-600' : 'border-transparent text-gray-600 hover:text-gray-900'}`}
+                >
                   <Icon className="w-4 h-4" />
                   <span className="font-medium">{tab.label}</span>
                 </button>
@@ -192,20 +211,31 @@ export default function PlagiarismCheckerPage() {
               <div className="bg-white rounded-xl shadow-sm p-6">
                 <h3 className="text-lg font-semibold mb-4">Content to Check</h3>
                 <div className="flex space-x-4 mb-4">
-                  <button onClick={() => setCheckType('text')}
-                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition ${checkType === 'text' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                    <FileText className="w-4 h-4" /><span>Text/Essay</span>
+                  <button
+                    onClick={() => setCheckType('text')}
+                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition ${checkType === 'text' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                  >
+                    <FileText className="w-4 h-4" />
+                    <span>Text/Essay</span>
                   </button>
-                  <button onClick={() => setCheckType('code')}
-                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition ${checkType === 'code' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                    <Code className="w-4 h-4" /><span>Code</span>
+                  <button
+                    onClick={() => setCheckType('code')}
+                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition ${checkType === 'code' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                  >
+                    <Code className="w-4 h-4" />
+                    <span>Code</span>
                   </button>
                 </div>
                 {checkType === 'code' && (
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Programming Language</label>
-                    <select value={selectedLanguage} onChange={e => setSelectedLanguage(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-red-500">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Programming Language
+                    </label>
+                    <select
+                      value={selectedLanguage}
+                      onChange={e => setSelectedLanguage(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-red-500"
+                    >
                       <option value="python">Python</option>
                       <option value="java">Java</option>
                       <option value="javascript">JavaScript</option>
@@ -216,24 +246,43 @@ export default function PlagiarismCheckerPage() {
                 )}
                 <div className="mb-4">
                   <label className="block">
-                    <input type="file"
+                    <input
+                      type="file"
                       accept={checkType === 'code' ? '.py,.java,.js,.cpp,.c' : '.txt,.doc,.docx'}
-                      onChange={handleFileUpload} className="hidden" />
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
                     <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-red-400 transition">
                       <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                      <p className="text-sm text-gray-600">Click to upload file or paste content below</p>
+                      <p className="text-sm text-gray-600">
+                        Click to upload file or paste content below
+                      </p>
                     </div>
                   </label>
                 </div>
-                <textarea value={inputText} onChange={e => setInputText(e.target.value)}
-                  placeholder={checkType === 'code' ? 'Paste your code here...' : 'Paste your text here...'}
-                  className="w-full h-64 px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-red-500 font-mono text-sm" />
-                <button onClick={handleCheck} disabled={!inputText.trim() || checking}
-                  className="w-full mt-4 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2">
+                <textarea
+                  value={inputText}
+                  onChange={e => setInputText(e.target.value)}
+                  placeholder={
+                    checkType === 'code' ? 'Paste your code here...' : 'Paste your text here...'
+                  }
+                  className="w-full h-64 px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-red-500 font-mono text-sm"
+                />
+                <button
+                  onClick={handleCheck}
+                  disabled={!inputText.trim() || checking}
+                  className="w-full mt-4 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                >
                   {checking ? (
-                    <><Loader2 className="w-5 h-5 animate-spin" /><span>Checking for plagiarism...</span></>
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>Checking for plagiarism...</span>
+                    </>
                   ) : (
-                    <><Search className="w-5 h-5" /><span>Check Plagiarism</span></>
+                    <>
+                      <Search className="w-5 h-5" />
+                      <span>Check Plagiarism</span>
+                    </>
                   )}
                 </button>
               </div>
@@ -242,10 +291,22 @@ export default function PlagiarismCheckerPage() {
               <div className="bg-white rounded-xl shadow-sm p-6">
                 <h3 className="font-semibold mb-3">How It Works</h3>
                 <ul className="space-y-2 text-sm text-gray-600">
-                  <li className="flex items-start"><span className="text-red-600 mr-2">1.</span><span>Paste or upload content to check</span></li>
-                  <li className="flex items-start"><span className="text-red-600 mr-2">2.</span><span>System compares with database and internet</span></li>
-                  <li className="flex items-start"><span className="text-red-600 mr-2">3.</span><span>Similarity score calculated</span></li>
-                  <li className="flex items-start"><span className="text-red-600 mr-2">4.</span><span>Detailed report with sources generated</span></li>
+                  <li className="flex items-start">
+                    <span className="text-red-600 mr-2">1.</span>
+                    <span>Paste or upload content to check</span>
+                  </li>
+                  <li className="flex items-start">
+                    <span className="text-red-600 mr-2">2.</span>
+                    <span>System compares with database and internet</span>
+                  </li>
+                  <li className="flex items-start">
+                    <span className="text-red-600 mr-2">3.</span>
+                    <span>Similarity score calculated</span>
+                  </li>
+                  <li className="flex items-start">
+                    <span className="text-red-600 mr-2">4.</span>
+                    <span>Detailed report with sources generated</span>
+                  </li>
                 </ul>
               </div>
               <div className="bg-white rounded-xl shadow-sm p-6">
@@ -253,15 +314,21 @@ export default function PlagiarismCheckerPage() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-gray-600">0-40%</span>
-                    <span className="px-3 py-1 bg-green-100 text-green-600 rounded-full text-xs font-semibold">Clean</span>
+                    <span className="px-3 py-1 bg-green-100 text-green-600 rounded-full text-xs font-semibold">
+                      Clean
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-gray-600">41-70%</span>
-                    <span className="px-3 py-1 bg-yellow-100 text-yellow-600 rounded-full text-xs font-semibold">Suspicious</span>
+                    <span className="px-3 py-1 bg-yellow-100 text-yellow-600 rounded-full text-xs font-semibold">
+                      Suspicious
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-gray-600">71-100%</span>
-                    <span className="px-3 py-1 bg-red-100 text-red-600 rounded-full text-xs font-semibold">Flagged</span>
+                    <span className="px-3 py-1 bg-red-100 text-red-600 rounded-full text-xs font-semibold">
+                      Flagged
+                    </span>
                   </div>
                 </div>
               </div>
@@ -275,8 +342,11 @@ export default function PlagiarismCheckerPage() {
               <div className="bg-white rounded-xl shadow-sm p-4">
                 <div className="flex items-center space-x-2 mb-4">
                   <Filter className="w-4 h-4 text-gray-400" />
-                  <input type="text" placeholder="Search results..."
-                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-red-500" />
+                  <input
+                    type="text"
+                    placeholder="Search results..."
+                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-red-500"
+                  />
                 </div>
               </div>
               {loading ? (
@@ -288,62 +358,101 @@ export default function PlagiarismCheckerPage() {
                   <Eye className="w-12 h-12 text-gray-300 mx-auto mb-2" />
                   <p className="text-sm text-gray-500">No results yet. Run a check first.</p>
                 </div>
-              ) : results.map(result => (
-                <div key={result.id} onClick={() => setSelectedResult(result)}
-                  className={`bg-white rounded-xl shadow-sm p-4 cursor-pointer transition ${selectedResult?.id === result.id ? 'ring-2 ring-red-600' : 'hover:shadow-md'}`}>
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <h4 className="font-semibold text-gray-900">{result.studentName}</h4>
-                      <p className="text-xs text-gray-500">{result.studentId}</p>
+              ) : (
+                results.map(result => (
+                  <div
+                    key={result.id}
+                    onClick={() => setSelectedResult(result)}
+                    className={`bg-white rounded-xl shadow-sm p-4 cursor-pointer transition ${selectedResult?.id === result.id ? 'ring-2 ring-red-600' : 'hover:shadow-md'}`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <h4 className="font-semibold text-gray-900">{result.studentName}</h4>
+                        <p className="text-xs text-gray-500">{result.studentId}</p>
+                      </div>
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(result.status)}`}
+                      >
+                        {result.status.toUpperCase()}
+                      </span>
                     </div>
-                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(result.status)}`}>
-                      {result.status.toUpperCase()}
-                    </span>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600">
+                        {new Date(result.submissionDate).toLocaleDateString()}
+                      </span>
+                      <span className={`font-bold ${getSimilarityColor(result.similarityScore)}`}>
+                        {result.similarityScore}% match
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">{new Date(result.submissionDate).toLocaleDateString()}</span>
-                    <span className={`font-bold ${getSimilarityColor(result.similarityScore)}`}>{result.similarityScore}% match</span>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
             <div className="md:col-span-2">
               {selectedResult ? (
                 <div className="bg-white rounded-xl shadow-sm p-6">
                   <div className="flex items-start justify-between mb-6">
                     <div>
-                      <h3 className="text-xl font-bold text-gray-900">{selectedResult.studentName}</h3>
+                      <h3 className="text-xl font-bold text-gray-900">
+                        {selectedResult.studentName}
+                      </h3>
                       <p className="text-sm text-gray-600">{selectedResult.studentId}</p>
                     </div>
                     <div className="text-right">
-                      <div className={`text-4xl font-bold ${getSimilarityColor(selectedResult.similarityScore)}`}>
+                      <div
+                        className={`text-4xl font-bold ${getSimilarityColor(selectedResult.similarityScore)}`}
+                      >
                         {selectedResult.similarityScore}%
                       </div>
-                      <span className={`px-3 py-1 rounded-full text-sm font-semibold ${getStatusColor(selectedResult.status)}`}>
+                      <span
+                        className={`px-3 py-1 rounded-full text-sm font-semibold ${getStatusColor(selectedResult.status)}`}
+                      >
                         {selectedResult.status.toUpperCase()}
                       </span>
                     </div>
                   </div>
                   <div className="mb-6">
-                    <h4 className="font-semibold mb-2 flex items-center"><FileText className="w-4 h-4 mr-2" />Original Content</h4>
-                    <div className="bg-gray-50 rounded-lg p-4 font-mono text-sm max-h-48 overflow-y-auto">{selectedResult.originalText}</div>
+                    <h4 className="font-semibold mb-2 flex items-center">
+                      <FileText className="w-4 h-4 mr-2" />
+                      Original Content
+                    </h4>
+                    <div className="bg-gray-50 rounded-lg p-4 font-mono text-sm max-h-48 overflow-y-auto">
+                      {selectedResult.originalText}
+                    </div>
                   </div>
                   <div>
-                    <h4 className="font-semibold mb-3 flex items-center"><Copy className="w-4 h-4 mr-2" />Similarity Matches ({selectedResult.matches.length})</h4>
+                    <h4 className="font-semibold mb-3 flex items-center">
+                      <Copy className="w-4 h-4 mr-2" />
+                      Similarity Matches ({selectedResult.matches.length})
+                    </h4>
                     <div className="space-y-4">
                       {selectedResult.matches.map((match, idx) => (
                         <div key={idx} className="border border-gray-200 rounded-lg p-4">
                           <div className="flex items-start justify-between mb-2">
                             <div>
                               <h5 className="font-semibold text-gray-900">{match.source}</h5>
-                              <p className="text-xs text-gray-500">{match.sourceType === 'student' ? `Student: ${match.studentName}` : match.sourceType}</p>
+                              <p className="text-xs text-gray-500">
+                                {match.sourceType === 'student'
+                                  ? `Student: ${match.studentName}`
+                                  : match.sourceType}
+                              </p>
                             </div>
-                            <span className={`text-lg font-bold ${getSimilarityColor(match.similarity)}`}>{match.similarity}%</span>
+                            <span
+                              className={`text-lg font-bold ${getSimilarityColor(match.similarity)}`}
+                            >
+                              {match.similarity}%
+                            </span>
                           </div>
-                          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded text-sm mb-2">{match.matchedText}</div>
+                          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded text-sm mb-2">
+                            {match.matchedText}
+                          </div>
                           {match.url && (
-                            <a href={match.url} target="_blank" rel="noopener noreferrer"
-                              className="text-sm text-blue-600 hover:underline flex items-center">
+                            <a
+                              href={match.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-blue-600 hover:underline flex items-center"
+                            >
                               View Source <ExternalLink className="w-3 h-3 ml-1" />
                             </a>
                           )}
@@ -371,11 +480,17 @@ export default function PlagiarismCheckerPage() {
             <h3 className="text-lg font-semibold mb-4">Batch Plagiarism Check</h3>
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center">
               <Upload className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h4 className="text-xl font-semibold text-gray-900 mb-2">Upload Multiple Submissions</h4>
-              <p className="text-gray-600 mb-4">Upload a ZIP file containing multiple student submissions for batch processing</p>
+              <h4 className="text-xl font-semibold text-gray-900 mb-2">
+                Upload Multiple Submissions
+              </h4>
+              <p className="text-gray-600 mb-4">
+                Upload a ZIP file containing multiple student submissions for batch processing
+              </p>
               <label className="inline-block">
                 <input type="file" accept=".zip" className="hidden" />
-                <span className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition cursor-pointer inline-block">Choose ZIP File</span>
+                <span className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition cursor-pointer inline-block">
+                  Choose ZIP File
+                </span>
               </label>
             </div>
             <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">

@@ -7,12 +7,12 @@ export enum ScreenSize {
   MOBILE = 'mobile',
   TABLET = 'tablet',
   DESKTOP = 'desktop',
-  LARGE = 'large'
+  LARGE = 'large',
 }
 
 export enum Orientation {
   PORTRAIT = 'portrait',
-  LANDSCAPE = 'landscape'
+  LANDSCAPE = 'landscape',
 }
 
 export interface DeviceInfo {
@@ -33,7 +33,7 @@ export const BREAKPOINTS = {
   md: 768,
   lg: 1024,
   xl: 1280,
-  '2xl': 1536
+  '2xl': 1536,
 } as const
 
 /**
@@ -50,9 +50,7 @@ export const getScreenSize = (width: number): ScreenSize => {
  * Get current orientation
  */
 export const getOrientation = (): Orientation => {
-  return window.innerWidth > window.innerHeight 
-    ? Orientation.LANDSCAPE 
-    : Orientation.PORTRAIT
+  return window.innerWidth > window.innerHeight ? Orientation.LANDSCAPE : Orientation.PORTRAIT
 }
 
 /**
@@ -63,7 +61,7 @@ export const isTouchDevice = (): boolean => {
     'ontouchstart' in window ||
     navigator.maxTouchPoints > 0 ||
     // @ts-expect-error - Legacy support
-    (navigator.msMaxTouchPoints > 0)
+    navigator.msMaxTouchPoints > 0
   )
 }
 
@@ -80,7 +78,7 @@ export const isRetinaDisplay = (): boolean => {
 export const getDeviceInfo = (): DeviceInfo => {
   const width = window.innerWidth
   const height = window.innerHeight
-  
+
   return {
     screenSize: getScreenSize(width),
     width,
@@ -88,7 +86,7 @@ export const getDeviceInfo = (): DeviceInfo => {
     orientation: getOrientation(),
     isTouchDevice: isTouchDevice(),
     isRetina: isRetinaDisplay(),
-    devicePixelRatio: window.devicePixelRatio || 1
+    devicePixelRatio: window.devicePixelRatio || 1,
   }
 }
 
@@ -103,7 +101,7 @@ export const mediaQueries = {
   portrait: '(orientation: portrait)',
   landscape: '(orientation: landscape)',
   touch: '(hover: none) and (pointer: coarse)',
-  retina: '(-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi)'
+  retina: '(-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi)',
 }
 
 /**
@@ -118,14 +116,14 @@ export const matchesMediaQuery = (query: string): boolean => {
  */
 export const getOptimalFontSize = (baseSize: number = 16): number => {
   const { screenSize } = getDeviceInfo()
-  
+
   const multipliers = {
-    [ScreenSize.MOBILE]: 0.875,   // 14px
-    [ScreenSize.TABLET]: 0.9375,  // 15px
-    [ScreenSize.DESKTOP]: 1,      // 16px
-    [ScreenSize.LARGE]: 1.125     // 18px
+    [ScreenSize.MOBILE]: 0.875, // 14px
+    [ScreenSize.TABLET]: 0.9375, // 15px
+    [ScreenSize.DESKTOP]: 1, // 16px
+    [ScreenSize.LARGE]: 1.125, // 18px
   }
-  
+
   return baseSize * multipliers[screenSize]
 }
 
@@ -134,14 +132,14 @@ export const getOptimalFontSize = (baseSize: number = 16): number => {
  */
 export const getOptimalSpacing = (baseSpacing: number = 16): number => {
   const { screenSize } = getDeviceInfo()
-  
+
   const multipliers = {
-    [ScreenSize.MOBILE]: 0.75,    // 12px
-    [ScreenSize.TABLET]: 0.875,   // 14px
-    [ScreenSize.DESKTOP]: 1,      // 16px
-    [ScreenSize.LARGE]: 1.25      // 20px
+    [ScreenSize.MOBILE]: 0.75, // 12px
+    [ScreenSize.TABLET]: 0.875, // 14px
+    [ScreenSize.DESKTOP]: 1, // 16px
+    [ScreenSize.LARGE]: 1.25, // 20px
   }
-  
+
   return baseSpacing * multipliers[screenSize]
 }
 
@@ -150,38 +148,46 @@ export const getOptimalSpacing = (baseSpacing: number = 16): number => {
  */
 export const getOptimalImageQuality = (): 'low' | 'medium' | 'high' => {
   const { screenSize, isRetina } = getDeviceInfo()
-  
+
   if (screenSize === ScreenSize.MOBILE && !isRetina) return 'low'
-  if (screenSize === ScreenSize.TABLET || (screenSize === ScreenSize.MOBILE && isRetina)) return 'medium'
+  if (screenSize === ScreenSize.TABLET || (screenSize === ScreenSize.MOBILE && isRetina))
+    return 'medium'
   return 'high'
 }
 
 /**
  * Get column count for grid layouts
  */
-export const getGridColumns = (options: {
-  mobile?: number
-  tablet?: number
-  desktop?: number
-  large?: number
-} = {}): number => {
+export const getGridColumns = (
+  options: {
+    mobile?: number
+    tablet?: number
+    desktop?: number
+    large?: number
+  } = {}
+): number => {
   const { screenSize } = getDeviceInfo()
-  
+
   const defaults = {
     mobile: 1,
     tablet: 2,
     desktop: 3,
-    large: 4
+    large: 4,
   }
-  
+
   const columns = { ...defaults, ...options }
-  
+
   switch (screenSize) {
-    case ScreenSize.MOBILE: return columns.mobile
-    case ScreenSize.TABLET: return columns.tablet
-    case ScreenSize.DESKTOP: return columns.desktop
-    case ScreenSize.LARGE: return columns.large
-    default: return columns.desktop
+    case ScreenSize.MOBILE:
+      return columns.mobile
+    case ScreenSize.TABLET:
+      return columns.tablet
+    case ScreenSize.DESKTOP:
+      return columns.desktop
+    case ScreenSize.LARGE:
+      return columns.large
+    default:
+      return columns.desktop
   }
 }
 
@@ -190,12 +196,12 @@ export const getGridColumns = (options: {
  */
 export const formatBytes = (bytes: number, decimals: number = 2): string => {
   if (bytes === 0) return '0 Bytes'
-  
+
   const k = 1024
   const dm = decimals < 0 ? 0 : decimals
   const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
-  
+
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i]
 }
 
@@ -204,21 +210,23 @@ export const formatBytes = (bytes: number, decimals: number = 2): string => {
  */
 export const getSafeAreaInsets = () => {
   const style = getComputedStyle(document.documentElement)
-  
+
   return {
     top: parseInt(style.getPropertyValue('--safe-area-inset-top') || '0'),
     right: parseInt(style.getPropertyValue('--safe-area-inset-right') || '0'),
     bottom: parseInt(style.getPropertyValue('--safe-area-inset-bottom') || '0'),
-    left: parseInt(style.getPropertyValue('--safe-area-inset-left') || '0')
+    left: parseInt(style.getPropertyValue('--safe-area-inset-left') || '0'),
   }
 }
 
 /**
  * Lock screen orientation (mobile only)
  */
-export const lockOrientation = async (orientation: 'portrait' | 'landscape' | 'portrait-primary' | 'landscape-primary'): Promise<boolean> => {
+export const lockOrientation = async (
+  orientation: 'portrait' | 'landscape' | 'portrait-primary' | 'landscape-primary'
+): Promise<boolean> => {
   if (!('orientation' in screen)) return false
-  
+
   try {
     // @ts-expect-error - Screen Orientation API
     await screen.orientation.lock(orientation)
@@ -234,7 +242,7 @@ export const lockOrientation = async (orientation: 'portrait' | 'landscape' | 'p
  */
 export const unlockOrientation = (): void => {
   if ('orientation' in screen) {
-    // @ts-ignore - Screen Orientation API
+    // @ts-expect-error - Screen Orientation API
     screen.orientation.unlock()
   }
 }
@@ -247,9 +255,9 @@ export const isFullscreen = (): boolean => {
     document.fullscreenElement ||
     // @ts-expect-error - Vendor prefixes
     document.webkitFullscreenElement ||
-    // @ts-expect-error
+    // @ts-expect-error - Vendor prefixes
     document.mozFullScreenElement ||
-    // @ts-expect-error
+    // @ts-expect-error - Vendor prefixes
     document.msFullscreenElement
   )
 }
@@ -257,7 +265,9 @@ export const isFullscreen = (): boolean => {
 /**
  * Request fullscreen on element
  */
-export const requestFullscreen = async (element: HTMLElement = document.documentElement): Promise<boolean> => {
+export const requestFullscreen = async (
+  element: HTMLElement = document.documentElement
+): Promise<boolean> => {
   try {
     if (element.requestFullscreen) {
       await element.requestFullscreen()
@@ -301,7 +311,7 @@ export const exitFullscreen = async (): Promise<boolean> => {
  */
 export const vibrate = (pattern: number | number[]): boolean => {
   if (!('vibrate' in navigator)) return false
-  
+
   try {
     navigator.vibrate(pattern)
     return true
@@ -315,16 +325,16 @@ export const vibrate = (pattern: number | number[]): boolean => {
  * Show notification (requires permission)
  */
 export const showNotification = async (
-  title: string, 
+  title: string,
   options?: NotificationOptions
 ): Promise<boolean> => {
   if (!('Notification' in window)) return false
-  
+
   if (Notification.permission === 'granted') {
     new Notification(title, options)
     return true
   }
-  
+
   if (Notification.permission !== 'denied') {
     const permission = await Notification.requestPermission()
     if (permission === 'granted') {
@@ -332,7 +342,7 @@ export const showNotification = async (
       return true
     }
   }
-  
+
   return false
 }
 
@@ -345,7 +355,7 @@ export const copyToClipboard = async (text: string): Promise<boolean> => {
       await navigator.clipboard.writeText(text)
       return true
     }
-    
+
     // Fallback for older browsers
     const textarea = document.createElement('textarea')
     textarea.value = text
@@ -367,7 +377,7 @@ export const copyToClipboard = async (text: string): Promise<boolean> => {
  */
 export const shareContent = async (data: ShareData): Promise<boolean> => {
   if (!('share' in navigator)) return false
-  
+
   try {
     await navigator.share(data)
     return true
@@ -407,21 +417,21 @@ export const hasMicrophone = async (): Promise<boolean> => {
 export const getNetworkInfo = () => {
   // @ts-expect-error - Experimental API
   const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection
-  
+
   if (!connection) {
     return {
       effectiveType: 'unknown',
       downlink: undefined,
       rtt: undefined,
-      saveData: false
+      saveData: false,
     }
   }
-  
+
   return {
     effectiveType: connection.effectiveType || 'unknown', // 4g, 3g, 2g, slow-2g
     downlink: connection.downlink, // Mbps
     rtt: connection.rtt, // Round trip time in ms
-    saveData: connection.saveData || false
+    saveData: connection.saveData || false,
   }
 }
 
@@ -436,19 +446,19 @@ export const isOnline = (): boolean => {
  * Get battery status (if available)
  */
 export const getBatteryStatus = async () => {
-  // @ts-ignore - Experimental Network Information API
+  // @ts-expect-error - Experimental Network Information API
   if (!('getBattery' in navigator)) {
     return null
   }
-  
+
   try {
-    // @ts-expect-error
+    // @ts-expect-error - Battery API
     const battery = await navigator.getBattery()
     return {
       level: battery.level * 100, // 0-100%
       charging: battery.charging,
       chargingTime: battery.chargingTime, // seconds
-      dischargingTime: battery.dischargingTime // seconds
+      dischargingTime: battery.dischargingTime, // seconds
     }
   } catch (error) {
     return null
@@ -459,14 +469,14 @@ export const getBatteryStatus = async () => {
  * Prevent screen sleep (during exams)
  */
 export const preventScreenSleep = async (): Promise<WakeLockSentinel | null> => {
-  // @ts-ignore - Experimental Wake Lock API check
+  // @ts-expect-error - Experimental Wake Lock API check
   if (!('wakeLock' in navigator)) {
     console.warn('Wake Lock API not supported')
     return null
   }
-  
+
   try {
-    // @ts-ignore - Experimental Wake Lock API request
+    // @ts-expect-error - Experimental Wake Lock API request
     const wakeLock = await navigator.wakeLock.request('screen')
     console.log('Screen wake lock activated')
     return wakeLock
@@ -503,5 +513,5 @@ export default {
   getBatteryStatus,
   preventScreenSleep,
   BREAKPOINTS,
-  mediaQueries
+  mediaQueries,
 }

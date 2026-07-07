@@ -4,7 +4,7 @@ Generates, stores, and verifies OTP codes for email verification.
 OTPs stored in MongoDB with TTL index for auto-expiry.
 """
 
-import random
+import secrets
 import string
 from datetime import datetime, timedelta, timezone
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -46,7 +46,7 @@ def generate_otp(length: int = None) -> str:
     """Generate a numeric OTP of given length."""
     if length is None:
         length = settings.OTP_LENGTH
-    return "".join(random.choices(string.digits, k=length))
+    return "".join(secrets.choice(string.digits) for _ in range(length))
 
 
 async def store_otp(

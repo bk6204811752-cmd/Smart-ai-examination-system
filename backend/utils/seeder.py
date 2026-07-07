@@ -3,10 +3,18 @@ Database Seeder
 Seeds demo accounts and sample exam data on first startup
 """
 
+import os
 from datetime import datetime, timedelta
 import random
 from utils.password import hash_password
 from bson import ObjectId
+
+
+def _is_production() -> bool:
+    vercel_env = os.getenv("VERCEL_ENV", "").lower()
+    render_env = os.getenv("RENDER", "").lower()
+    env = os.getenv("ENVIRONMENT", "development").lower()
+    return vercel_env == "production" or render_env == "true" or env in ["production", "prod"]
 
 
 DEMO_USERS = [
@@ -340,7 +348,10 @@ async def ensure_demo_accounts(db):
             }
             await db.users.insert_one(doc)
             created += 1
-            print(f"   [DEMO] Created: {acc['email']} (password: {acc['password']})")
+            if not _is_production():
+                print(f"   [DEMO] Created: {acc['email']} (password: {acc['password']})")
+            else:
+                print(f"   [DEMO] Created: {acc['email']}")
         else:
             # Fix broken accounts (unverified, pending, suspended)
             if existing.get("status") not in ("approved",) or not existing.get("email_verified") or not existing.get("is_active"):
@@ -358,8 +369,9 @@ async def ensure_demo_accounts(db):
 
     if created > 0 or fixed > 0:
         print(f" [DEMO] Demo accounts ready: {created} created, {fixed} fixed")
-        print(f"   admin@pcmt.edu.in   / Admin@123")
-        print(f"   teacher@pcmt.edu.in / Teacher@123")
-        print(f"   student@pcmt.edu.in / Student@123")
+        if not _is_production():
+            print(f"   admin@pcmt.edu.in   / Admin@123")
+            print(f"   teacher@pcmt.edu.in / Teacher@123")
+            print(f"   student@pcmt.edu.in / Student@123")
     else:
         print(" [DEMO] Demo accounts already exist and are healthy.")

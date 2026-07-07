@@ -299,6 +299,7 @@ export function useWebSocket(type: string, handler: MessageHandler, deps: any[] 
   useEffect(() => {
     const unsubscribe = wsManager.subscribe(type, handler)
     return unsubscribe
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type, ...deps])
 }
 

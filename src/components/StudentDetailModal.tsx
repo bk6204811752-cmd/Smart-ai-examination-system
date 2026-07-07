@@ -1,11 +1,23 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  X, AlertTriangle, Camera, Clock, Shield, Eye, Mic,
-  TrendingDown, CheckCircle, XCircle, Pause, MessageSquare,
-  BarChart3, Activity, ChevronDown
+  X,
+  AlertTriangle,
+  Camera,
+  Clock,
+  Shield,
+  Eye,
+  Mic,
+  CheckCircle,
+  XCircle,
+  Pause,
+  MessageSquare,
+  BarChart3,
+  Activity,
 } from 'lucide-react'
 import AudioWaveform from './AudioWaveform'
+import ExamChat from './ExamChat'
+import { WebSocketClient } from '../lib/websocket'
 
 interface StudentSession {
   student_id: string
@@ -23,6 +35,7 @@ interface StudentSession {
   face_detected?: boolean
   looking_at_screen?: boolean
   attention_level?: number
+  is_paused?: boolean
 }
 
 interface ViolationFlag {
@@ -40,8 +53,14 @@ interface StudentDetailModalProps {
   flags: ViolationFlag[]
   videoFrame: string | null
   onClose: () => void
-  onIntervene: (studentId: string, action: 'warn' | 'pause' | 'terminate', message: string) => void
+  onIntervene: (
+    studentId: string,
+    action: 'warn' | 'pause' | 'resume' | 'terminate',
+    message: string
+  ) => void
   totalQuestions: number
+  wsClientRef?: React.RefObject<WebSocketClient | null>
+  examId?: string
 }
 
 export default function StudentDetailModal({
@@ -50,38 +69,56 @@ export default function StudentDetailModal({
   videoFrame,
   onClose,
   onIntervene,
-  totalQuestions
+  totalQuestions,
+  wsClientRef,
+  examId,
 }: StudentDetailModalProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'violations' | 'intervention'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'violations' | 'intervention' | 'chat'>(
+    'overview'
+  )
   const [interventionMessage, setInterventionMessage] = useState('')
   const [intervening, setIntervening] = useState(false)
 
   if (!student) return null
 
   const studentFlags = flags.filter(f => f.student_id === student.student_id)
-  const criticalFlags = studentFlags.filter(f => f.severity === 'CRITICAL' || f.severity === 'critical')
+  const criticalFlags = studentFlags.filter(
+    f => f.severity === 'CRITICAL' || f.severity === 'critical'
+  )
   const highFlags = studentFlags.filter(f => f.severity === 'HIGH' || f.severity === 'high')
   const progress = totalQuestions > 0 ? (student.answered_questions / totalQuestions) * 100 : 0
   const timeElapsed = Math.floor((Date.now() - new Date(student.start_time).getTime()) / 60000)
   const audioLevel = student.audio_level || 0
 
-  const trustColor = student.trust_score >= 80 ? 'text-emerald-400' :
-    student.trust_score >= 60 ? 'text-yellow-400' : 'text-red-400'
+  const trustColor =
+    student.trust_score >= 80
+      ? 'text-emerald-400'
+      : student.trust_score >= 60
+        ? 'text-yellow-400'
+        : 'text-red-400'
 
   const getSeverityBadge = (severity: string) => {
     const s = severity.toUpperCase()
     switch (s) {
-      case 'CRITICAL': return 'bg-red-600/30 text-red-400 border-red-500/50'
-      case 'HIGH': return 'bg-orange-600/30 text-orange-400 border-orange-500/50'
-      case 'MEDIUM': return 'bg-yellow-600/30 text-yellow-400 border-yellow-500/50'
-      default: return 'bg-gray-600/30 text-gray-400 border-gray-500/50'
+      case 'CRITICAL':
+        return 'bg-red-600/30 text-red-400 border-red-500/50'
+      case 'HIGH':
+        return 'bg-orange-600/30 text-orange-400 border-orange-500/50'
+      case 'MEDIUM':
+        return 'bg-yellow-600/30 text-yellow-400 border-yellow-500/50'
+      default:
+        return 'bg-gray-600/30 text-gray-400 border-gray-500/50'
     }
   }
 
-  const handleIntervene = async (action: 'warn' | 'pause' | 'terminate') => {
-    if (!interventionMessage.trim() && action !== 'terminate') return
+  const handleIntervene = async (action: 'warn' | 'pause' | 'resume' | 'terminate') => {
+    if (!interventionMessage.trim() && action !== 'terminate' && action !== 'resume') return
     setIntervening(true)
-    onIntervene(student.student_id, action, interventionMessage || `Exam ${action}d by proctor`)
+    const message =
+      action === 'resume'
+        ? 'Your exam has been resumed by the proctor.'
+        : interventionMessage || `Exam ${action}d by proctor`
+    onIntervene(student.student_id, action, message)
     setTimeout(() => setIntervening(false), 1000)
   }
 
@@ -93,7 +130,7 @@ export default function StudentDetailModal({
         exit={{ opacity: 0 }}
         className="fixed inset-0 z-[1000] flex items-center justify-center p-4"
         style={{ backgroundColor: 'rgba(0,0,0,0.85)' }}
-        onClick={(e) => e.target === e.currentTarget && onClose()}
+        onClick={e => e.target === e.currentTarget && onClose()}
       >
         <motion.div
           initial={{ scale: 0.9, y: 30 }}
@@ -112,22 +149,29 @@ export default function StudentDetailModal({
                 <h2 className="text-white font-bold text-lg">{student.student_name}</h2>
                 <p className="text-gray-400 text-sm">{student.email}</p>
               </div>
-              <div className={`px-3 py-1 rounded-full text-xs font-bold border ${
-                student.status === 'active' ? 'bg-green-600/20 text-green-400 border-green-500/50' :
-                student.status === 'flagged' ? 'bg-red-600/20 text-red-400 border-red-500/50' :
-                'bg-blue-600/20 text-blue-400 border-blue-500/50'
-              }`}>
+              <div
+                className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                  student.status === 'active'
+                    ? 'bg-green-600/20 text-green-400 border-green-500/50'
+                    : student.status === 'flagged'
+                      ? 'bg-red-600/20 text-red-400 border-red-500/50'
+                      : 'bg-blue-600/20 text-blue-400 border-blue-500/50'
+                }`}
+              >
                 {student.status.toUpperCase()}
               </div>
             </div>
-            <button onClick={onClose} className="text-gray-400 hover:text-white p-2 rounded-lg hover:bg-gray-700 transition">
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-white p-2 rounded-lg hover:bg-gray-700 transition"
+            >
               <X className="w-5 h-5" />
             </button>
           </div>
 
           {/* Tabs */}
           <div className="flex border-b border-gray-700 bg-gray-800/50">
-            {(['overview', 'violations', 'intervention'] as const).map(tab => (
+            {(['overview', 'violations', 'intervention', 'chat'] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -181,11 +225,15 @@ export default function StudentDetailModal({
                     )}
                     {/* Face & eye detection overlays */}
                     <div className="p-3 flex items-center gap-4 border-t border-gray-700">
-                      <div className={`flex items-center gap-1.5 text-xs ${student.face_detected ? 'text-green-400' : 'text-red-400'}`}>
+                      <div
+                        className={`flex items-center gap-1.5 text-xs ${student.face_detected ? 'text-green-400' : 'text-red-400'}`}
+                      >
                         <Eye className="w-3.5 h-3.5" />
                         {student.face_detected ? 'Face Detected' : 'No Face'}
                       </div>
-                      <div className={`flex items-center gap-1.5 text-xs ${student.looking_at_screen ? 'text-green-400' : 'text-yellow-400'}`}>
+                      <div
+                        className={`flex items-center gap-1.5 text-xs ${student.looking_at_screen ? 'text-green-400' : 'text-yellow-400'}`}
+                      >
                         <Eye className="w-3.5 h-3.5" />
                         {student.looking_at_screen ? 'Looking at Screen' : 'Looking Away'}
                       </div>
@@ -199,11 +247,18 @@ export default function StudentDetailModal({
                         <Mic className="w-4 h-4 text-green-400" />
                         <span className="text-sm text-gray-300 font-medium">Audio Level</span>
                       </div>
-                      <span className={`text-xs font-bold ${audioLevel > 60 ? 'text-red-400' : audioLevel > 30 ? 'text-yellow-400' : 'text-green-400'}`}>
+                      <span
+                        className={`text-xs font-bold ${audioLevel > 60 ? 'text-red-400' : audioLevel > 30 ? 'text-yellow-400' : 'text-green-400'}`}
+                      >
                         {audioLevel > 60 ? '⚠ HIGH' : audioLevel > 30 ? 'MEDIUM' : 'LOW'}
                       </span>
                     </div>
-                    <AudioWaveform audioLevel={audioLevel} isActive={student.status === 'active'} height={48} barCount={30} />
+                    <AudioWaveform
+                      audioLevel={audioLevel}
+                      isActive={student.status === 'active'}
+                      height={48}
+                      barCount={30}
+                    />
                     <div className="flex justify-between text-xs text-gray-500 mt-2">
                       <span>0</span>
                       <span className="text-gray-400">{Math.round(audioLevel)}%</span>
@@ -218,13 +273,18 @@ export default function StudentDetailModal({
                   <div className="grid grid-cols-2 gap-3">
                     <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
                       <Shield className="w-5 h-5 text-purple-400 mb-2" />
-                      <div className={`text-2xl font-black ${trustColor}`}>{student.trust_score}%</div>
+                      <div className={`text-2xl font-black ${trustColor}`}>
+                        {student.trust_score}%
+                      </div>
                       <div className="text-xs text-gray-500 mt-1">Trust Score</div>
                       <div className="mt-2 h-1.5 bg-gray-700 rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full ${
-                            student.trust_score >= 80 ? 'bg-emerald-500' :
-                            student.trust_score >= 60 ? 'bg-yellow-500' : 'bg-red-500'
+                            student.trust_score >= 80
+                              ? 'bg-emerald-500'
+                              : student.trust_score >= 60
+                                ? 'bg-yellow-500'
+                                : 'bg-red-500'
                           }`}
                           style={{ width: `${student.trust_score}%` }}
                         />
@@ -233,7 +293,9 @@ export default function StudentDetailModal({
 
                     <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
                       <Activity className="w-5 h-5 text-blue-400 mb-2" />
-                      <div className="text-2xl font-black text-blue-400">{student.attention_level || 0}%</div>
+                      <div className="text-2xl font-black text-blue-400">
+                        {student.attention_level || 0}%
+                      </div>
                       <div className="text-xs text-gray-500 mt-1">Attention</div>
                       <div className="mt-2 h-1.5 bg-gray-700 rounded-full overflow-hidden">
                         <div
@@ -245,7 +307,9 @@ export default function StudentDetailModal({
 
                     <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
                       <AlertTriangle className="w-5 h-5 text-red-400 mb-2" />
-                      <div className="text-2xl font-black text-red-400">{student.flags_count || student.flags || 0}</div>
+                      <div className="text-2xl font-black text-red-400">
+                        {student.flags_count || student.flags || 0}
+                      </div>
                       <div className="text-xs text-gray-500 mt-1">Total Flags</div>
                       <div className="text-xs text-red-400 mt-1">
                         {criticalFlags.length} critical, {highFlags.length} high
@@ -299,7 +363,9 @@ export default function StudentDetailModal({
                             <span className="text-gray-400 truncate flex-1">
                               {flag.flag_type || flag.type || 'Violation'}
                             </span>
-                            <span className={`ml-2 px-2 py-0.5 rounded border text-xs ${getSeverityBadge(flag.severity)}`}>
+                            <span
+                              className={`ml-2 px-2 py-0.5 rounded border text-xs ${getSeverityBadge(flag.severity)}`}
+                            >
                               {flag.severity}
                             </span>
                           </div>
@@ -318,7 +384,9 @@ export default function StudentDetailModal({
                   <div className="text-center py-16">
                     <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4 opacity-50" />
                     <p className="text-gray-400 text-lg font-semibold">No Violations Recorded</p>
-                    <p className="text-gray-600 text-sm mt-1">This student has maintained exam integrity</p>
+                    <p className="text-gray-600 text-sm mt-1">
+                      This student has maintained exam integrity
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -329,19 +397,25 @@ export default function StudentDetailModal({
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: i * 0.05 }}
                         className={`border-l-4 rounded-lg p-4 ${
-                          (flag.severity || '').toUpperCase() === 'CRITICAL' ? 'border-red-500 bg-red-950/30' :
-                          (flag.severity || '').toUpperCase() === 'HIGH' ? 'border-orange-500 bg-orange-950/30' :
-                          'border-yellow-500 bg-yellow-950/20'
+                          (flag.severity || '').toUpperCase() === 'CRITICAL'
+                            ? 'border-red-500 bg-red-950/30'
+                            : (flag.severity || '').toUpperCase() === 'HIGH'
+                              ? 'border-orange-500 bg-orange-950/30'
+                              : 'border-yellow-500 bg-yellow-950/20'
                         }`}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
-                              <AlertTriangle className={`w-4 h-4 flex-shrink-0 ${
-                                (flag.severity || '').toUpperCase() === 'CRITICAL' ? 'text-red-400' :
-                                (flag.severity || '').toUpperCase() === 'HIGH' ? 'text-orange-400' :
-                                'text-yellow-400'
-                              }`} />
+                              <AlertTriangle
+                                className={`w-4 h-4 flex-shrink-0 ${
+                                  (flag.severity || '').toUpperCase() === 'CRITICAL'
+                                    ? 'text-red-400'
+                                    : (flag.severity || '').toUpperCase() === 'HIGH'
+                                      ? 'text-orange-400'
+                                      : 'text-yellow-400'
+                                }`}
+                              />
                               <span className="font-semibold text-sm text-white">
                                 {(flag.flag_type || flag.type || 'Violation').replace(/_/g, ' ')}
                               </span>
@@ -351,7 +425,9 @@ export default function StudentDetailModal({
                             </p>
                           </div>
                           <div className="flex flex-col items-end gap-2">
-                            <span className={`px-2 py-0.5 rounded border text-xs font-bold ${getSeverityBadge(flag.severity)}`}>
+                            <span
+                              className={`px-2 py-0.5 rounded border text-xs font-bold ${getSeverityBadge(flag.severity)}`}
+                            >
                               {flag.severity.toUpperCase()}
                             </span>
                             <span className="text-gray-600 text-xs">
@@ -375,7 +451,9 @@ export default function StudentDetailModal({
                 </div>
 
                 <div>
-                  <label className="block text-sm text-gray-300 font-medium mb-2">Intervention Message</label>
+                  <label className="block text-sm text-gray-300 font-medium mb-2">
+                    Intervention Message
+                  </label>
                   <textarea
                     value={interventionMessage}
                     onChange={e => setInterventionMessage(e.target.value)}
@@ -396,15 +474,27 @@ export default function StudentDetailModal({
                     <span className="text-xs text-yellow-600">Student sees message</span>
                   </button>
 
-                  <button
-                    onClick={() => handleIntervene('pause')}
-                    disabled={!interventionMessage.trim() || intervening}
-                    className="flex flex-col items-center gap-2 p-4 bg-orange-950/30 border border-orange-600/50 rounded-xl text-orange-400 hover:bg-orange-900/30 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Pause className="w-6 h-6" />
-                    <span className="text-sm font-semibold">Pause Exam</span>
-                    <span className="text-xs text-orange-600">Stops student temporarily</span>
-                  </button>
+                  {student.is_paused ? (
+                    <button
+                      onClick={() => handleIntervene('resume')}
+                      disabled={intervening}
+                      className="flex flex-col items-center gap-2 p-4 bg-green-950/30 border border-green-600/50 rounded-xl text-green-400 hover:bg-green-900/30 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Pause className="w-6 h-6" />
+                      <span className="text-sm font-semibold">Resume Exam</span>
+                      <span className="text-xs text-green-600">Let student continue</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleIntervene('pause')}
+                      disabled={!interventionMessage.trim() || intervening}
+                      className="flex flex-col items-center gap-2 p-4 bg-orange-950/30 border border-orange-600/50 rounded-xl text-orange-400 hover:bg-orange-900/30 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Pause className="w-6 h-6" />
+                      <span className="text-sm font-semibold">Pause Exam</span>
+                      <span className="text-xs text-orange-600">Stops student temporarily</span>
+                    </button>
+                  )}
 
                   <button
                     onClick={() => handleIntervene('terminate')}
@@ -422,6 +512,31 @@ export default function StudentDetailModal({
                     ✓ Intervention sent successfully
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* CHAT TAB */}
+            {activeTab === 'chat' && wsClientRef && examId && (
+              <div className="p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <MessageSquare className="w-5 h-5 text-blue-400" />
+                  <h3 className="text-white font-bold">Chat with {student.student_name}</h3>
+                </div>
+                <div className="flex justify-center">
+                  <div className="w-full" style={{ position: 'relative', minHeight: '300px' }}>
+                    <ExamChat
+                      wsClientRef={wsClientRef}
+                      userId={''}
+                      userName={'Teacher'}
+                      role="teacher"
+                      examId={examId}
+                      forStudentId={student.student_id}
+                    />
+                  </div>
+                </div>
+                <p className="text-gray-500 text-xs mt-4 text-center">
+                  Messages are sent in real-time. Student will see your reply immediately.
+                </p>
               </div>
             )}
           </div>

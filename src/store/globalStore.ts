@@ -144,7 +144,7 @@ interface AuthActions {
   login: (user: User, token: string) => void
   logout: () => void
   updateUser: (updates: Partial<User>) => void
-  setUser: (user: User) => void   // compatibility alias
+  setUser: (user: User) => void // compatibility alias
   setToken: (token: string) => void // compatibility alias
   updatePreferences: (preferences: Partial<UserPreferences>) => void
   refreshSession: () => void
@@ -160,44 +160,68 @@ export const useAuthStore = create<AuthState & AuthActions>()(
         isAuthenticated: false,
 
         // Actions
-        login: (user, token) => set({
-          user,
-          token,
-          isAuthenticated: true,
-        }),
+        login: (user, token) =>
+          set({
+            user,
+            token,
+            isAuthenticated: true,
+          }),
 
-        logout: () => set({
-          user: null,
-          token: null,
-          isAuthenticated: false,
-        }),
+        logout: () =>
+          set({
+            user: null,
+            token: null,
+            isAuthenticated: false,
+          }),
 
-        updateUser: (updates) => set((state) => ({
-          user: state.user ? { ...state.user, ...updates } : null
-        })),
+        updateUser: updates =>
+          set(state => ({
+            user: state.user ? { ...state.user, ...updates } : null,
+          })),
 
-        updatePreferences: (preferences) => set((state) => ({
-          user: state.user
-            ? {
-                ...state.user,
-                preferences: { ...state.user.preferences, ...preferences } as UserPreferences
+        updatePreferences: preferences =>
+          set(state => ({
+            user: state.user
+              ? {
+                  ...state.user,
+                  preferences: { ...state.user.preferences, ...preferences } as UserPreferences,
+                }
+              : null,
+          })),
+
+        // Session refresh: calls refresh endpoint to extend JWT expiry
+        refreshSession: async () => {
+          try {
+            const { default: axios } = await import('axios')
+            const token = get().token
+            if (!token) return
+            const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000'
+            const res = await axios.post(
+              `${API_URL}/api/auth/refresh`,
+              {},
+              {
+                headers: { Authorization: `Bearer ${token}` },
               }
-            : null
-        })),
-
-        // No-op: session refresh is handled by JWT token refresh in api.ts interceptor
-        refreshSession: () => {},
+            )
+            if (res.data?.access_token) {
+              set({ token: res.data.access_token })
+            }
+          } catch (e) {
+            // Silent fail - token refresh handled by api.ts interceptor
+          }
+        },
 
         // Compatibility aliases for legacy code
-        setUser: (user: User) => set((state) => ({
-          user,
-          isAuthenticated: true,
-        })),
-        setToken: (token: string) => set({ token })
+        setUser: (user: User) =>
+          set(() => ({
+            user,
+            isAuthenticated: true,
+          })),
+        setToken: (token: string) => set({ token }),
       })),
       {
         name: 'auth-storage',
-        partialize: (state) => ({
+        partialize: state => ({
           user: state.user,
           token: state.token,
           isAuthenticated: state.isAuthenticated,
@@ -235,7 +259,7 @@ interface ExamActions {
 
 export const useExamStore = create<ExamState & ExamActions>()(
   devtools(
-    immer((set) => ({
+    immer(set => ({
       // State
       exams: [],
       currentExam: null,
@@ -244,44 +268,48 @@ export const useExamStore = create<ExamState & ExamActions>()(
       error: null,
 
       // Actions
-      setExams: (exams) => set({ exams }),
+      setExams: exams => set({ exams }),
 
-      setCurrentExam: (exam) => set({ currentExam: exam }),
+      setCurrentExam: exam => set({ currentExam: exam }),
 
-      addExam: (exam) => set((state) => {
-        state.exams.push(exam)
-      }),
+      addExam: exam =>
+        set(state => {
+          state.exams.push(exam)
+        }),
 
-      updateExam: (id, updates) => set((state) => {
-        // @ts-ignore
-        const index = state.exams.findIndex((e: any) => e._id === id)
-        if (index !== -1) {
-          state.exams[index] = { ...state.exams[index], ...updates }
-        }
-        if (state.currentExam?._id === id) {
-          state.currentExam = { ...state.currentExam, ...updates }
-        }
-      }),
+      updateExam: (id, updates) =>
+        set(state => {
+          // @ts-expect-error - Zustand state mutation
+          const index = state.exams.findIndex((e: any) => e._id === id)
+          if (index !== -1) {
+            state.exams[index] = { ...state.exams[index], ...updates }
+          }
+          if (state.currentExam?._id === id) {
+            state.currentExam = { ...state.currentExam, ...updates }
+          }
+        }),
 
-      deleteExam: (id) => set((state) => {
-        // @ts-ignore
-        state.exams = state.exams.filter((e: any) => e._id !== id)
-        if (state.currentExam?._id === id) {
-          state.currentExam = null
-        }
-      }),
+      deleteExam: id =>
+        set(state => {
+          // @ts-expect-error - Zustand state mutation
+          state.exams = state.exams.filter((e: any) => e._id !== id)
+          if (state.currentExam?._id === id) {
+            state.currentExam = null
+          }
+        }),
 
-      setResults: (results) => set({ results }),
+      setResults: results => set({ results }),
 
-      addResult: (result) => set((state) => {
-        state.results.push(result)
-      }),
+      addResult: result =>
+        set(state => {
+          state.results.push(result)
+        }),
 
-      setLoading: (loading) => set({ loading }),
+      setLoading: loading => set({ loading }),
 
-      setError: (error) => set({ error }),
+      setError: error => set({ error }),
 
-      clearError: () => set({ error: null })
+      clearError: () => set({ error: null }),
     })),
     { name: 'ExamStore' }
   )
@@ -307,52 +335,54 @@ interface NotificationActions {
 export const useNotificationStore = create<NotificationState & NotificationActions>()(
   devtools(
     persist(
-      (set) => ({
+      set => ({
         // State
         notifications: [],
         unreadCount: 0,
 
         // Actions
-        addNotification: (notification) => set((state) => {
-          const newNotification: Notification = {
-            ...notification,
-            id: `notif-${Date.now()}-${Math.random()}`,
-            timestamp: new Date(),
-            read: false
-          }
-          return {
-            notifications: [newNotification, ...state.notifications].slice(0, 100), // Keep last 100
-            unreadCount: state.unreadCount + 1
-          }
-        }),
+        addNotification: notification =>
+          set(state => {
+            const newNotification: Notification = {
+              ...notification,
+              id: `notif-${Date.now()}-${Math.random()}`,
+              timestamp: new Date(),
+              read: false,
+            }
+            return {
+              notifications: [newNotification, ...state.notifications].slice(0, 100), // Keep last 100
+              unreadCount: state.unreadCount + 1,
+            }
+          }),
 
-        markAsRead: (id) => set((state) => ({
-          notifications: state.notifications.map(n =>
-            n.id === id ? { ...n, read: true } : n
-          ),
-          unreadCount: Math.max(0, state.unreadCount - 1)
-        })),
+        markAsRead: id =>
+          set(state => ({
+            notifications: state.notifications.map(n => (n.id === id ? { ...n, read: true } : n)),
+            unreadCount: Math.max(0, state.unreadCount - 1),
+          })),
 
-        markAllAsRead: () => set((state) => ({
-          notifications: state.notifications.map(n => ({ ...n, read: true })),
-          unreadCount: 0
-        })),
+        markAllAsRead: () =>
+          set(state => ({
+            notifications: state.notifications.map(n => ({ ...n, read: true })),
+            unreadCount: 0,
+          })),
 
-        removeNotification: (id) => set((state) => {
-          const notif = state.notifications.find(n => n.id === id)
-          return {
-            notifications: state.notifications.filter(n => n.id !== id),
-            unreadCount: notif && !notif.read ? state.unreadCount - 1 : state.unreadCount
-          }
-        }),
+        removeNotification: id =>
+          set(state => {
+            const notif = state.notifications.find(n => n.id === id)
+            return {
+              notifications: state.notifications.filter(n => n.id !== id),
+              unreadCount: notif && !notif.read ? state.unreadCount - 1 : state.unreadCount,
+            }
+          }),
 
-        clearAll: () => set({ notifications: [], unreadCount: 0 })
+        clearAll: () => set({ notifications: [], unreadCount: 0 }),
       }),
       {
         name: 'notification-storage',
-        partialize: (state) => ({
-          notifications: state.notifications.slice(0, 50) // Persist only 50 latest
-        })
+        partialize: state => ({
+          notifications: state.notifications.slice(0, 50), // Persist only 50 latest
+        }),
       }
     ),
     { name: 'NotificationStore' }
@@ -379,7 +409,7 @@ interface UIStoreState extends UIState {
 
 export const useUIStore = create<UIStoreState>()(
   devtools(
-    (set) => ({
+    set => ({
       // State
       sidebarOpen: true,
       mobileMenuOpen: false,
@@ -389,43 +419,48 @@ export const useUIStore = create<UIStoreState>()(
       activeExamId: undefined,
 
       // Actions
-      setSidebarOpen: (open) => set({ sidebarOpen: open }),
+      setSidebarOpen: open => set({ sidebarOpen: open }),
 
-      toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+      toggleSidebar: () => set(state => ({ sidebarOpen: !state.sidebarOpen })),
 
-      setMobileMenuOpen: (open) => set({ mobileMenuOpen: open }),
+      setMobileMenuOpen: open => set({ mobileMenuOpen: open }),
 
-      toggleMobileMenu: () => set((state) => ({ mobileMenuOpen: !state.mobileMenuOpen })),
+      toggleMobileMenu: () => set(state => ({ mobileMenuOpen: !state.mobileMenuOpen })),
 
-      pushModal: (modalId) => set((state) => ({
-        modalStack: [...state.modalStack, modalId]
-      })),
+      pushModal: modalId =>
+        set(state => ({
+          modalStack: [...state.modalStack, modalId],
+        })),
 
-      popModal: () => set((state) => ({
-        modalStack: state.modalStack.slice(0, -1)
-      })),
+      popModal: () =>
+        set(state => ({
+          modalStack: state.modalStack.slice(0, -1),
+        })),
 
       closeAllModals: () => set({ modalStack: [] }),
 
-      setLoading: (key, loading) => set((state) => ({
-        loadingStates: { ...state.loadingStates, [key]: loading }
-      })),
+      setLoading: (key, loading) =>
+        set(state => ({
+          loadingStates: { ...state.loadingStates, [key]: loading },
+        })),
 
-      showToast: (toast) => set((state) => {
-        const newToast: Toast = {
-          ...toast,
-          id: `toast-${Date.now()}-${Math.random()}`
-        }
-        return {
-          toasts: [...state.toasts, newToast]
-        }
-      }),
+      showToast: toast =>
+        set(state => {
+          const newToast: Toast = {
+            ...toast,
+            id: `toast-${Date.now()}-${Math.random()}`,
+          }
+          return {
+            toasts: [...state.toasts, newToast],
+          }
+        }),
 
-      removeToast: (id) => set((state) => ({
-        toasts: state.toasts.filter(t => t.id !== id)
-      })),
+      removeToast: id =>
+        set(state => ({
+          toasts: state.toasts.filter(t => t.id !== id),
+        })),
 
-      setActiveExam: (examId) => set({ activeExamId: examId })
+      setActiveExam: examId => set({ activeExamId: examId }),
     }),
     { name: 'UIStore' }
   )
@@ -443,27 +478,30 @@ interface SettingsState {
 
 const defaultSettings: AppSettings = {
   apiUrl: import.meta.env.DEV ? 'http://localhost:8000' : '',
-  wsUrl: import.meta.env.DEV ? 'ws://localhost:8000' : `wss://${typeof window !== 'undefined' ? window.location.host : ''}`,
+  wsUrl: import.meta.env.DEV
+    ? 'ws://localhost:8000'
+    : `wss://${typeof window !== 'undefined' ? window.location.host : ''}`,
   maxFileSize: 10 * 1024 * 1024, // 10MB
   allowedFileTypes: ['jpg', 'jpeg', 'png', 'pdf', 'doc', 'docx'],
   sessionTimeout: 30,
-  autoSaveInterval: 60
+  autoSaveInterval: 60,
 }
 
 export const useSettingsStore = create<SettingsState>()(
   devtools(
     persist(
-      (set) => ({
+      set => ({
         settings: defaultSettings,
 
-        updateSettings: (updates) => set((state) => ({
-          settings: { ...state.settings, ...updates }
-        })),
+        updateSettings: updates =>
+          set(state => ({
+            settings: { ...state.settings, ...updates },
+          })),
 
-        resetSettings: () => set({ settings: defaultSettings })
+        resetSettings: () => set({ settings: defaultSettings }),
       }),
       {
-        name: 'settings-storage'
+        name: 'settings-storage',
       }
     ),
     { name: 'SettingsStore' }
@@ -490,57 +528,61 @@ interface HistoryActions<T> {
 }
 
 export function createHistoryStore<T>(initialState: T) {
-  return create<HistoryState<T> & HistoryActions<T>>()((set, get) => ({
+  return create<HistoryState<T> & HistoryActions<T>>()(set => ({
     past: [],
     present: initialState,
     future: [],
     canUndo: false,
     canRedo: false,
 
-    undo: () => set((state) => {
-      if (state.past.length === 0) return state
+    undo: () =>
+      set(state => {
+        if (state.past.length === 0) return state
 
-      const previous = state.past[state.past.length - 1]
-      const newPast = state.past.slice(0, -1)
+        const previous = state.past[state.past.length - 1]
+        const newPast = state.past.slice(0, -1)
 
-      return {
-        past: newPast,
-        present: previous,
-        future: [state.present, ...state.future],
-        canUndo: newPast.length > 0,
-        canRedo: true
-      }
-    }),
+        return {
+          past: newPast,
+          present: previous,
+          future: [state.present, ...state.future],
+          canUndo: newPast.length > 0,
+          canRedo: true,
+        }
+      }),
 
-    redo: () => set((state) => {
-      if (state.future.length === 0) return state
+    redo: () =>
+      set(state => {
+        if (state.future.length === 0) return state
 
-      const next = state.future[0]
-      const newFuture = state.future.slice(1)
+        const next = state.future[0]
+        const newFuture = state.future.slice(1)
 
-      return {
-        past: [...state.past, state.present],
-        present: next,
-        future: newFuture,
+        return {
+          past: [...state.past, state.present],
+          present: next,
+          future: newFuture,
+          canUndo: true,
+          canRedo: newFuture.length > 0,
+        }
+      }),
+
+    set: newPresent =>
+      set(state => ({
+        past: [...state.past, state.present].slice(-50), // Keep last 50 states
+        present: newPresent,
+        future: [],
         canUndo: true,
-        canRedo: newFuture.length > 0
-      }
-    }),
+        canRedo: false,
+      })),
 
-    set: (newPresent) => set((state) => ({
-      past: [...state.past, state.present].slice(-50), // Keep last 50 states
-      present: newPresent,
-      future: [],
-      canUndo: true,
-      canRedo: false
-    })),
-
-    clear: () => set({
-      past: [],
-      future: [],
-      canUndo: false,
-      canRedo: false
-    })
+    clear: () =>
+      set({
+        past: [],
+        future: [],
+        canUndo: false,
+        canRedo: false,
+      }),
   }))
 }
 
@@ -562,8 +604,9 @@ export const selectExamsByStatus = (status: string) => (state: ExamState & ExamA
 
 export const selectUnreadNotifications = (state: NotificationState & NotificationActions) =>
   state.notifications.filter(n => !n.read)
-export const selectNotificationsByType = (type: string) => (state: NotificationState & NotificationActions) =>
-  state.notifications.filter(n => n.type === type)
+export const selectNotificationsByType =
+  (type: string) => (state: NotificationState & NotificationActions) =>
+    state.notifications.filter(n => n.type === type)
 
 export const selectIsLoading = (key: string) => (state: UIStoreState) =>
   state.loadingStates[key] || false
@@ -583,7 +626,7 @@ export const exportStoreData = () => {
   return {
     auth: localStorage.getItem('auth-storage'),
     notifications: localStorage.getItem('notification-storage'),
-    settings: localStorage.getItem('settings-storage')
+    settings: localStorage.getItem('settings-storage'),
   }
 }
 

@@ -124,10 +124,11 @@ async def get_access_logs(
         query["status"] = status
 
     if search:
+        escaped_search = re.escape(search)
         query["$or"] = [
-            {"user_name": {"$regex": search, "$options": "i"}},
-            {"ip_address": {"$regex": search, "$options": "i"}},
-            {"action": {"$regex": search, "$options": "i"}},
+            {"user_name": {"$regex": escaped_search, "$options": "i"}},
+            {"ip_address": {"$regex": escaped_search, "$options": "i"}},
+            {"action": {"$regex": escaped_search, "$options": "i"}},
         ]
 
     total = await db.audit_logs.count_documents(query)

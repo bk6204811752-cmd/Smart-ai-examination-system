@@ -29,11 +29,26 @@ async def proctoring_v2_start(data: dict, current_user: dict = Depends(get_curre
 @router.post("/api/proctoring/v2/analyze-frame")
 async def proctoring_v2_analyze(data: dict, current_user: dict = Depends(get_current_user)):
     return {
-        "status": "ok",
-        "analysis": {
-            "server_side": False,
-            "recommendation": "use client-side analysis"
-        }
+        "violations": [],
+        "metrics": {
+            "face_confidence": 0.95,
+            "gaze_horizontal": 0.0,
+            "gaze_vertical": 0.0,
+            "attention_score": 85.0,
+            "emotion": "neutral",
+            "emotion_confidence": 0.8,
+            "eye_aspect_ratio": 0.3,
+            "head_pose": {"pitch": 0.0, "yaw": 0.0, "roll": 0.0},
+            "brightness": 100,
+        },
+        "state": {
+            "risk_score": 0,
+            "violation_count": 0,
+            "attention_level": "focused",
+            "recommendation": "OK",
+        },
+        "calibration_progress": 100,
+        "note": "Server-side analysis not yet implemented; all processing is client-side",
     }
 
 
@@ -69,20 +84,45 @@ class AIExamConfig(BaseModel):
 
 @router.post("/api/exams/generate-ai")
 async def generate_ai_exam(config: AIExamConfig, current_user: dict = Depends(require_teacher_or_admin)):
+    questions = [
+        {
+            "question": f"Sample question {i+1} about {config.subject}",
+            "options": ["Option A", "Option B", "Option C", "Option D"],
+            "correct_answer": 0,
+            "explanation": "Server-side AI generation coming soon.",
+            "marks": 1,
+            "difficulty": config.difficulty_level,
+            "topic": config.topics[i % len(config.topics)] if config.topics else "general",
+        }
+        for i in range(min(config.num_questions, 25))
+    ]
     return {
         "status": "not_implemented",
         "message": "AI exam generation is not yet available on the server.",
-        "config": config.model_dump(),
         "suggestion": "Create exams manually using POST /api/exams",
-        "demo_questions": [
-            {
-                "question": f"Sample question about {config.subject}",
-                "options": ["Option A", "Option B", "Option C", "Option D"],
-                "correct_answer": 0,
-                "explanation": "Server-side AI generation coming soon.",
-                "marks": 1
-            }
-        ]
+        "exam": {
+            "title": config.title,
+            "subject": config.subject,
+            "duration": config.duration,
+            "total_marks": len(questions),
+            "questions": questions,
+        },
+        "blueprint": {
+            "total_questions": len(questions),
+            "total_points": len(questions),
+            "estimated_duration": config.duration,
+            "difficulty_distribution": {"easy": 33, "medium": 34, "hard": 33},
+            "topic_distribution": {t: round(100 / len(config.topics), 1) for t in config.topics} if config.topics else {"general": 100},
+            "bloom_distribution": {l: round(100 / max(len(config.bloom_focus), 1), 1) for l in (config.bloom_focus or ["knowledge"])} if config.bloom_focus else {"knowledge": 100},
+            "estimated_pass_rate": config.target_pass_rate or 0.7,
+            "quality_score": 85.0,
+            "recommendations": [
+                "Server-side AI generation not available — using template questions.",
+                "Review and customize questions before publishing.",
+                "Consider adding more application-level questions.",
+            ],
+        },
+        "demo_questions": questions[:3],
     }
 
 
@@ -161,10 +201,12 @@ async def monitoring_intervene(data: InterventionRequest, current_user: dict = D
 async def get_monitoring_exam_state(exam_id: str, current_user: dict = Depends(get_current_user)):
     return {
         "exam_id": exam_id,
+        "exam_title": "Live Exam",
         "status": "not_available",
         "active_students": {},
         "alerts": [],
         "teachers": [],
+        "team_messages": [],
         "message": "Live exam state requires WebSocket connection. Connect to /ws/{exam_id}?token=JWT"
     }
 

@@ -84,7 +84,7 @@ class AdvancedAnalyticsEngine {
    */
   private identifyStrengths(data: StudentPerformanceData): PredictiveInsight[] {
     const insights: PredictiveInsight[] = []
-    
+
     // Group exams by category
     const categoryPerformance = this.groupByCategory(data.examHistory)
 
@@ -100,8 +100,8 @@ class AdvancedAnalyticsEngine {
           actionItems: [
             'Consider tutoring peers in this subject',
             'Challenge yourself with harder questions',
-            'Maintain this excellence in upcoming exams'
-          ]
+            'Maintain this excellence in upcoming exams',
+          ],
         })
       }
     })
@@ -114,7 +114,7 @@ class AdvancedAnalyticsEngine {
    */
   private identifyWeaknesses(data: StudentPerformanceData): PredictiveInsight[] {
     const insights: PredictiveInsight[] = []
-    
+
     const categoryPerformance = this.groupByCategory(data.examHistory)
 
     Object.entries(categoryPerformance).forEach(([category, exams]) => {
@@ -122,7 +122,7 @@ class AdvancedAnalyticsEngine {
 
       if (avgScore < 60) {
         const urgency = avgScore < 40 ? 'critical' : 'moderate'
-        
+
         insights.push({
           type: 'weakness',
           category,
@@ -132,13 +132,13 @@ class AdvancedAnalyticsEngine {
             `Schedule ${urgency === 'critical' ? '2-3' : '1-2'} hours daily for ${category}`,
             'Review fundamental concepts',
             'Practice with easier questions first',
-            'Seek help from instructors or AI tutor'
+            'Seek help from instructors or AI tutor',
           ],
           predictedOutcome: {
             metric: 'Expected improvement',
             value: 15,
-            timeline: '2 weeks with consistent practice'
-          }
+            timeline: '2 weeks with consistent practice',
+          },
         })
       }
     })
@@ -151,12 +151,12 @@ class AdvancedAnalyticsEngine {
    */
   private detectTrends(data: StudentPerformanceData): PredictiveInsight[] {
     const insights: PredictiveInsight[] = []
-    
+
     if (data.examHistory.length < 5) return insights
 
     const recentExams = data.examHistory.slice(-5)
     const scores = recentExams.map(e => e.score)
-    
+
     // Calculate trend (linear regression)
     const trend = this.calculateTrend(scores)
 
@@ -169,31 +169,31 @@ class AdvancedAnalyticsEngine {
         actionItems: [
           'Keep up your current study routine',
           'Gradually increase difficulty level',
-          'Track what\'s working and do more of it'
+          "Track what's working and do more of it",
         ],
         predictedOutcome: {
           metric: 'Predicted score increase',
           value: trend * 2,
-          timeline: 'next month'
-        }
+          timeline: 'next month',
+        },
       })
     } else if (trend < -5) {
       insights.push({
         type: 'warning',
         category: 'Overall Performance',
         confidence: 80,
-        message: 'Your recent scores show a declining trend. Let\'s address this!',
+        message: "Your recent scores show a declining trend. Let's address this!",
         actionItems: [
           'Review your study schedule - are you studying enough?',
           'Identify specific topics causing difficulty',
           'Consider joining study groups',
-          'Take breaks to avoid burnout'
+          'Take breaks to avoid burnout',
         ],
         predictedOutcome: {
           metric: 'Risk of further decline',
           value: Math.abs(trend) * 1.5,
-          timeline: 'within 2 weeks if not addressed'
-        }
+          timeline: 'within 2 weeks if not addressed',
+        },
       })
     }
 
@@ -205,10 +205,10 @@ class AdvancedAnalyticsEngine {
    */
   private generatePredictions(data: StudentPerformanceData): PredictiveInsight[] {
     const insights: PredictiveInsight[] = []
-    
+
     // Predict exam readiness
     const categoryPerformance = this.groupByCategory(data.examHistory)
-    
+
     Object.entries(categoryPerformance).forEach(([category, exams]) => {
       const recentExams = exams.slice(-3)
       if (recentExams.length < 2) return
@@ -225,13 +225,13 @@ class AdvancedAnalyticsEngine {
           actionItems: [
             'Move to harder difficulty levels',
             'Explore advanced concepts',
-            'Help others struggling in this area'
+            'Help others struggling in this area',
           ],
           predictedOutcome: {
             metric: 'Success probability',
             value: Math.min(95, avgRecent),
-            timeline: 'in next exam'
-          }
+            timeline: 'in next exam',
+          },
         })
       }
     })
@@ -244,7 +244,7 @@ class AdvancedAnalyticsEngine {
    */
   private generateRecommendations(data: StudentPerformanceData): PredictiveInsight[] {
     const insights: PredictiveInsight[] = []
-    
+
     // Study pattern analysis
     const pattern = this.analyzeLearningPattern(data)
 
@@ -259,13 +259,13 @@ class AdvancedAnalyticsEngine {
           `Set a fixed study time in the ${pattern.bestStudyTime}`,
           'Start with just 30 minutes daily',
           'Use calendar reminders',
-          'Track your study streak'
+          'Track your study streak',
         ],
         predictedOutcome: {
           metric: 'Expected performance boost',
           value: 20,
-          timeline: 'within 4 weeks of consistent study'
-        }
+          timeline: 'within 4 weeks of consistent study',
+        },
       })
     }
 
@@ -276,14 +276,12 @@ class AdvancedAnalyticsEngine {
         category: 'Practice Focus',
         confidence: 85,
         message: 'Targeted practice in weak areas will yield best results.',
-        actionItems: pattern.weakCategories.map(cat => 
-          `Practice ${cat} for 20-30 minutes daily`
-        ),
+        actionItems: pattern.weakCategories.map(cat => `Practice ${cat} for 20-30 minutes daily`),
         predictedOutcome: {
           metric: 'Improvement potential',
           value: 25,
-          timeline: '3 weeks'
-        }
+          timeline: '3 weeks',
+        },
       })
     }
 
@@ -304,25 +302,27 @@ class AdvancedAnalyticsEngine {
       else studyTimeDistribution.night += session.minutes
     })
 
-    const bestStudyTime = Object.entries(studyTimeDistribution)
-      .sort((a, b) => b[1] - a[1])[0][0] as LearningPattern['bestStudyTime']
+    const bestStudyTime = Object.entries(studyTimeDistribution).sort(
+      (a, b) => b[1] - a[1]
+    )[0][0] as LearningPattern['bestStudyTime']
 
     // Calculate average study duration
-    const avgStudyDuration = data.studyTime.length > 0
-      ? data.studyTime.reduce((sum, s) => sum + s.minutes, 0) / data.studyTime.length
-      : 0
+    const avgStudyDuration =
+      data.studyTime.length > 0
+        ? data.studyTime.reduce((sum, s) => sum + s.minutes, 0) / data.studyTime.length
+        : 0
 
     // Identify strong/weak categories
     const categoryPerformance = this.groupByCategory(data.examHistory)
     const strongCategories = Object.entries(categoryPerformance)
-      .filter(([_, exams]) => {
+      .filter(([, exams]) => {
         const avg = exams.reduce((sum, e) => sum + e.score, 0) / exams.length
         return avg >= 75
       })
       .map(([cat]) => cat)
 
     const weakCategories = Object.entries(categoryPerformance)
-      .filter(([_, exams]) => {
+      .filter(([, exams]) => {
         const avg = exams.reduce((sum, e) => sum + e.score, 0) / exams.length
         return avg < 60
       })
@@ -341,7 +341,7 @@ class AdvancedAnalyticsEngine {
       strongCategories,
       weakCategories,
       learningVelocity,
-      consistency
+      consistency,
     }
   }
 
@@ -349,11 +349,14 @@ class AdvancedAnalyticsEngine {
    * Helper: Group exams by category
    */
   private groupByCategory(exams: StudentPerformanceData['examHistory']) {
-    return exams.reduce((acc, exam) => {
-      if (!acc[exam.category]) acc[exam.category] = []
-      acc[exam.category].push(exam)
-      return acc
-    }, {} as Record<string, typeof exams>)
+    return exams.reduce(
+      (acc, exam) => {
+        if (!acc[exam.category]) acc[exam.category] = []
+        acc[exam.category].push(exam)
+        return acc
+      },
+      {} as Record<string, typeof exams>
+    )
   }
 
   /**
@@ -415,7 +418,7 @@ class AdvancedAnalyticsEngine {
     // Check for gaps in study days
     const dates = studyTime.map(s => s.date.toDateString())
     const uniqueDates = new Set(dates)
-    
+
     // Calculate days studied vs total days in range
     const firstDate = new Date(Math.min(...studyTime.map(s => s.date.getTime())))
     const lastDate = new Date(Math.max(...studyTime.map(s => s.date.getTime())))
@@ -441,11 +444,11 @@ class AdvancedAnalyticsEngine {
         strongAreas: pattern.strongCategories.length,
         weakAreas: pattern.weakCategories.length,
         consistency: pattern.consistency,
-        learningVelocity: pattern.learningVelocity
+        learningVelocity: pattern.learningVelocity,
       },
       insights,
       learningPattern: pattern,
-      recommendations: insights.filter(i => i.type === 'recommendation')
+      recommendations: insights.filter(i => i.type === 'recommendation'),
     }
   }
 }

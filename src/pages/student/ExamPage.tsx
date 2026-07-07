@@ -1,9 +1,19 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+﻿import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Clock, AlertTriangle, Camera, ChevronLeft, ChevronRight,
-  Menu, Flag, Check, Maximize, Shield, X, BookOpen, Zap
+  Clock,
+  AlertTriangle,
+  Camera,
+  ChevronLeft,
+  ChevronRight,
+  Menu,
+  Flag,
+  Check,
+  Maximize,
+  Shield,
+  BookOpen,
+  Zap,
 } from 'lucide-react'
 import { examAPI, proctoringAPI, sessionAPI } from '../../lib/api'
 import { useSwipe } from '../../hooks/useSwipe'
@@ -15,10 +25,10 @@ import { WebSocketClient } from '../../lib/websocket'
 import { useAuthStore } from '../../store/globalStore'
 import ExamSubmitModal from '../../components/ExamSubmitModal'
 import ExamTimerWarning from '../../components/ExamTimerWarning'
-import ProctoringHUD from '../../components/ProctoringHUD'
 import ViolationOverlay from '../../components/ViolationOverlay'
 import type { ViolationOverlayType } from '../../components/ViolationOverlay'
 import ProctoringRightPanel from '../../components/ProctoringRightPanel'
+import ExamChat from '../../components/ExamChat'
 
 export default function ExamPage() {
   const { examId } = useParams()
@@ -41,7 +51,6 @@ export default function ExamPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
-  const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [showSaveIndicator, setShowSaveIndicator] = useState(false)
 
   // Proctoring state
@@ -55,18 +64,19 @@ export default function ExamPage() {
   const [audioWaveData, setAudioWaveData] = useState<number[]>([])
 
   // Advanced violation overlay
-  const [violationOverlayType, setViolationOverlayType] = useState<ViolationOverlayType | null>(null)
+  const [violationOverlayType, setViolationOverlayType] = useState<ViolationOverlayType | null>(
+    null
+  )
   const [violationOverlayMsg, setViolationOverlayMsg] = useState('')
-  const [violationOverlaySeverity, setViolationOverlaySeverity] = useState<'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'>('HIGH')
-  const [teacherMessage, setTeacherMessage] = useState<{text: string; from: string} | null>(null)
+  const [violationOverlaySeverity, setViolationOverlaySeverity] = useState<
+    'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+  >('HIGH')
   const [examPausedByTeacher, setExamPausedByTeacher] = useState(false)
   const [examPausedByEngine, setExamPausedByEngine] = useState(false)
 
   // Screen sharing & window detection
-  const [screenShareDetected, setScreenShareDetected] = useState(false)
   const screenShareCheckRef = useRef<number | null>(null)
   const windowSizeCheckRef = useRef<number | null>(null)
-  const [windowMinimized, setWindowMinimized] = useState(false)
   const heartbeatRef = useRef<number | null>(null)
   const trustSyncRef = useRef<number | null>(null)
   const brightnessCheckRef = useRef<number | null>(null)
@@ -74,9 +84,7 @@ export default function ExamPage() {
   // New: dark room block & fullscreen hard block states
   const [darkRoomBlocked, setDarkRoomBlocked] = useState(false)
   const [darkRoomBrightness, setDarkRoomBrightness] = useState(0)
-  const [fullscreenCountdown, setFullscreenCountdown] = useState<number | null>(null)
   const fullscreenCountdownRef = useRef<number | null>(null)
-
 
   // Modal state
   const [showSubmitModal, setShowSubmitModal] = useState(false)
@@ -86,31 +94,38 @@ export default function ExamPage() {
   const warned1Min = useRef(false)
 
   // Fullscreen state
-  const [isFullscreen, setIsFullscreen] = useState(false)
   const [fullscreenExited, setFullscreenExited] = useState(false)
 
   // Refs to avoid stale closures in event listeners
   const examStartedRef = useRef(false)
   const submittingRef = useRef(false)
   const examPausedByEngineRef = useRef(false)
+  const timeRemainingRef = useRef(0)
+  const answersRef = useRef<Record<string, any>>({})
+  const tabSwitchesRef = useRef(0)
+  const flagsRef = useRef<any[]>([])
+  const trustScoreRef = useRef(100)
   examStartedRef.current = examStarted
   submittingRef.current = submitting
   examPausedByEngineRef.current = examPausedByEngine
+  timeRemainingRef.current = timeRemaining
+  answersRef.current = answers
+  tabSwitchesRef.current = tabSwitches
+  flagsRef.current = flags
+  trustScoreRef.current = trustScore
 
   // Connection quality
-  const [connectionQuality, setConnectionQuality] = useState<'excellent' | 'good' | 'poor'>('excellent')
-
   const { isMobile, isTablet } = useMobileDetect()
 
   // Computed
   const answeredCount = Object.keys(answers).length
   const flaggedCount = flaggedQuestions.size
-  const timeTaken = exam ? (exam.duration * 60) - timeRemaining : 0
+  const timeTaken = exam ? exam.duration * 60 - timeRemaining : 0
   const violationCount = flags.length
 
   // Swipe navigation
   const nextQuestion = useCallback(() => {
-    if (currentQuestionIndex < (exam?.questions.length - 1)) {
+    if (currentQuestionIndex < exam?.questions.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1)
       setShowMobileMenu(false)
     }
@@ -125,43 +140,56 @@ export default function ExamPage() {
 
   const swipeHandlers = useSwipe({
     onSwipeLeft: nextQuestion,
-    onSwipeRight: prevQuestion
+    onSwipeRight: prevQuestion,
   })
 
-  // ─── Fullscreen Lockdown ───────────────────────────────────────────────────
-  const requestFullscreen = async () => {
-    try {
-      const target = document.documentElement as HTMLElement & {
-        webkitRequestFullscreen?: () => Promise<void>
-        msRequestFullscreen?: () => Promise<void>
-      }
-      if (target.requestFullscreen) {
-        await target.requestFullscreen({ navigationUI: 'hide' } as FullscreenOptions)
-      } else if (target.webkitRequestFullscreen) {
-        await target.webkitRequestFullscreen()
-      } else if (target.msRequestFullscreen) {
-        await target.msRequestFullscreen()
-      }
-      if (document.fullscreenElement) {
-        setIsFullscreen(true)
-        setFullscreenExited(false)
-      }
-    } catch {
-      console.warn('Fullscreen not supported or denied')
+  // â”€â”€â”€ Fullscreen Lockdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const requestFullscreen = async (): Promise<void> => {
+    if (document.fullscreenElement) {
+      setIsFullscreen(true)
+      setFullscreenExited(false)
+      return
     }
+    const target = document.documentElement as HTMLElement & {
+      webkitRequestFullscreen?: () => Promise<void>
+      msRequestFullscreen?: () => Promise<void>
+    }
+    if (target.requestFullscreen) {
+      await target.requestFullscreen({ navigationUI: 'hide' } as FullscreenOptions)
+    } else if (target.webkitRequestFullscreen) {
+      await target.webkitRequestFullscreen()
+    } else if (target.msRequestFullscreen) {
+      await target.msRequestFullscreen()
+    } else {
+      throw new Error('Fullscreen API not available')
+    }
+    if (!document.fullscreenElement) {
+      throw new Error('Fullscreen request rejected by browser')
+    }
+    setIsFullscreen(true)
+    setFullscreenExited(false)
   }
 
-  const startExamFlow = () => {
+  const startExamFlow = async () => {
     if (examStarted) return
-    setExamStarted(true)
-    requestFullscreen()
+    try {
+      await requestFullscreen()
+      setExamStarted(true)
+    } catch {
+      setFullscreenExited(true)
+    }
   }
 
   useEffect(() => {
     const handleFullscreenChange = () => {
       const isNowFullscreen = !!document.fullscreenElement
       setIsFullscreen(isNowFullscreen)
-      if (!isNowFullscreen && examStartedRef.current && !submittingRef.current && !examPausedByEngineRef.current) {
+      if (
+        !isNowFullscreen &&
+        examStartedRef.current &&
+        !submittingRef.current &&
+        !examPausedByEngineRef.current
+      ) {
         setFullscreenExited(true)
         setTabSwitches(prev => prev + 1)
         createProctoringFlag('fullscreen_exit', 'high', 'Student exited fullscreen mode')
@@ -177,9 +205,10 @@ export default function ExamPage() {
     }
     document.addEventListener('fullscreenchange', handleFullscreenChange)
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ─── Lifecycle ─────────────────────────────────────────────────────────────
+  // â”€â”€â”€ Lifecycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     loadExam()
     const cleanupProctoring = setupProctoringListeners()
@@ -195,8 +224,8 @@ export default function ExamPage() {
       if (brightnessCheckRef.current) clearInterval(brightnessCheckRef.current)
       if (fullscreenCountdownRef.current) clearInterval(fullscreenCountdownRef.current)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [examId])
-
 
   // Start camera when exam loads
   useEffect(() => {
@@ -210,6 +239,7 @@ export default function ExamPage() {
 
     const timer = setTimeout(tryStart, 300)
     return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exam, loading])
 
   // Timer countdown
@@ -233,7 +263,9 @@ export default function ExamPage() {
           }
 
           if (next <= 1) {
-            doSubmitExam()
+            // Clear interval immediately, submit outside updater
+            clearInterval(timer)
+            setTimeout(() => doSubmitExam(), 0)
             return 0
           }
           return next
@@ -241,6 +273,7 @@ export default function ExamPage() {
       }, 1000)
       return () => clearInterval(timer)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [examStarted, timeRemaining, submitting])
 
   // Real-time audio wave polling during exam
@@ -258,7 +291,7 @@ export default function ExamPage() {
     return () => clearInterval(interval)
   }, [examStarted, submitting])
 
-  // ─── API Calls ─────────────────────────────────────────────────────────────
+  // â”€â”€â”€ API Calls â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const loadExam = async () => {
     try {
       const data = await examAPI.getExam(examId!)
@@ -273,10 +306,12 @@ export default function ExamPage() {
 
       try {
         await sessionAPI.startSession(examId!, {})
-      } catch { /* non-critical */ }
+      } catch {
+        /* non-critical */
+      }
 
       // Exam start is triggered by the proctoring engine success path,
-      // or by the no-camera fallback. Do NOT start here — we wait
+      // or by the no-camera fallback. Do NOT start here â€” we wait
       // for the engine's brightness check to pass first.
       // (see startExamFlow() called from Phase 2 success or no-camera fallback)
     } catch {
@@ -290,7 +325,7 @@ export default function ExamPage() {
     if (cameraReady && videoRef.current?.srcObject) return
     initializingRef.current = true
 
-    // ── PHASE 1: Attach stream to video element immediately ────────────
+    // â”€â”€ PHASE 1: Attach stream to video element immediately â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     try {
       const preExamStream = (window as any).__preExamStream as MediaStream | undefined
       let stream: MediaStream
@@ -302,7 +337,7 @@ export default function ExamPage() {
       } else {
         stream = await navigator.mediaDevices.getUserMedia({
           video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
-          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
         })
       }
 
@@ -327,7 +362,9 @@ export default function ExamPage() {
     } catch (streamErr) {
       const msg = streamErr instanceof Error ? streamErr.message : String(streamErr)
       if (msg.includes('NotAllowedError') || msg.includes('Permission')) {
-        toast.error('Camera permission denied. Please allow camera access and refresh.', { duration: 8000 })
+        toast.error('Camera permission denied. Please allow camera access and refresh.', {
+          duration: 8000,
+        })
       } else if (msg.includes('NotFoundError')) {
         toast.error('No camera found. Please connect a camera.', { duration: 8000 })
         console.warn('[Camera] No camera, continuing:', msg)
@@ -346,14 +383,14 @@ export default function ExamPage() {
       return
     }
 
-    // ── PHASE 2: Initialize AI engine with the already-playing stream ──
+    // â”€â”€ PHASE 2: Initialize AI engine with the already-playing stream â”€â”€
     setTimeout(async () => {
       const stream = videoRef.current?.srcObject as MediaStream | null
       if (!stream || !stream.active || !videoRef.current) return
 
       try {
-        const engine = new ProctoringEngine()
-        ;(proctoringEngineRef as any).current = engine
+        const engine = new ProctoringEngine();
+        (proctoringEngineRef as any).current = engine
 
         await engine.loadModels()
 
@@ -361,16 +398,22 @@ export default function ExamPage() {
         await engine.initialize(videoRef.current!, stream)
 
         engine.setOnViolation((violation: ProctoringViolation) => {
-          const penalty = violation.severity === 'CRITICAL' ? 15
-            : violation.severity === 'HIGH' ? 10
-            : violation.severity === 'MEDIUM' ? 5 : 2
+          const penalty =
+            violation.severity === 'CRITICAL'
+              ? 15
+              : violation.severity === 'HIGH'
+                ? 10
+                : violation.severity === 'MEDIUM'
+                  ? 5
+                  : 2
           setTrustScore(prev => Math.max(0, prev - penalty))
 
           setShowViolationFlash(true)
           setTimeout(() => setShowViolationFlash(false), 500)
 
           if (violation.severity === 'CRITICAL') toast.error(violation.message, { duration: 5000 })
-          else if (violation.severity === 'HIGH') toast.warning(violation.message, { duration: 4000 })
+          else if (violation.severity === 'HIGH')
+            toast.warning(violation.message, { duration: 4000 })
 
           createProctoringFlag(violation.type, violation.severity, violation.message)
           broadcastViolation(violation)
@@ -382,8 +425,10 @@ export default function ExamPage() {
 
         engine.setOnPause((reason: string) => {
           setExamPausedByEngine(true)
-          showViolationAlert('SUSPICIOUS_BEHAVIOR', `⏸️ Exam Paused: ${reason}`, 'CRITICAL')
+          showViolationAlert('SUSPICIOUS_BEHAVIOR', `â¸ï¸ Exam Paused: ${reason}`, 'CRITICAL')
           toast.error(`Exam Paused: ${reason}`, { duration: 10000, id: 'exam-pause' })
+          // Notify teacher immediately that this student is paused
+          setTimeout(() => sendProctoringStatusUpdate(), 100)
         })
 
         // Capture reference face after 3s
@@ -406,21 +451,36 @@ export default function ExamPage() {
         }
       } catch (engineErr) {
         const msg = engineErr instanceof Error ? engineErr.message : String(engineErr)
-        if (msg.includes('lighting') || msg.includes('INSUFFICIENT_LIGHTING') || msg.includes('too dark') || msg.includes('Too dark')) {
+        if (
+          msg.includes('lighting') ||
+          msg.includes('INSUFFICIENT_LIGHTING') ||
+          msg.includes('too dark') ||
+          msg.includes('Too dark')
+        ) {
           setDarkRoomBlocked(true)
           const brightness = (() => {
             try {
-              const c = document.createElement('canvas'); c.width = 64; c.height = 48
+              const c = document.createElement('canvas')
+              c.width = 64
+              c.height = 48
               const x = c.getContext('2d')
               if (!x || !videoRef.current) return 0
               x.drawImage(videoRef.current, 0, 0, 64, 48)
               const d = x.getImageData(0, 0, 64, 48).data
-              let t = 0; for (let i = 0; i < d.length; i += 4) t += 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2]
-              return Math.round(t / (d.length/4))
-            } catch { return 0 }
+              let t = 0
+              for (let i = 0; i < d.length; i += 4)
+                t += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
+              return Math.round(t / (d.length / 4))
+            } catch {
+              return 0
+            }
           })()
           setDarkRoomBrightness(brightness)
-          createProctoringFlag('dark_room', 'critical', `Room too dark (brightness: ${brightness}/255)`)
+          createProctoringFlag(
+            'dark_room',
+            'critical',
+            `Room too dark (brightness: ${brightness}/255)`
+          )
         } else {
           console.warn('[Proctoring] AI engine failed, basic monitoring continues:', msg)
           streamRef.current = videoRef.current?.srcObject as MediaStream | null
@@ -436,48 +496,60 @@ export default function ExamPage() {
     const userId = user._id || user.email || 'unknown'
     wsClient.connect({ userId, role: 'student', examId })
 
-    // ── Teacher Intervention Handler ──────────────────────────────────
+    // â”€â”€ Teacher Intervention Handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     wsClient.on('intervention', (data: any) => {
       const action = data.action as string
       const msg = data.message || ''
 
       if (action === 'warn') {
         setTeacherMessage({ text: msg || 'Please focus on your exam.', from: 'Teacher' })
-        showViolationAlert('SUSPICIOUS_BEHAVIOR', `⚠️ Teacher Warning: ${msg || 'Please focus on your exam.'}`, 'HIGH')
-        toast.warning(`🔔 Teacher: ${msg}`, { duration: 6000 })
-
+        showViolationAlert(
+          'SUSPICIOUS_BEHAVIOR',
+          `Teacher Warning: ${msg || 'Please focus on your exam.'}`,
+          'HIGH'
+        )
+        toast.warning(`Teacher: ${msg}`, { duration: 6000 })
       } else if (action === 'pause') {
         setExamPausedByTeacher(true)
-        showViolationAlert('SUSPICIOUS_BEHAVIOR', `⏸️ Exam Paused by Teacher: ${msg || 'Your exam has been paused. Please wait.'}`, 'CRITICAL')
+        showViolationAlert(
+          'SUSPICIOUS_BEHAVIOR',
+          `â¸ï¸ Exam Paused by Teacher: ${msg || 'Your exam has been paused. Please wait.'}`,
+          'CRITICAL'
+        )
         toast.error(`Exam paused by teacher: ${msg}`, { duration: 0 })
-
       } else if (action === 'resume') {
         setExamPausedByTeacher(false)
+        setExamPausedByEngine(false)
         setViolationOverlayType(null)
-        toast.success('✅ Exam resumed by teacher', { duration: 3000 })
-
+        const engine = proctoringEngineRef.current
+        if (engine) engine.resumeExam()
+        toast.success('âœ… Exam resumed by teacher', { duration: 3000 })
       } else if (action === 'terminate') {
-        showViolationAlert('SUSPICIOUS_BEHAVIOR', `🚫 Exam Terminated: ${msg || 'Your exam has been terminated by the teacher due to integrity violations.'}`, 'CRITICAL')
+        showViolationAlert(
+          'SUSPICIOUS_BEHAVIOR',
+          `ðŸš« Exam Terminated: ${msg || 'Your exam has been terminated by the teacher due to integrity violations.'}`,
+          'CRITICAL'
+        )
         toast.error('Exam terminated by teacher', { duration: 0 })
         // Auto-submit after 5 seconds
         setTimeout(() => doSubmitExam(), 5000)
       }
     })
 
-    // ── Teacher Broadcast Message ──────────────────────────────────────
+    // â”€â”€ Teacher Broadcast Message â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     wsClient.on('teacher_message', (data: any) => {
       setTeacherMessage({ text: data.message, from: 'Teacher' })
-      toast.info(`📢 Teacher: ${data.message}`, { duration: 8000 })
+      toast.info(`ðŸ“¢ Teacher: ${data.message}`, { duration: 8000 })
     })
 
     wsClient.on('connection_established', () => {
-      toast.success('🔗 Live monitoring active', { duration: 1500 })
-      // ── CRITICAL FIX: Start video streaming when WebSocket connects ─────
+      toast.success('ðŸ”— Live monitoring active', { duration: 1500 })
+      // â”€â”€ CRITICAL FIX: Start video streaming when WebSocket connects â”€â”€â”€â”€â”€
       // This was missing - without this call, teachers see NO video feeds
       startVideoStreaming()
     })
 
-    // ── Heartbeat: send alive ping every 10 seconds ────────────────────
+    // â”€â”€ Heartbeat: send alive ping every 10 seconds â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     heartbeatRef.current = window.setInterval(() => {
       if (wsClient.isConnected()) {
         wsClient.send({
@@ -489,7 +561,7 @@ export default function ExamPage() {
       }
     }, 10000)
 
-    // ── Trust Score Sync: send proctoring_status every 15 seconds ─────
+    // â”€â”€ Trust Score Sync: send proctoring_status every 15 seconds â”€â”€â”€â”€â”€
     trustSyncRef.current = window.setInterval(() => {
       if (wsClient.isConnected()) {
         wsClient.send({
@@ -507,13 +579,14 @@ export default function ExamPage() {
             integrityScore: proctoringStatus?.integrityScore ?? trustScore,
             tabSwitchCount: proctoringStatus?.tabSwitchCount ?? tabSwitches,
             violationCount: flags.length,
+            isPaused: examPausedByEngine || examPausedByTeacher,
           },
           timestamp: new Date().toISOString(),
         })
       }
     }, 15000)
 
-    // ── Brightness Monitoring During Exam ─────────────────────────────
+    // â”€â”€ Brightness Monitoring During Exam â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     brightnessCheckRef.current = window.setInterval(() => {
       if (!videoRef.current || !examStarted) return
       try {
@@ -530,27 +603,44 @@ export default function ExamPage() {
         }
         const brightness = total / (imgData.length / 4)
         setDarkRoomBrightness(Math.round(brightness))
-        
+
         if (brightness < 25) {
-          // Very dark — send notification and show block overlay
+          // Very dark â€” send notification and show block overlay
           if (wsClient.isConnected()) {
             wsClient.send({ type: 'brightness_update', brightness, exam_id: examId })
           }
-          createProctoringFlag('dark_room_exam', 'critical', `Room too dark during exam (brightness: ${brightness.toFixed(0)}/255)`)
+          createProctoringFlag(
+            'dark_room_exam',
+            'critical',
+            `Room too dark during exam (brightness: ${brightness.toFixed(0)}/255)`
+          )
           setDarkRoomBlocked(true)
-          showViolationAlert('CAMERA_BLOCKED', `🌑 Room is too dark! Brightness: ${brightness.toFixed(0)}/255. Exam paused until lighting is improved.`, 'CRITICAL')
+          showViolationAlert(
+            'CAMERA_BLOCKED',
+            `ðŸŒ‘ Room is too dark! Brightness: ${brightness.toFixed(0)}/255. Exam paused until lighting is improved.`,
+            'CRITICAL'
+          )
         } else if (brightness < 35) {
-          // Warning level — log but don't block
+          // Warning level â€” log but don't block
           if (wsClient.isConnected()) {
             wsClient.send({ type: 'brightness_update', brightness, exam_id: examId })
           }
-          createProctoringFlag('low_light', 'medium', `Low room lighting detected (brightness: ${brightness.toFixed(0)})`)
-          showViolationAlert('CAMERA_BLOCKED', `⚠️ Low Lighting: ${brightness.toFixed(0)}/255. Please improve your room lighting.`, 'MEDIUM')
+          createProctoringFlag(
+            'low_light',
+            'medium',
+            `Low room lighting detected (brightness: ${brightness.toFixed(0)})`
+          )
+          showViolationAlert(
+            'CAMERA_BLOCKED',
+            `Low Lighting: ${brightness.toFixed(0)}/255. Please improve your room lighting.`,
+            'MEDIUM'
+          )
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }, 8000) // Check every 8 seconds during exam (was 20s)
   }
-
 
   const startVideoStreaming = () => {
     if (!videoRef.current || !wsClientRef.current) return
@@ -581,7 +671,9 @@ export default function ExamPage() {
           timestamp: new Date().toISOString(),
           frame_number: frameCount,
         })
-      } catch { /* ignore frame errors silently */ }
+      } catch {
+        /* ignore frame errors silently */
+      }
     }, 3000) // Every 3 seconds (less spam)
   }
 
@@ -595,8 +687,8 @@ export default function ExamPage() {
         severity: violation.severity,
         message: violation.message,
         timestamp: violation.timestamp.toISOString(),
-        metadata: violation.metadata
-      }
+        metadata: violation.metadata,
+      },
     })
   }
 
@@ -646,18 +738,25 @@ export default function ExamPage() {
     setCameraReady(false)
   }
 
-  const showViolationAlert = useCallback((type: ViolationOverlayType, message: string, severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' = 'HIGH') => {
-    setViolationOverlayType(type)
-    setViolationOverlayMsg(message)
-    setViolationOverlaySeverity(severity)
-  }, [])
+  const showViolationAlert = useCallback(
+    (
+      type: ViolationOverlayType,
+      message: string,
+      severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' = 'HIGH'
+    ) => {
+      setViolationOverlayType(type)
+      setViolationOverlayMsg(message)
+      setViolationOverlaySeverity(severity)
+    },
+    []
+  )
 
   const dismissViolationAlert = useCallback(() => {
     setViolationOverlayType(null)
   }, [])
 
   const setupAdvancedSecurityListeners = () => {
-    // ── Screen Share Detection ─────────────────────────────────────
+    // â”€â”€ Screen Share Detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Check if any display media track is active (indicates screen sharing)
     const checkScreenShare = () => {
       // Method 1: Check via document visibility + display media
@@ -666,66 +765,142 @@ export default function ExamPage() {
       if (displays) {
         setScreenShareDetected(true)
         createProctoringFlag('screen_share', 'critical', 'Screen sharing detected during exam')
-        showViolationAlert('SCREEN_SHARE', 'Screen sharing was detected! This is a critical violation. Please stop screen sharing immediately.', 'CRITICAL')
+        showViolationAlert(
+          'SCREEN_SHARE',
+          'Screen sharing was detected! This is a critical violation. Please stop screen sharing immediately.',
+          'CRITICAL'
+        )
       }
     }
     screenShareCheckRef.current = window.setInterval(checkScreenShare, 3000)
 
-    // ── Window Size / Taskbar Detection ───────────────────────────
+    // â”€â”€ Window Size / Taskbar Detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // If window height is significantly less than screen height, taskbar may be visible
     const checkWindowSize = () => {
-      if (!examStartedRef.current || !document.fullscreenElement || submittingRef.current || examPausedByEngineRef.current) return
+      if (
+        !examStartedRef.current ||
+        !document.fullscreenElement ||
+        submittingRef.current ||
+        examPausedByEngineRef.current
+      )
+        return
       const screenH = window.screen.height
       const windowH = window.outerHeight
       const ratio = windowH / screenH
       if (ratio < 0.95) {
         // Window is smaller than screen - user exited fullscreen or taskbar visible
         setWindowMinimized(true)
-        createProctoringFlag('window_resized', 'high', `Window minimized or taskbar visible (ratio: ${(ratio * 100).toFixed(0)}%)`)
-        showViolationAlert('WINDOW_MINIMIZED', 'Exam window was minimized or resized. Exam paused.', 'HIGH')
+        createProctoringFlag(
+          'window_resized',
+          'high',
+          `Window minimized or taskbar visible (ratio: ${(ratio * 100).toFixed(0)}%)`
+        )
+        showViolationAlert(
+          'WINDOW_MINIMIZED',
+          'Exam window was minimized or resized. Exam paused.',
+          'HIGH'
+        )
         const engine = proctoringEngineRef.current
-        if (engine) engine.pauseExam('Window was resized or minimized. Return to fullscreen to resume.')
+        if (engine)
+          engine.pauseExam('Window was resized or minimized. Return to fullscreen to resume.')
       } else {
         setWindowMinimized(false)
       }
     }
     windowSizeCheckRef.current = window.setInterval(checkWindowSize, 2000)
 
-    // ── Blur Detection (clicking outside browser) ─────────────────
+    // â”€â”€ Blur Detection (clicking outside browser) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const handleBlur = () => {
       if (!examStartedRef.current || submittingRef.current || examPausedByEngineRef.current) return
-      createProctoringFlag('window_blur', 'high', 'Browser window lost focus - possible alt-tab or external app')
+      createProctoringFlag(
+        'window_blur',
+        'high',
+        'Browser window lost focus - possible alt-tab or external app'
+      )
       showViolationAlert('TAB_SWITCH', 'Application switch detected! Exam paused.', 'HIGH')
       const engine = proctoringEngineRef.current
       if (engine) engine.pauseExam('Application switch detected. Return to the exam to resume.')
     }
     window.addEventListener('blur', handleBlur)
 
-    // ── PiP Detection ──────────────────────────────────────────────
+    // â”€â”€ PiP Detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const handlePiP = () => {
       createProctoringFlag('pip_detected', 'high', 'Picture-in-Picture mode detected during exam')
-      showViolationAlert('SCREEN_SHARE', 'Picture-in-Picture mode is not allowed during exam!', 'HIGH')
+      showViolationAlert(
+        'SCREEN_SHARE',
+        'Picture-in-Picture mode is not allowed during exam!',
+        'HIGH'
+      )
     }
     document.addEventListener('enterpictureinpicture', handlePiP as any)
+
+    // â”€â”€ Copy-Paste-Cut Blocking â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    const handleCopy = (e: ClipboardEvent) => {
+      if (!examStartedRef.current || submittingRef.current) return
+      e.preventDefault()
+      createProctoringFlag('copy_attempt', 'medium', 'Copy operation blocked during exam')
+    }
+    const handlePaste = (e: ClipboardEvent) => {
+      if (!examStartedRef.current || submittingRef.current) return
+      e.preventDefault()
+      createProctoringFlag('paste_attempt', 'medium', 'Paste operation blocked during exam')
+    }
+    const handleCut = (e: ClipboardEvent) => {
+      if (!examStartedRef.current || submittingRef.current) return
+      e.preventDefault()
+      createProctoringFlag('cut_attempt', 'medium', 'Cut operation blocked during exam')
+    }
+    document.addEventListener('copy', handleCopy)
+    document.addEventListener('paste', handlePaste)
+    document.addEventListener('cut', handleCut)
+
+    // â”€â”€ Right-Click / Context Menu Blocking â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    const handleContextMenu = (e: MouseEvent) => {
+      if (!examStartedRef.current || submittingRef.current) return
+      e.preventDefault()
+      createProctoringFlag('right_click', 'low', 'Right-click blocked during exam')
+    }
+    document.addEventListener('contextmenu', handleContextMenu)
+
+    // â”€â”€ Text Selection Prevention â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    const handleSelectStart = (e: Event) => {
+      if (!examStartedRef.current || submittingRef.current) return
+      e.preventDefault()
+    }
+    document.addEventListener('selectstart', handleSelectStart)
 
     return () => {
       if (screenShareCheckRef.current) clearInterval(screenShareCheckRef.current)
       if (windowSizeCheckRef.current) clearInterval(windowSizeCheckRef.current)
       window.removeEventListener('blur', handleBlur)
       document.removeEventListener('enterpictureinpicture', handlePiP as any)
+      document.removeEventListener('copy', handleCopy)
+      document.removeEventListener('paste', handlePaste)
+      document.removeEventListener('cut', handleCut)
+      document.removeEventListener('contextmenu', handleContextMenu)
+      document.removeEventListener('selectstart', handleSelectStart)
     }
   }
 
   const setupProctoringListeners = () => {
     const handleVisibilityChange = () => {
-      if (document.hidden && examStartedRef.current && !submittingRef.current && !examPausedByEngineRef.current) {
+      if (
+        document.hidden &&
+        examStartedRef.current &&
+        !submittingRef.current &&
+        !examPausedByEngineRef.current
+      ) {
         setTabSwitches(prev => prev + 1)
         setTrustScore(prev => Math.max(0, prev - 10))
         setShowViolationFlash(true)
         setTimeout(() => setShowViolationFlash(false), 500)
         createProctoringFlag('tab_switch', 'high', 'Student switched tabs or minimized window')
-        showViolationAlert('TAB_SWITCH', 'Tab switch detected! Exam paused. Return to the exam window to resume.', 'HIGH')
-        toast.warning('⚠️ Tab switch detected — exam paused', { duration: 5000 })
+        showViolationAlert(
+          'TAB_SWITCH',
+          'Tab switch detected! Exam paused. Return to the exam window to resume.',
+          'HIGH'
+        )
+        toast.warning('âš ï¸ Tab switch detected â€” exam paused', { duration: 5000 })
         // PAUSE the exam immediately
         const engine = proctoringEngineRef.current
         if (engine) {
@@ -754,7 +929,24 @@ export default function ExamPage() {
         if (engine) engine.pauseExam('Windows key pressed. Stay focused on the exam to resume.')
       }
       if (e.key === 'Escape' && document.fullscreenElement) {
+        e.preventDefault()
         createProctoringFlag('escape_key', 'low', 'Escape key pressed during exam')
+      }
+      if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && ['I', 'J', 'C'].includes(e.key))) {
+        e.preventDefault()
+        createProctoringFlag(
+          'devtools_attempt',
+          'high',
+          'Developer tools shortcut attempt detected'
+        )
+      }
+      if (e.ctrlKey && ['c', 'v', 'x', 's'].includes(e.key.toLowerCase())) {
+        e.preventDefault()
+        createProctoringFlag(
+          `ctrl_${e.key.toLowerCase()}_blocked`,
+          'low',
+          `Ctrl+${e.key.toUpperCase()} blocked during exam`
+        )
       }
     }
     document.addEventListener('keydown', handleKeyDown)
@@ -774,7 +966,7 @@ export default function ExamPage() {
       flag_type: type,
       severity,
       timestamp: new Date().toISOString(),
-      evidence
+      evidence,
     }
     setFlags(prev => [...prev, flag])
 
@@ -787,12 +979,14 @@ export default function ExamPage() {
       await proctoringAPI.createFlag(flag)
       await sessionAPI.updateSession(examId!, {
         flags_count: flags.length + 1,
-        trust_score: trustScore
+        trust_score: trustScore,
       })
-    } catch { /* non-critical */ }
+    } catch {
+      /* non-critical */
+    }
   }
 
-  // ─── Answer Handling ────────────────────────────────────────────────────────
+  // â”€â”€â”€ Answer Handling â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleAnswerChange = (questionId: string, value: any) => {
     setAnswers(prev => {
       const newAnswers = { ...prev, [questionId]: value }
@@ -802,10 +996,12 @@ export default function ExamPage() {
       setTimeout(() => setShowSaveIndicator(false), 1800)
       setLastSaved(new Date())
 
-      sessionAPI.updateSession(examId!, {
-        current_question: currentQuestionIndex,
-        answered_questions: Object.keys(newAnswers).length
-      }).catch(() => {})
+      sessionAPI
+        .updateSession(examId!, {
+          current_question: currentQuestionIndex,
+          answered_questions: Object.keys(newAnswers).length,
+        })
+        .catch(() => {})
 
       return newAnswers
     })
@@ -825,47 +1021,61 @@ export default function ExamPage() {
     })
   }
 
-  // ─── Submit Exam ────────────────────────────────────────────────────────────
+  // â”€â”€â”€ Submit Exam â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleSubmitClick = () => {
     setShowSubmitModal(true)
   }
 
   const doSubmitExam = async () => {
-    if (submitting) return
+    if (submittingRef.current) return
     setSubmitting(true)
     setShowSubmitModal(false)
 
     // Exit fullscreen
     try {
       if (document.fullscreenElement) await document.exitFullscreen()
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
 
     stopCamera()
 
-    // Build submission payload
+    // Use refs for fresh state at submission time (avoid stale closures)
+    const freshTimeTaken = exam ? exam.duration * 60 - timeRemainingRef.current : 0
+    const freshAnswers = { ...answersRef.current }
+
     const submission = {
       exam_id: examId!,
-      answers,
-      time_taken: timeTaken,
+      answers: freshAnswers,
+      time_taken: freshTimeTaken,
       proctoring_data: {
-        violations: flags.length,
-        trust_score: trustScore,
-        tab_switches: tabSwitches,
-        flags: flags
-      }
+        violations: flagsRef.current.length,
+        trust_score: trustScoreRef.current,
+        tab_switches: tabSwitchesRef.current,
+        flags: flagsRef.current,
+      },
     }
 
     // Save locally as backup before submitting
     try {
-      localStorage.setItem(`exam_backup_${examId}`, JSON.stringify({ ...submission, savedAt: new Date().toISOString() }))
-    } catch { /* ignore storage errors */ }
+      localStorage.setItem(
+        `exam_backup_${examId}`,
+        JSON.stringify({ ...submission, savedAt: new Date().toISOString() })
+      )
+    } catch {
+      /* ignore storage errors */
+    }
 
     // Retry submit up to 3 times
     let lastError: any = null
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const result = await examAPI.submitExam(examId!, submission)
-        try { localStorage.removeItem(`exam_backup_${examId}`) } catch { /* ignore */ }
+        try {
+          localStorage.removeItem(`exam_backup_${examId}`)
+        } catch {
+          /* ignore */
+        }
         toast.success('Exam submitted successfully!')
         setTimeout(() => {
           if (result?._id) navigate(`/student/results/${result._id}`, { state: { result } })
@@ -891,23 +1101,42 @@ export default function ExamPage() {
     startCamera()
   }
 
-  // ─── Resume from Pause ──────────────────────────────────────────────────────
-  const handleResumeFromPause = useCallback(async () => {
-    const engine = proctoringEngineRef.current
-    if (engine) {
-      engine.resumeExam()
-    }
-    setExamPausedByEngine(false)
-    setExamPausedByTeacher(false)
-    setFullscreenExited(false)
-    // Re-enter fullscreen immediately
-    await requestFullscreen()
-    // Reset suspicious activity score after resume
-    setTrustScore(prev => Math.min(100, prev + 10))
-    toast.success('✅ Exam resumed. Stay focused!', { duration: 3000 })
-  }, [])
+  // Send immediate proctoring status update (used when pause state changes)
+  const sendProctoringStatusUpdate = useCallback(() => {
+    const wsClient = wsClientRef.current
+    if (!wsClient || !wsClient.isConnected()) return
+    const userId = user?.email || user?._id || 'unknown'
+    wsClient.send({
+      type: 'proctoring_status',
+      exam_id: examId,
+      student_id: userId,
+      trust_score: trustScore,
+      status: {
+        faceDetected: proctoringStatus?.faceDetected ?? true,
+        faceCount: proctoringStatus?.faceCount ?? 1,
+        lookingAtScreen: proctoringStatus?.lookingAtScreen ?? true,
+        audioLevel: proctoringStatus?.audioLevel ?? 0,
+        attentionLevel: proctoringStatus?.attentionLevel ?? 100,
+        environmentScore: proctoringStatus?.environmentScore ?? 100,
+        integrityScore: proctoringStatus?.integrityScore ?? trustScore,
+        tabSwitchCount: proctoringStatus?.tabSwitchCount ?? tabSwitches,
+        violationCount: flags.length,
+        isPaused: examPausedByEngine || examPausedByTeacher,
+      },
+      timestamp: new Date().toISOString(),
+    })
+  }, [
+    examId,
+    trustScore,
+    proctoringStatus,
+    tabSwitches,
+    flags.length,
+    examPausedByEngine,
+    examPausedByTeacher,
+    user,
+  ])
 
-  // ─── Helpers ────────────────────────────────────────────────────────────────
+  // â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const formatTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600)
     const m = Math.floor((seconds % 3600) / 60)
@@ -928,36 +1157,62 @@ export default function ExamPage() {
 
   const getBadgeClasses = (state: string) => {
     switch (state) {
-      case 'current': return 'bg-blue-600 text-white shadow-md shadow-blue-500/30'
-      case 'answered': return 'bg-green-100 text-green-800 hover:bg-green-200 border border-green-200'
-      case 'flagged': return 'bg-amber-100 text-amber-800 hover:bg-amber-200 border border-amber-300'
-      default: return 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200'
+      case 'current':
+        return 'bg-blue-600 text-white shadow-md shadow-blue-500/30'
+      case 'answered':
+        return 'bg-green-100 text-green-800 hover:bg-green-200 border border-green-200'
+      case 'flagged':
+        return 'bg-amber-100 text-amber-800 hover:bg-amber-200 border border-amber-300'
+      default:
+        return 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200'
     }
   }
 
-  // ─── Render Question ────────────────────────────────────────────────────────
+  // â”€â”€â”€ Render Question â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const renderQuestion = (question: any, index: number) => {
     if (!question) return <p className="text-gray-500">Question not found</p>
-    // Normalize question type — handle all common backend field names
+    // Normalize question type â€” handle all common backend field names
     const rawType = (question.question_type || question.type || '').toString().toLowerCase().trim()
     const questionId = question._id || question.id || index.toString()
 
     // Map any known type alias to our canonical types
     const typeAliasMap: Record<string, string> = {
-      'mcq': 'mcq', 'multiple_choice': 'mcq', 'single_choice': 'mcq', 'single': 'mcq',
-      'multiple_select': 'multiple_select', 'multi_select': 'multiple_select', 'checkbox': 'multiple_select',
-      'essay': 'essay', 'long_answer': 'essay', 'long': 'essay', 'descriptive': 'essay',
-      'subjective': 'essay', 'paragraph': 'essay', 'detailed': 'essay',
-      'short_answer': 'short_answer', 'short': 'short_answer', 'brief': 'short_answer',
-      'fill_blank': 'short_answer', 'fill_in_blank': 'short_answer', 'fill_in_the_blank': 'short_answer',
-      'true_false': 'true_false', 'true/false': 'true_false', 'boolean': 'true_false', 'tf': 'true_false',
-      'code': 'code', 'coding': 'code', 'programming': 'code',
-      'numerical': 'short_answer', 'numeric': 'short_answer', 'number': 'short_answer',
-      'matching': 'short_answer',
+      mcq: 'mcq',
+      multiple_choice: 'mcq',
+      single_choice: 'mcq',
+      single: 'mcq',
+      multiple_select: 'multiple_select',
+      multi_select: 'multiple_select',
+      checkbox: 'multiple_select',
+      essay: 'essay',
+      long_answer: 'essay',
+      long: 'essay',
+      descriptive: 'essay',
+      subjective: 'essay',
+      paragraph: 'essay',
+      detailed: 'essay',
+      short_answer: 'short_answer',
+      short: 'short_answer',
+      brief: 'short_answer',
+      fill_blank: 'short_answer',
+      fill_in_blank: 'short_answer',
+      fill_in_the_blank: 'short_answer',
+      true_false: 'true_false',
+      'true/false': 'true_false',
+      boolean: 'true_false',
+      tf: 'true_false',
+      code: 'code',
+      coding: 'code',
+      programming: 'code',
+      numerical: 'short_answer',
+      numeric: 'short_answer',
+      number: 'short_answer',
+      matching: 'short_answer',
     }
     const questionType = typeAliasMap[rawType] || rawType
 
-    const optionBase = 'flex items-center p-3 sm:p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 min-h-[52px] touch-manipulation group'
+    const optionBase =
+      'flex items-center p-3 sm:p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 min-h-[52px] touch-manipulation group'
     const optionSelected = 'border-blue-500 bg-blue-50 shadow-sm shadow-blue-100'
     const optionDefault = 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50'
 
@@ -979,15 +1234,21 @@ export default function ExamPage() {
                     name={`question_${index}`}
                     value={option}
                     checked={selected}
-                    onChange={(e) => handleAnswerChange(questionId, e.target.value)}
+                    onChange={e => handleAnswerChange(questionId, e.target.value)}
                     className="sr-only"
                   />
-                  <div className={`w-5 h-5 rounded-full border-2 mr-3 flex items-center justify-center shrink-0 transition-all ${
-                    selected ? 'border-blue-500 bg-blue-500' : 'border-gray-300 group-hover:border-blue-400'
-                  }`}>
+                  <div
+                    className={`w-5 h-5 rounded-full border-2 mr-3 flex items-center justify-center shrink-0 transition-all ${
+                      selected
+                        ? 'border-blue-500 bg-blue-500'
+                        : 'border-gray-300 group-hover:border-blue-400'
+                    }`}
+                  >
                     {selected && <div className="w-2.5 h-2.5 bg-white rounded-full" />}
                   </div>
-                  <span className={`text-sm sm:text-base ${selected ? 'text-blue-900 font-medium' : 'text-gray-700'}`}>
+                  <span
+                    className={`text-sm sm:text-base ${selected ? 'text-blue-900 font-medium' : 'text-gray-700'}`}
+                  >
                     <strong className="mr-2 text-gray-400">{String.fromCharCode(65 + i)}.</strong>
                     {option}
                   </span>
@@ -1016,7 +1277,7 @@ export default function ExamPage() {
                     type="checkbox"
                     value={option}
                     checked={checked}
-                    onChange={(e) => {
+                    onChange={e => {
                       const current = answers[questionId] || []
                       const newValue = e.target.checked
                         ? [...current, option]
@@ -1025,12 +1286,18 @@ export default function ExamPage() {
                     }}
                     className="sr-only"
                   />
-                  <div className={`w-5 h-5 rounded-md border-2 mr-3 flex items-center justify-center shrink-0 transition-all ${
-                    checked ? 'border-blue-500 bg-blue-500' : 'border-gray-300 group-hover:border-blue-400'
-                  }`}>
+                  <div
+                    className={`w-5 h-5 rounded-md border-2 mr-3 flex items-center justify-center shrink-0 transition-all ${
+                      checked
+                        ? 'border-blue-500 bg-blue-500'
+                        : 'border-gray-300 group-hover:border-blue-400'
+                    }`}
+                  >
                     {checked && <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />}
                   </div>
-                  <span className={`text-sm sm:text-base ${checked ? 'text-blue-900 font-medium' : 'text-gray-700'}`}>
+                  <span
+                    className={`text-sm sm:text-base ${checked ? 'text-blue-900 font-medium' : 'text-gray-700'}`}
+                  >
                     {option}
                   </span>
                 </motion.label>
@@ -1045,7 +1312,7 @@ export default function ExamPage() {
           <div>
             <textarea
               value={answers[questionId] || ''}
-              onChange={(e) => handleAnswerChange(questionId, e.target.value)}
+              onChange={e => handleAnswerChange(questionId, e.target.value)}
               className="w-full min-h-[180px] p-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base resize-y transition-all font-[inherit]"
               placeholder="Type your detailed answer here..."
             />
@@ -1061,7 +1328,7 @@ export default function ExamPage() {
           <input
             type="text"
             value={answers[questionId] || ''}
-            onChange={(e) => handleAnswerChange(questionId, e.target.value)}
+            onChange={e => handleAnswerChange(questionId, e.target.value)}
             className="w-full p-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base transition-all"
             placeholder="Type your answer here..."
           />
@@ -1070,7 +1337,7 @@ export default function ExamPage() {
       case 'true_false':
         return (
           <div className="flex gap-4">
-            {['True', 'False'].map((option) => {
+            {['True', 'False'].map(option => {
               const selected = answers[questionId] === option
               return (
                 <motion.label
@@ -1078,7 +1345,9 @@ export default function ExamPage() {
                   whileTap={{ scale: 0.97 }}
                   className={`flex-1 flex items-center justify-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all ${
                     selected
-                      ? option === 'True' ? 'border-green-500 bg-green-50' : 'border-red-500 bg-red-50'
+                      ? option === 'True'
+                        ? 'border-green-500 bg-green-50'
+                        : 'border-red-500 bg-red-50'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
@@ -1087,15 +1356,21 @@ export default function ExamPage() {
                     name={`question_${index}`}
                     value={option}
                     checked={selected}
-                    onChange={(e) => handleAnswerChange(questionId, e.target.value)}
+                    onChange={e => handleAnswerChange(questionId, e.target.value)}
                     className="sr-only"
                   />
-                  <span className={`text-2xl`}>{option === 'True' ? '✓' : '✗'}</span>
-                  <span className={`font-semibold text-base ${
-                    selected
-                      ? option === 'True' ? 'text-green-700' : 'text-red-700'
-                      : 'text-gray-700'
-                  }`}>{option}</span>
+                  <span className={`text-2xl`}>{option === 'True' ? 'âœ“' : 'âœ—'}</span>
+                  <span
+                    className={`font-semibold text-base ${
+                      selected
+                        ? option === 'True'
+                          ? 'text-green-700'
+                          : 'text-red-700'
+                        : 'text-gray-700'
+                    }`}
+                  >
+                    {option}
+                  </span>
                 </motion.label>
               )
             })}
@@ -1114,11 +1389,11 @@ export default function ExamPage() {
               </div>
               <textarea
                 value={answers[questionId] || ''}
-                onChange={(e) => handleAnswerChange(questionId, e.target.value)}
+                onChange={e => handleAnswerChange(questionId, e.target.value)}
                 className="w-full min-h-[200px] p-4 bg-gray-900 text-green-400 font-mono text-sm resize-y border-none outline-none"
                 placeholder="// Write your code here..."
                 spellCheck={false}
-                onKeyDown={(e) => {
+                onKeyDown={e => {
                   // Tab inserts 2 spaces
                   if (e.key === 'Tab') {
                     e.preventDefault()
@@ -1139,8 +1414,8 @@ export default function ExamPage() {
         )
 
       default:
-        // Smart fallback: if the question has options → render as MCQ
-        // Otherwise → render as a textarea (descriptive / any unknown type)
+        // Smart fallback: if the question has options â†’ render as MCQ
+        // Otherwise â†’ render as a textarea (descriptive / any unknown type)
         if (question.options && Array.isArray(question.options) && question.options.length > 0) {
           return (
             <div className="space-y-3">
@@ -1160,15 +1435,21 @@ export default function ExamPage() {
                       name={`question_${index}`}
                       value={option}
                       checked={selected}
-                      onChange={(e) => handleAnswerChange(questionId, e.target.value)}
+                      onChange={e => handleAnswerChange(questionId, e.target.value)}
                       className="sr-only"
                     />
-                    <div className={`w-5 h-5 rounded-full border-2 mr-3 flex items-center justify-center shrink-0 transition-all ${
-                      selected ? 'border-blue-500 bg-blue-500' : 'border-gray-300 group-hover:border-blue-400'
-                    }`}>
+                    <div
+                      className={`w-5 h-5 rounded-full border-2 mr-3 flex items-center justify-center shrink-0 transition-all ${
+                        selected
+                          ? 'border-blue-500 bg-blue-500'
+                          : 'border-gray-300 group-hover:border-blue-400'
+                      }`}
+                    >
                       {selected && <div className="w-2.5 h-2.5 bg-white rounded-full" />}
                     </div>
-                    <span className={`text-sm sm:text-base ${selected ? 'text-blue-900 font-medium' : 'text-gray-700'}`}>
+                    <span
+                      className={`text-sm sm:text-base ${selected ? 'text-blue-900 font-medium' : 'text-gray-700'}`}
+                    >
                       <strong className="mr-2 text-gray-400">{String.fromCharCode(65 + i)}.</strong>
                       {option}
                     </span>
@@ -1179,17 +1460,18 @@ export default function ExamPage() {
             </div>
           )
         }
-        // No options → descriptive textarea
+        // No options â†’ descriptive textarea
         return (
           <div>
             {rawType && rawType !== 'essay' && rawType !== 'descriptive' && (
               <p className="text-xs text-purple-600 bg-purple-50 px-3 py-1.5 rounded-lg border border-purple-100 font-medium mb-3">
-                {rawType.charAt(0).toUpperCase() + rawType.slice(1).replace(/_/g, ' ')} — Write your answer below
+                {rawType.charAt(0).toUpperCase() + rawType.slice(1).replace(/_/g, ' ')} â€” Write
+                your answer below
               </p>
             )}
             <textarea
               value={answers[questionId] || ''}
-              onChange={(e) => handleAnswerChange(questionId, e.target.value)}
+              onChange={e => handleAnswerChange(questionId, e.target.value)}
               className="w-full min-h-[160px] p-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base resize-y transition-all font-[inherit]"
               placeholder="Type your answer here..."
             />
@@ -1202,7 +1484,7 @@ export default function ExamPage() {
     }
   }
 
-  // ─── Loading Screen ─────────────────────────────────────────────────────────
+  // â”€â”€â”€ Loading Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-blue-900">
@@ -1223,8 +1505,8 @@ export default function ExamPage() {
   }
 
   const currentQuestion = exam?.questions[currentQuestionIndex]
-  const currentQuestionId = currentQuestion?._id || currentQuestion?.id || currentQuestionIndex.toString()
-  const progress = ((currentQuestionIndex + 1) / exam?.questions.length) * 100
+  const currentQuestionId =
+    currentQuestion?._id || currentQuestion?.id || currentQuestionIndex.toString()
   const isTimeCritical = timeRemaining < 300 // < 5 minutes
   const isTimeDanger = timeRemaining < 60 // < 1 minute
 
@@ -1236,7 +1518,10 @@ export default function ExamPage() {
         message={violationOverlayMsg}
         severity={violationOverlaySeverity}
         onDismiss={dismissViolationAlert}
-        onForceFullscreen={() => { requestFullscreen(); dismissViolationAlert() }}
+        onForceFullscreen={() => {
+          requestFullscreen()
+          dismissViolationAlert()
+        }}
         autoCountdown={violationOverlaySeverity === 'CRITICAL' ? 0 : 8}
       />
 
@@ -1272,16 +1557,18 @@ export default function ExamPage() {
                 <Maximize className="w-12 h-12 text-red-400" />
               </div>
               <h2 className="text-3xl font-black text-white mb-3">Fullscreen Required</h2>
-              <p className="text-red-400 font-bold text-lg mb-2">⚠️ VIOLATION RECORDED</p>
+              <p className="text-red-400 font-bold text-lg mb-2">VIOLATION RECORDED</p>
               <p className="text-gray-400 text-sm mb-6">
-                You exited fullscreen mode during the exam. This has been logged as a security violation.
-                Return to fullscreen immediately to continue.
+                You exited fullscreen mode during the exam. This has been logged as a security
+                violation. Return to fullscreen immediately to continue.
               </p>
               {fullscreenCountdown !== null && (
                 <div className="mb-6">
-                  <div className={`text-5xl font-black mb-2 ${
-                    fullscreenCountdown <= 10 ? 'text-red-400 animate-pulse' : 'text-yellow-400'
-                  }`}>
+                  <div
+                    className={`text-5xl font-black mb-2 ${
+                      fullscreenCountdown <= 10 ? 'text-red-400 animate-pulse' : 'text-yellow-400'
+                    }`}
+                  >
                     {fullscreenCountdown}
                   </div>
                   <p className="text-gray-500 text-xs">seconds before auto-submission</p>
@@ -1297,19 +1584,34 @@ export default function ExamPage() {
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
-                onClick={() => { requestFullscreen(); setFullscreenExited(false) }}
+                onClick={async () => {
+                  try {
+                    await requestFullscreen()
+                    setFullscreenExited(false)
+                    if (!examStarted) startExamFlow()
+                  } catch {
+                    toast.error('Fullscreen was denied. Click the button to try again.', {
+                      duration: 3000,
+                    })
+                  }
+                }}
                 className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl font-bold text-lg shadow-2xl shadow-blue-500/40 hover:from-blue-500 hover:to-indigo-500 transition-all"
               >
                 <Maximize className="w-5 h-5 inline mr-2" />
-                Return to Fullscreen
+                {examStarted ? 'Return to Fullscreen' : 'Enter Fullscreen & Start Exam'}
               </motion.button>
+              {!examStarted && (
+                <p className="text-gray-500 text-xs mt-2">
+                  Fullscreen is required before the exam can begin
+                </p>
+              )}
               <p className="text-gray-600 text-xs mt-4">Violations: {tabSwitches} total</p>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Engine/Tab/Fullscreen Pause Overlay */}
+      {/* Engine/Tab/Fullscreen Pause Overlay â€” teacher-only resume for live exams */}
       <AnimatePresence>
         {(examPausedByEngine || examPausedByTeacher) && (
           <motion.div
@@ -1327,32 +1629,42 @@ export default function ExamPage() {
               <div className="w-24 h-24 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-red-500/40">
                 <AlertTriangle className="w-12 h-12 text-red-400" />
               </div>
-              <h2 className="text-3xl font-black text-white mb-3">⏸️ Exam Paused</h2>
+              <h2 className="text-3xl font-black text-white mb-3">â¸ï¸ Exam Paused</h2>
               <p className="text-red-400 font-bold text-lg mb-2">
-                {examPausedByTeacher ? 'Paused by Teacher' : '⚠️ Violation Detected'}
+                {examPausedByTeacher ? 'Paused by Teacher' : 'âš ï¸ Violation Detected'}
               </p>
               <div className="bg-gray-900 rounded-xl p-4 mb-6 text-left">
                 <p className="text-gray-300 text-sm">
-                  {proctoringStatus?.pauseReason || 'Exam has been paused due to suspicious activity.'}
+                  {proctoringStatus?.pauseReason ||
+                    'Exam has been paused due to suspicious activity.'}
                 </p>
               </div>
               <div className="bg-gray-900/50 rounded-xl p-4 mb-6 space-y-2 text-left">
                 <p className="text-gray-400 text-sm font-semibold">To resume:</p>
-                <p className="text-gray-400 text-sm">✅ Return to fullscreen mode</p>
-                <p className="text-gray-400 text-sm">✅ Ensure only the exam tab is open</p>
-                <p className="text-gray-400 text-sm">✅ Face the camera directly</p>
-                <p className="text-gray-400 text-sm">✅ Ensure adequate lighting</p>
+                <p className="text-gray-400 text-sm">â³ Wait for your teacher to resume the exam</p>
+                <p className="text-gray-400 text-sm">âœ… Ensure adequate lighting</p>
+                <p className="text-gray-400 text-sm">âœ… Face the camera directly</p>
+                <p className="text-gray-400 text-sm">âœ… Stay in fullscreen mode</p>
               </div>
-              <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                onClick={handleResumeFromPause}
-                className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl font-bold text-lg shadow-2xl shadow-blue-500/40 hover:from-blue-500 hover:to-indigo-500 transition-all"
-              >
-                <Maximize className="w-5 h-5 inline mr-2" />
-                Resume Exam
-              </motion.button>
-              <p className="text-gray-600 text-xs mt-4">Continuing violations may result in auto-submission</p>
+              <div className="w-full py-4 bg-gray-800/50 text-gray-400 rounded-2xl font-bold text-lg border border-gray-700/50 cursor-not-allowed">
+                <Clock className="w-5 h-5 inline mr-2" />
+                Waiting for Teacher
+              </div>
+
+              {/* Chat button inside pause overlay */}
+              <div className="mt-4 flex justify-center">
+                <ExamChat
+                  wsClientRef={wsClientRef}
+                  userId={user?._id || user?.email || 'student'}
+                  userName={user?.full_name || user?.email || 'Student'}
+                  role="student"
+                  examId={examId || ''}
+                />
+              </div>
+
+              <p className="text-gray-600 text-xs mt-4">
+                Only your teacher can resume the exam. Please be patient.
+              </p>
             </motion.div>
           </motion.div>
         )}
@@ -1374,12 +1686,13 @@ export default function ExamPage() {
               className="max-w-md w-full mx-4 text-center"
             >
               <div className="w-24 h-24 bg-yellow-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-yellow-500/40">
-                <span className="text-5xl">🌑</span>
+                <span className="text-5xl">ðŸŒ‘</span>
               </div>
               <h2 className="text-3xl font-black text-white mb-3">Room Too Dark</h2>
-              <p className="text-yellow-400 font-bold text-lg mb-2">⚠️ Exam Cannot Start</p>
+              <p className="text-yellow-400 font-bold text-lg mb-2">Exam Cannot Start</p>
               <p className="text-gray-400 text-sm mb-4">
-                Your room lighting is insufficient for face detection. The system cannot verify your identity in these conditions.
+                Your room lighting is insufficient for face detection. The system cannot verify your
+                identity in these conditions.
               </p>
               <div className="bg-gray-900 rounded-xl p-4 mb-6 text-left">
                 <div className="flex items-center justify-between text-sm mb-2">
@@ -1396,10 +1709,12 @@ export default function ExamPage() {
               </div>
               <div className="text-left bg-gray-900 rounded-xl p-4 mb-6 space-y-2">
                 <p className="text-gray-300 text-sm font-semibold mb-2">To fix this:</p>
-                <p className="text-gray-400 text-sm">✅ Turn on your room lights</p>
-                <p className="text-gray-400 text-sm">✅ Face a window or bright light source</p>
-                <p className="text-gray-400 text-sm">✅ Avoid sitting with backlight behind you</p>
-                <p className="text-gray-400 text-sm">✅ Remove any camera covers or obstructions</p>
+                <p className="text-gray-400 text-sm">âœ… Turn on your room lights</p>
+                <p className="text-gray-400 text-sm">âœ… Face a window or bright light source</p>
+                <p className="text-gray-400 text-sm">âœ… Avoid sitting with backlight behind you</p>
+                <p className="text-gray-400 text-sm">
+                  âœ… Remove any camera covers or obstructions
+                </p>
               </div>
               <motion.button
                 whileHover={{ scale: 1.03 }}
@@ -1408,14 +1723,16 @@ export default function ExamPage() {
                   // Re-check brightness
                   if (videoRef.current && videoRef.current.readyState >= 2) {
                     const canvas = document.createElement('canvas')
-                    canvas.width = 64; canvas.height = 48
+                    canvas.width = 64
+                    canvas.height = 48
                     const ctx = canvas.getContext('2d')
                     if (ctx) {
                       ctx.drawImage(videoRef.current, 0, 0, 64, 48)
                       const imgData = ctx.getImageData(0, 0, 64, 48).data
                       let total = 0
                       for (let i = 0; i < imgData.length; i += 4) {
-                        total += 0.299 * imgData[i] + 0.587 * imgData[i + 1] + 0.114 * imgData[i + 2]
+                        total +=
+                          0.299 * imgData[i] + 0.587 * imgData[i + 1] + 0.114 * imgData[i + 2]
                       }
                       const brightness = total / (imgData.length / 4)
                       setDarkRoomBrightness(Math.round(brightness))
@@ -1423,24 +1740,31 @@ export default function ExamPage() {
                         setDarkRoomBlocked(false)
                         setExamStarted(true)
                         requestFullscreen()
-                        toast.success('✅ Lighting verified — exam starting!', { duration: 3000 })
+                        toast.success('âœ… Lighting verified â€” exam starting!', {
+                          duration: 3000,
+                        })
                       } else {
-                        toast.error(`Still too dark (${Math.round(brightness)}/255). Turn on more lights.`, { duration: 3000 })
+                        toast.error(
+                          `Still too dark (${Math.round(brightness)}/255). Turn on more lights.`,
+                          { duration: 3000 }
+                        )
                       }
                     }
                   }
                 }}
                 className="w-full py-4 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-2xl font-bold text-lg shadow-2xl shadow-yellow-500/30 hover:from-yellow-400 hover:to-orange-400 transition-all"
               >
-                🔆 I've Turned on the Lights — Re-check
+                ðŸ”† I've Turned on the Lights â€” Re-check
               </motion.button>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ─── Top Bar ─────────────────────────────────────────────────── */}
-      <div className={`bg-white/95 backdrop-blur-sm border-b border-gray-200/80 sticky top-0 z-30 shadow-sm`}>
+      {/* â”€â”€â”€ Top Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <div
+        className={`bg-white/95 backdrop-blur-sm border-b border-gray-200/80 sticky top-0 z-30 shadow-sm`}
+      >
         <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3">
           <div className="flex items-center justify-between gap-3">
             {/* Mobile Menu Button */}
@@ -1455,8 +1779,12 @@ export default function ExamPage() {
 
             {/* Exam Title */}
             <div className="flex-1 min-w-0">
-              <h1 className="text-sm sm:text-base font-bold text-gray-900 truncate">{exam?.title}</h1>
-              <p className="text-xs text-gray-400 hidden sm:block">{exam?.course} • {answeredCount}/{exam?.questions.length} answered</p>
+              <h1 className="text-sm sm:text-base font-bold text-gray-900 truncate">
+                {exam?.title}
+              </h1>
+              <p className="text-xs text-gray-400 hidden sm:block">
+                {exam?.course} â€¢ {answeredCount}/{exam?.questions.length} answered
+              </p>
             </div>
 
             {/* Right Side Controls */}
@@ -1484,8 +1812,8 @@ export default function ExamPage() {
                   isTimeDanger
                     ? 'bg-red-50 text-red-600 border-2 border-red-300'
                     : isTimeCritical
-                    ? 'bg-amber-50 text-amber-600 border border-amber-200'
-                    : 'bg-gray-50 text-gray-700 border border-gray-200'
+                      ? 'bg-amber-50 text-amber-600 border border-amber-200'
+                      : 'bg-gray-50 text-gray-700 border border-gray-200'
                 }`}
               >
                 <Clock className="w-4 h-4" />
@@ -1494,24 +1822,28 @@ export default function ExamPage() {
 
               {/* Proctoring Status (Desktop) */}
               {!isMobile && (
-                <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium transition-all ${
-                  proctoringActive
-                    ? 'bg-green-50 text-green-700 border border-green-200'
-                    : 'bg-red-50 text-red-600 border border-red-200'
-                }`}>
+                <div
+                  className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium transition-all ${
+                    proctoringActive
+                      ? 'bg-green-50 text-green-700 border border-green-200'
+                      : 'bg-red-50 text-red-600 border border-red-200'
+                  }`}
+                >
                   <Camera className="w-3.5 h-3.5" />
                   {proctoringActive ? 'Active' : 'Inactive'}
                 </div>
               )}
 
               {/* Trust Score Badge */}
-              <div className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium ${
-                trustScore >= 80
-                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                  : trustScore >= 60
-                  ? 'bg-yellow-50 text-yellow-700 border border-yellow-200'
-                  : 'bg-red-50 text-red-700 border border-red-200'
-              }`}>
+              <div
+                className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium ${
+                  trustScore >= 80
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : trustScore >= 60
+                      ? 'bg-yellow-50 text-yellow-700 border border-yellow-200'
+                      : 'bg-red-50 text-red-700 border border-red-200'
+                }`}
+              >
                 <Shield className="w-3.5 h-3.5" />
                 {trustScore}%
               </div>
@@ -1523,27 +1855,40 @@ export default function ExamPage() {
                   <span className="hidden sm:inline">{tabSwitches}w</span>
                 </div>
               )}
+
+              {/* Chat with Teacher */}
+              <ExamChat
+                wsClientRef={wsClientRef}
+                userId={user?._id || user?.email || 'student'}
+                userName={user?.full_name || user?.email || 'Student'}
+                role="student"
+                examId={examId || ''}
+              />
             </div>
           </div>
         </div>
       </div>
 
-      {/* ─── Main Content ─────────────────────────────────────────────── */}
+      {/* â”€â”€â”€ Main Content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="max-w-screen-2xl mx-auto px-3 sm:px-4 py-4 sm:py-5">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-
-          {/* ─── Left Navigation Panel ─────────────────────────────────── */}
-          <div className={`lg:col-span-2 ${(isMobile || isTablet) && !showMobileMenu ? 'hidden' : 'block lg:block'} ${(isMobile || isTablet) ? 'fixed inset-0 bg-black/50 z-40' : ''}`}
+          {/* â”€â”€â”€ Left Navigation Panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+          <div
+            className={`lg:col-span-2 ${(isMobile || isTablet) && !showMobileMenu ? 'hidden' : 'block lg:block'} ${isMobile || isTablet ? 'fixed inset-0 bg-black/50 z-40' : ''}`}
             onClick={() => setShowMobileMenu(false)}
           >
             <div
               className={`bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sticky top-20 space-y-4 ${
-                (isMobile || isTablet) ? 'absolute left-0 top-0 h-full w-72 max-w-[90vw] overflow-y-auto rounded-none shadow-2xl' : ''
+                isMobile || isTablet
+                  ? 'absolute left-0 top-0 h-full w-72 max-w-[90vw] overflow-y-auto rounded-none shadow-2xl'
+                  : ''
               }`}
-              onClick={(e) => e.stopPropagation()}
+              onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Navigator</h3>
+                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">
+                  Navigator
+                </h3>
                 <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-semibold border border-blue-100">
                   {answeredCount}/{exam?.questions.length}
                 </span>
@@ -1555,7 +1900,10 @@ export default function ExamPage() {
                   return (
                     <button
                       key={idx}
-                      onClick={() => { setCurrentQuestionIndex(idx); setShowMobileMenu(false) }}
+                      onClick={() => {
+                        setCurrentQuestionIndex(idx)
+                        setShowMobileMenu(false)
+                      }}
                       className={`w-full aspect-square rounded-lg font-bold text-xs transition-all touch-manipulation relative ${getBadgeClasses(state)}`}
                       title={`Question ${idx + 1}${flaggedQuestions.has(qId) ? ' (Flagged)' : ''}`}
                     >
@@ -1571,9 +1919,18 @@ export default function ExamPage() {
               <div className="space-y-1.5 text-xs text-gray-500 border-t border-gray-100 pt-3">
                 {[
                   { color: 'bg-blue-600', label: 'Current' },
-                  { color: 'bg-green-100 border border-green-300', label: `Answered (${answeredCount})` },
-                  { color: 'bg-amber-100 border border-amber-300', label: `Flagged (${flaggedCount})` },
-                  { color: 'bg-gray-100 border border-gray-300', label: `Remaining (${(exam?.questions.length || 0) - answeredCount - flaggedCount})` },
+                  {
+                    color: 'bg-green-100 border border-green-300',
+                    label: `Answered (${answeredCount})`,
+                  },
+                  {
+                    color: 'bg-amber-100 border border-amber-300',
+                    label: `Flagged (${flaggedCount})`,
+                  },
+                  {
+                    color: 'bg-gray-100 border border-gray-300',
+                    label: `Remaining (${(exam?.questions.length || 0) - answeredCount - flaggedCount})`,
+                  },
                 ].map(({ color, label }) => (
                   <div key={label} className="flex items-center gap-2">
                     <div className={`w-3 h-3 rounded shrink-0 ${color}`} />
@@ -1604,9 +1961,8 @@ export default function ExamPage() {
             </div>
           </div>
 
-          {/* ─── Question Area ─────────────────────────────────────────── */}
+          {/* â”€â”€â”€ Question Area â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <div className="lg:col-span-7 space-y-4">
-
             {/* Progress */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 premium-card">
               <div className="flex items-center justify-between mb-2">
@@ -1638,10 +1994,13 @@ export default function ExamPage() {
                     <div
                       key={idx}
                       className={`flex-1 rounded-full transition-all duration-300 ${
-                        state === 'current' ? 'bg-blue-500' :
-                        state === 'answered' ? 'bg-green-400' :
-                        state === 'flagged' ? 'bg-amber-400' :
-                        'bg-gray-200'
+                        state === 'current'
+                          ? 'bg-blue-500'
+                          : state === 'answered'
+                            ? 'bg-green-400'
+                            : state === 'flagged'
+                              ? 'bg-amber-400'
+                              : 'bg-gray-200'
                       }`}
                     />
                   )
@@ -1672,11 +2031,15 @@ export default function ExamPage() {
                       </span>
                     )}
                     {currentQuestion?.difficulty && (
-                      <span className={`text-xs px-2.5 py-1 rounded-lg border font-medium ${
-                        currentQuestion.difficulty === 'easy' ? 'bg-green-50 text-green-700 border-green-100' :
-                        currentQuestion.difficulty === 'medium' ? 'bg-yellow-50 text-yellow-700 border-yellow-100' :
-                        'bg-red-50 text-red-700 border-red-100'
-                      }`}>
+                      <span
+                        className={`text-xs px-2.5 py-1 rounded-lg border font-medium ${
+                          currentQuestion.difficulty === 'easy'
+                            ? 'bg-green-50 text-green-700 border-green-100'
+                            : currentQuestion.difficulty === 'medium'
+                              ? 'bg-yellow-50 text-yellow-700 border-yellow-100'
+                              : 'bg-red-50 text-red-700 border-red-100'
+                        }`}
+                      >
                         {currentQuestion.difficulty}
                       </span>
                     )}
@@ -1688,21 +2051,28 @@ export default function ExamPage() {
                     )}
                   </div>
                   <p className="text-gray-900 text-sm sm:text-base leading-relaxed font-medium">
-                    {currentQuestion?.question_text || currentQuestion?.question || 'Question text not available'}
+                    {currentQuestion?.question_text ||
+                      currentQuestion?.question ||
+                      'Question text not available'}
                   </p>
                 </div>
 
                 {/* Flag button */}
                 <button
                   onClick={() => toggleQuestionFlag(currentQuestionId)}
-                  title={flaggedQuestions.has(currentQuestionId) ? 'Unflag question' : 'Flag for review'}
+                  title={
+                    flaggedQuestions.has(currentQuestionId) ? 'Unflag question' : 'Flag for review'
+                  }
                   className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
                     flaggedQuestions.has(currentQuestionId)
                       ? 'bg-amber-100 text-amber-600 hover:bg-amber-200 border border-amber-300'
                       : 'bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-amber-500 border border-gray-200'
                   }`}
                 >
-                  <Flag className="w-4 h-4" fill={flaggedQuestions.has(currentQuestionId) ? 'currentColor' : 'none'} />
+                  <Flag
+                    className="w-4 h-4"
+                    fill={flaggedQuestions.has(currentQuestionId) ? 'currentColor' : 'none'}
+                  />
                 </button>
               </div>
 
@@ -1712,7 +2082,7 @@ export default function ExamPage() {
               {/* Mobile swipe hint */}
               {(isMobile || isTablet) && (
                 <p className="mt-5 text-center text-xs text-gray-300">
-                  ← Swipe to navigate questions →
+                  â† Swipe to navigate questions â†’
                 </p>
               )}
             </motion.div>
@@ -1755,21 +2125,25 @@ export default function ExamPage() {
             </div>
           </div>
 
-          {/* ─── Proctoring Right Panel ────────────────────────────────── */}
+          {/* â”€â”€â”€ Proctoring Right Panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <div className="hidden lg:block lg:col-span-3 overflow-y-auto max-h-[calc(100vh-5rem)]">
             <ProctoringRightPanel
               videoRef={videoRef}
               proctoringActive={proctoringActive}
               cameraReady={cameraReady}
               trustScore={trustScore}
-              proctoringStatus={proctoringStatus ? {
-                faceDetected: proctoringStatus.faceDetected,
-                lookingAtScreen: proctoringStatus.lookingAtScreen,
-                faceCount: proctoringStatus.faceCount,
-                audioLevel: proctoringStatus.audioLevel,
-                isActive: proctoringStatus.isActive,
-                integrityScore: proctoringStatus.integrityScore,
-              } : null}
+              proctoringStatus={
+                proctoringStatus
+                  ? {
+                      faceDetected: proctoringStatus.faceDetected,
+                      lookingAtScreen: proctoringStatus.lookingAtScreen,
+                      faceCount: proctoringStatus.faceCount,
+                      audioLevel: proctoringStatus.audioLevel,
+                      isActive: proctoringStatus.isActive,
+                      integrityScore: proctoringStatus.integrityScore,
+                    }
+                  : null
+              }
               audioWaveData={audioWaveData}
               tabSwitches={tabSwitches}
               flags={flags}
@@ -1779,7 +2153,7 @@ export default function ExamPage() {
         </div>
       </div>
 
-      {/* ─── Modals ────────────────────────────────────────────────────── */}
+      {/* â”€â”€â”€ Modals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <ExamSubmitModal
         isOpen={showSubmitModal}
         onConfirm={doSubmitExam}

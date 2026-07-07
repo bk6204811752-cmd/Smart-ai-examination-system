@@ -14,7 +14,7 @@ DELETE /api/users/{id}
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from bson import ObjectId
 
 from database import get_db
@@ -44,6 +44,15 @@ class CreateUserRequest(BaseModel):
     program: Optional[str] = None
     semester: Optional[int] = None
     department: Optional[str] = None
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v):
+        from utils.password_validation import validate_password_strength, is_weak_password
+        if is_weak_password(v):
+            raise ValueError("This password is too common. Please choose a stronger password.")
+        validate_password_strength(v)
+        return v
 
 
 class UpdateUserRequest(BaseModel):

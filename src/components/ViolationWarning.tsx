@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { AlertTriangle, X, Camera, Mic, Eye, Monitor, Sun } from 'lucide-react'
 import { ProctoringViolation } from '../utils/proctoringEngine'
 
@@ -10,11 +10,16 @@ interface ViolationWarningProps {
 export default function ViolationWarning({ violation, onDismiss }: ViolationWarningProps) {
   const getSeverityColor = () => {
     switch (violation.severity) {
-      case 'CRITICAL': return 'bg-red-600'
-      case 'HIGH': return 'bg-orange-600'
-      case 'MEDIUM': return 'bg-yellow-600'
-      case 'LOW': return 'bg-blue-600'
-      default: return 'bg-gray-600'
+      case 'CRITICAL':
+        return 'bg-red-600'
+      case 'HIGH':
+        return 'bg-orange-600'
+      case 'MEDIUM':
+        return 'bg-yellow-600'
+      case 'LOW':
+        return 'bg-blue-600'
+      default:
+        return 'bg-gray-600'
     }
   }
 
@@ -43,9 +48,7 @@ export default function ViolationWarning({ violation, onDismiss }: ViolationWarn
       className={`fixed top-4 right-4 ${getSeverityColor()} text-white rounded-xl shadow-2xl p-4 max-w-md z-50 border-4 border-white`}
     >
       <div className="flex items-start space-x-3">
-        <div className="flex-shrink-0 bg-white/20 p-2 rounded-lg">
-          {getIcon()}
-        </div>
+        <div className="flex-shrink-0 bg-white/20 p-2 rounded-lg">{getIcon()}</div>
         <div className="flex-1">
           <div className="flex items-center justify-between mb-1">
             <h3 className="font-bold text-lg">
@@ -54,15 +57,12 @@ export default function ViolationWarning({ violation, onDismiss }: ViolationWarn
               {violation.severity === 'MEDIUM' && '⚡ WARNING'}
               {violation.severity === 'LOW' && 'ℹ️ Notice'}
             </h3>
-            <button
-              onClick={onDismiss}
-              className="text-white/80 hover:text-white transition"
-            >
+            <button onClick={onDismiss} className="text-white/80 hover:text-white transition">
               <X className="w-5 h-5" />
             </button>
           </div>
           <p className="text-sm opacity-90">{violation.message}</p>
-          
+
           {/* Show metadata if available */}
           {violation.metadata && (
             <div className="mt-2 text-xs opacity-75 space-y-1">
@@ -80,10 +80,8 @@ export default function ViolationWarning({ violation, onDismiss }: ViolationWarn
               )}
             </div>
           )}
-          
-          <p className="text-xs opacity-70 mt-1">
-            {violation.timestamp.toLocaleTimeString()}
-          </p>
+
+          <p className="text-xs opacity-70 mt-1">{violation.timestamp.toLocaleTimeString()}</p>
         </div>
       </div>
       {violation.severity === 'CRITICAL' && (
@@ -114,29 +112,30 @@ export function ProctoringStatusBar({
   isFullscreen,
   brightness,
   attentionLevel = 100,
-  integrityScore = 100
+  integrityScore = 100,
 }: ProctoringStatusBarProps) {
-  
   const getBrightnessColor = () => {
     if (brightness < 30) return 'text-red-400'
     if (brightness < 50) return 'text-orange-400'
     if (brightness < 70) return 'text-yellow-400'
     return 'text-green-400'
   }
-  
+
   const getBrightnessStatus = () => {
     if (brightness < 30) return '🚨 TOO DARK!'
     if (brightness < 50) return '⚠️ Very Dim'
     if (brightness < 70) return '💡 Low Light'
     return '✓ Good'
   }
-  
+
   return (
     <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-gray-900/95 backdrop-blur-sm text-white rounded-full px-6 py-3 shadow-2xl z-40 border-2 border-white/20">
       <div className="flex items-center space-x-6 text-sm">
         {/* Face Detection */}
         <div className="flex items-center space-x-2">
-          <Camera className={`w-4 h-4 ${faceDetected && faceCount === 1 ? 'text-green-400' : 'text-red-400'}`} />
+          <Camera
+            className={`w-4 h-4 ${faceDetected && faceCount === 1 ? 'text-green-400' : 'text-red-400'}`}
+          />
           <span className={faceDetected && faceCount === 1 ? 'text-green-400' : 'text-red-400'}>
             {!faceDetected && 'No Face'}
             {faceDetected && faceCount === 1 && 'Face ✓'}
@@ -154,10 +153,12 @@ export function ProctoringStatusBar({
 
         {/* Audio Level */}
         <div className="flex items-center space-x-2">
-          <Mic className={`w-4 h-4 ${audioLevel > 15 ? 'text-yellow-400 animate-pulse' : 'text-green-400'}`} />
+          <Mic
+            className={`w-4 h-4 ${audioLevel > 15 ? 'text-yellow-400 animate-pulse' : 'text-green-400'}`}
+          />
           <div className="flex flex-col">
             <div className="w-24 h-2 bg-gray-700 rounded-full overflow-hidden">
-              <div 
+              <div
                 className={`h-full transition-all ${audioLevel > 15 ? 'bg-yellow-400' : 'bg-green-400'}`}
                 style={{ width: `${Math.min((audioLevel / 255) * 100, 100)}%` }}
               />
@@ -170,14 +171,20 @@ export function ProctoringStatusBar({
 
         {/* Brightness Level */}
         <div className="flex items-center space-x-2">
-          <Sun className={`w-4 h-4 ${getBrightnessColor()} ${brightness < 30 ? 'animate-pulse' : ''}`} />
+          <Sun
+            className={`w-4 h-4 ${getBrightnessColor()} ${brightness < 30 ? 'animate-pulse' : ''}`}
+          />
           <div className="flex flex-col">
             <div className="w-24 h-2 bg-gray-700 rounded-full overflow-hidden">
-              <div 
+              <div
                 className={`h-full transition-all ${
-                  brightness < 30 ? 'bg-red-400' :
-                  brightness < 50 ? 'bg-orange-400' :
-                  brightness < 70 ? 'bg-yellow-400' : 'bg-green-400'
+                  brightness < 30
+                    ? 'bg-red-400'
+                    : brightness < 50
+                      ? 'bg-orange-400'
+                      : brightness < 70
+                        ? 'bg-yellow-400'
+                        : 'bg-green-400'
                 }`}
                 style={{ width: `${Math.min((brightness / 255) * 100, 100)}%` }}
               />
@@ -200,11 +207,17 @@ export function ProctoringStatusBar({
         {integrityScore !== undefined && (
           <div className="flex items-center space-x-2 border-l border-gray-700 pl-4">
             <div className="flex flex-col items-center">
-              <span className={`text-xs font-semibold ${
-                integrityScore >= 80 ? 'text-green-400' :
-                integrityScore >= 60 ? 'text-yellow-400' :
-                integrityScore >= 40 ? 'text-orange-400' : 'text-red-400'
-              }`}>
+              <span
+                className={`text-xs font-semibold ${
+                  integrityScore >= 80
+                    ? 'text-green-400'
+                    : integrityScore >= 60
+                      ? 'text-yellow-400'
+                      : integrityScore >= 40
+                        ? 'text-orange-400'
+                        : 'text-red-400'
+                }`}
+              >
                 {Math.round(integrityScore)}%
               </span>
               <span className="text-xs text-gray-400">Integrity</span>
@@ -216,11 +229,17 @@ export function ProctoringStatusBar({
         {attentionLevel !== undefined && (
           <div className="flex items-center space-x-2">
             <div className="flex flex-col items-center">
-              <span className={`text-xs font-semibold ${
-                attentionLevel >= 80 ? 'text-green-400' :
-                attentionLevel >= 60 ? 'text-yellow-400' :
-                attentionLevel >= 40 ? 'text-orange-400' : 'text-red-400'
-              }`}>
+              <span
+                className={`text-xs font-semibold ${
+                  attentionLevel >= 80
+                    ? 'text-green-400'
+                    : attentionLevel >= 60
+                      ? 'text-yellow-400'
+                      : attentionLevel >= 40
+                        ? 'text-orange-400'
+                        : 'text-red-400'
+                }`}
+              >
                 {Math.round(attentionLevel)}%
               </span>
               <span className="text-xs text-gray-400">Attention</span>

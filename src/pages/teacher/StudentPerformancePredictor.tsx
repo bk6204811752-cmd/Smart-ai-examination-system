@@ -57,6 +57,7 @@ export default function StudentPerformancePredictor({ studentId = 'default' }: {
 
   useEffect(() => {
     loadPerformanceData()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentId])
 
   const loadPerformanceData = async () => {

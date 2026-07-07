@@ -1,4 +1,4 @@
-import { useState, useEffect, TouchEvent } from 'react'
+import { useState, TouchEvent } from 'react'
 
 interface SwipeInput {
   onSwipeLeft?: () => void
@@ -24,14 +24,14 @@ export const useSwipe = (input: SwipeInput): SwipeOutput => {
     setTouchEnd(null)
     setTouchStart({
       x: e.targetTouches[0].clientX,
-      y: e.targetTouches[0].clientY
+      y: e.targetTouches[0].clientY,
     })
   }
 
   const onTouchMove = (e: TouchEvent) => {
     setTouchEnd({
       x: e.targetTouches[0].clientX,
-      y: e.targetTouches[0].clientY
+      y: e.targetTouches[0].clientY,
     })
   }
 
@@ -66,7 +66,7 @@ export const useSwipe = (input: SwipeInput): SwipeOutput => {
   return {
     onTouchStart,
     onTouchMove,
-    onTouchEnd
+    onTouchEnd,
   }
 }
 

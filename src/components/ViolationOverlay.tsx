@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { AlertTriangle, Shield, Maximize2, Eye, Mic, Monitor, X } from 'lucide-react'
+import { AlertTriangle, Shield, Maximize2, Eye, Mic, Monitor } from 'lucide-react'
 
-export type ViolationOverlayType = 
-  | 'FULLSCREEN_EXIT' 
-  | 'TAB_SWITCH' 
-  | 'MULTIPLE_FACES' 
-  | 'NO_FACE' 
+export type ViolationOverlayType =
+  | 'FULLSCREEN_EXIT'
+  | 'TAB_SWITCH'
+  | 'MULTIPLE_FACES'
+  | 'NO_FACE'
   | 'AUDIO_DETECTED'
   | 'SCREEN_SHARE'
   | 'WINDOW_MINIMIZED'
@@ -23,16 +23,19 @@ interface ViolationOverlayProps {
   severity?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
 }
 
-const violationConfig: Record<ViolationOverlayType, {
-  icon: any
-  title: string
-  color: string
-  bgColor: string
-  borderColor: string
-  glowColor: string
-  requireAction?: boolean
-  actionLabel?: string
-}> = {
+const violationConfig: Record<
+  ViolationOverlayType,
+  {
+    icon: any
+    title: string
+    color: string
+    bgColor: string
+    borderColor: string
+    glowColor: string
+    requireAction?: boolean
+    actionLabel?: string
+  }
+> = {
   FULLSCREEN_EXIT: {
     icon: Maximize2,
     title: 'FULLSCREEN REQUIRED',
@@ -41,7 +44,7 @@ const violationConfig: Record<ViolationOverlayType, {
     borderColor: 'border-orange-500',
     glowColor: 'shadow-orange-500/50',
     requireAction: true,
-    actionLabel: 'Return to Fullscreen'
+    actionLabel: 'Return to Fullscreen',
   },
   WINDOW_MINIMIZED: {
     icon: Maximize2,
@@ -51,7 +54,7 @@ const violationConfig: Record<ViolationOverlayType, {
     borderColor: 'border-red-500',
     glowColor: 'shadow-red-500/50',
     requireAction: true,
-    actionLabel: 'Return to Exam'
+    actionLabel: 'Return to Exam',
   },
   TAB_SWITCH: {
     icon: Monitor,
@@ -68,7 +71,7 @@ const violationConfig: Record<ViolationOverlayType, {
     bgColor: 'from-red-950/98 via-red-900/95 to-rose-950/98',
     borderColor: 'border-red-500',
     glowColor: 'shadow-red-500/70',
-    requireAction: false
+    requireAction: false,
   },
   NO_FACE: {
     icon: Eye,
@@ -94,7 +97,7 @@ const violationConfig: Record<ViolationOverlayType, {
     borderColor: 'border-red-600',
     glowColor: 'shadow-red-600/70',
     requireAction: true,
-    actionLabel: 'Stop Screen Share'
+    actionLabel: 'Stop Screen Share',
   },
   CAMERA_BLOCKED: {
     icon: Eye,
@@ -104,7 +107,7 @@ const violationConfig: Record<ViolationOverlayType, {
     borderColor: 'border-red-500',
     glowColor: 'shadow-red-500/50',
     requireAction: true,
-    actionLabel: 'Unblock Camera'
+    actionLabel: 'Unblock Camera',
   },
   SUSPICIOUS_BEHAVIOR: {
     icon: AlertTriangle,
@@ -122,8 +125,8 @@ const violationConfig: Record<ViolationOverlayType, {
     borderColor: 'border-red-600',
     glowColor: 'shadow-red-600/80',
     requireAction: true,
-    actionLabel: 'Contact Proctor'
-  }
+    actionLabel: 'Contact Proctor',
+  },
 }
 
 export default function ViolationOverlay({
@@ -132,7 +135,7 @@ export default function ViolationOverlay({
   onDismiss,
   onForceFullscreen,
   autoCountdown = 10,
-  severity = 'HIGH'
+  severity = 'HIGH',
 }: ViolationOverlayProps) {
   const [countdown, setCountdown] = useState(autoCountdown)
   const [pulseRed, setPulseRed] = useState(false)
@@ -234,7 +237,8 @@ export default function ViolationOverlay({
 
             {/* Message */}
             <p className="text-gray-300 text-center text-sm mb-6 leading-relaxed">
-              {message || 'This activity has been recorded and flagged for review. Your proctor has been notified.'}
+              {message ||
+                'This activity has been recorded and flagged for review. Your proctor has been notified.'}
             </p>
 
             {/* Violation details */}
@@ -245,11 +249,19 @@ export default function ViolationOverlay({
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-red-400 font-semibold">Severity:</span>
-                <span className={
-                  severity === 'CRITICAL' ? 'text-red-400 font-bold' :
-                  severity === 'HIGH' ? 'text-orange-400' :
-                  severity === 'MEDIUM' ? 'text-yellow-400' : 'text-gray-400'
-                }>{severity}</span>
+                <span
+                  className={
+                    severity === 'CRITICAL'
+                      ? 'text-red-400 font-bold'
+                      : severity === 'HIGH'
+                        ? 'text-orange-400'
+                        : severity === 'MEDIUM'
+                          ? 'text-yellow-400'
+                          : 'text-gray-400'
+                  }
+                >
+                  {severity}
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-red-400 font-semibold">Time:</span>
@@ -303,7 +315,8 @@ export default function ViolationOverlay({
           <motion.div
             className="absolute inset-0 pointer-events-none"
             style={{
-              background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(239,68,68,0.03) 2px, rgba(239,68,68,0.03) 4px)',
+              background:
+                'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(239,68,68,0.03) 2px, rgba(239,68,68,0.03) 4px)',
             }}
           />
         </motion.div>

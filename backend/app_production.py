@@ -73,10 +73,12 @@ async def lifespan(app: FastAPI):
     await connect_db()
     ensure_upload_dir_exists()
 
-    # Always ensure the 3 core demo accounts exist (admin/teacher/student)
-    # This fixes the login deadlock where no accounts exist in a fresh DB
     db = get_db()
-    await ensure_demo_accounts(db)
+
+    # Seed demo accounts in development or demo mode (skipped in strict production)
+    if not settings.is_production or settings.SEED_DEMO_DATA:
+        await ensure_demo_accounts(db)
+        logger.info("Demo accounts ensured")
 
     # Seed additional sample exam data (only in development)
     if not settings.is_production and settings.SEED_DEMO_DATA:
@@ -233,13 +235,13 @@ async def system_stats(current_user: dict = Depends(get_current_user)):
 
 
 @app.post("/api/errors/log", tags=["system"])
-async def log_error(request: Request):
+async def log_error(request: Request, current_user: dict = Depends(get_current_user)):
     """Frontend error logging endpoint"""
     return {"status": "logged"}
 
 
 @app.post("/api/logs", tags=["system"])
-async def log_event(request: Request):
+async def log_event(request: Request, current_user: dict = Depends(get_current_user)):
     """Frontend event logging endpoint"""
     return {"status": "logged"}
 

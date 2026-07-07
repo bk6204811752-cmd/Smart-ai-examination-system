@@ -28,6 +28,10 @@ class ExamConnectionManager:
         self._status_cache: Dict[str, Dict[str, dict]] = {}
         # Heartbeat tracking: exam_id -> student_id -> last_seen ISO string
         self._heartbeats: Dict[str, Dict[str, str]] = {}
+        # Message history: exam_id -> list of messages
+        self._messages: Dict[str, list] = {}
+        # Student name cache: student_id -> name
+        self._student_names: Dict[str, str] = {}
 
     async def connect(self, websocket: WebSocket, exam_id: str, user_id: str, role: str):
         await websocket.accept()
@@ -210,6 +214,30 @@ class ExamConnectionManager:
             }
 
         return result
+
+    # ── Message Storage ──────────────────────────────────────────────────────
+
+    def store_message(self, exam_id: str, message: dict):
+        """Store a chat message for an exam"""
+        if exam_id not in self._messages:
+            self._messages[exam_id] = []
+        self._messages[exam_id].append(message)
+        # Keep only last 200 messages
+        if len(self._messages[exam_id]) > 200:
+            self._messages[exam_id] = self._messages[exam_id][-200:]
+
+    def get_messages(self, exam_id: str, limit: int = 50) -> list:
+        """Get recent messages for an exam"""
+        msgs = self._messages.get(exam_id, [])
+        return msgs[-limit:]
+
+    def cache_student_name(self, student_id: str, name: str):
+        """Cache a student's display name"""
+        self._student_names[student_id] = name
+
+    def get_student_name(self, student_id: str) -> str:
+        """Get cached student name"""
+        return self._student_names.get(student_id, student_id)
 
     # ── Stats ────────────────────────────────────────────────────────────────
 

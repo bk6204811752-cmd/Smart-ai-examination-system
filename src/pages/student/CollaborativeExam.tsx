@@ -1,5 +1,16 @@
 import { useState, useEffect, useRef } from 'react'
-import { Users, MessageSquare, Send, Video, Mic, MicOff, VideoOff, UserPlus, Shield, Clock, CheckCircle, AlertCircle } from 'lucide-react'
+import {
+  Users,
+  MessageSquare,
+  Send,
+  Video,
+  Mic,
+  MicOff,
+  VideoOff,
+  UserPlus,
+  Shield,
+  CheckCircle,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { useWebSocket } from '../../lib/websocket'
 
@@ -34,8 +45,8 @@ interface Answer {
 
 export default function CollaborativeExamPage() {
   const examId = 'collaborative-exam-123'
-  const { client, status, send } = useWebSocket({ userId: 'user1', examId, role: 'student' })
-  
+  const { client, send } = useWebSocket({ userId: 'user1', examId, role: 'student' })
+
   const [team, setTeam] = useState<TeamMember[]>([
     {
       id: 'user1',
@@ -44,7 +55,7 @@ export default function CollaborativeExamPage() {
       role: 'leader',
       status: 'online',
       currentQuestion: 1,
-      contributionScore: 45
+      contributionScore: 45,
     },
     {
       id: 'user2',
@@ -53,7 +64,7 @@ export default function CollaborativeExamPage() {
       role: 'member',
       status: 'online',
       currentQuestion: 1,
-      contributionScore: 38
+      contributionScore: 38,
     },
     {
       id: 'user3',
@@ -62,8 +73,8 @@ export default function CollaborativeExamPage() {
       role: 'member',
       status: 'online',
       currentQuestion: 2,
-      contributionScore: 32
-    }
+      contributionScore: 32,
+    },
   ])
 
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -73,8 +84,8 @@ export default function CollaborativeExamPage() {
       userName: 'System',
       message: 'Team collaboration exam started. Work together to solve the questions!',
       timestamp: new Date().toISOString(),
-      type: 'system'
-    }
+      type: 'system',
+    },
   ])
 
   const [currentQuestion, setCurrentQuestion] = useState(1)
@@ -82,8 +93,6 @@ export default function CollaborativeExamPage() {
   const [newMessage, setNewMessage] = useState('')
   const [videoEnabled, setVideoEnabled] = useState(false)
   const [audioEnabled, setAudioEnabled] = useState(false)
-  const [showInviteModal, setShowInviteModal] = useState(false)
-  
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
 
@@ -93,20 +102,20 @@ export default function CollaborativeExamPage() {
       text: 'What is the time complexity of merge sort?',
       type: 'multiple-choice',
       options: ['O(n)', 'O(n log n)', 'O(n²)', 'O(log n)'],
-      correctAnswer: 'O(n log n)'
+      correctAnswer: 'O(n log n)',
     },
     {
       id: 2,
       text: 'Explain the concept of closure in JavaScript with an example.',
       type: 'essay',
-      correctAnswer: 'A closure is a function that has access to variables in its outer scope...'
+      correctAnswer: 'A closure is a function that has access to variables in its outer scope...',
     },
     {
       id: 3,
       text: 'Implement a function to reverse a linked list.',
       type: 'coding',
-      correctAnswer: 'def reverse_linked_list(head): ...'
-    }
+      correctAnswer: 'def reverse_linked_list(head): ...',
+    },
   ]
 
   useEffect(() => {
@@ -138,7 +147,7 @@ export default function CollaborativeExamPage() {
       userName: data.userName,
       message: data.message,
       timestamp: new Date().toISOString(),
-      type: 'text'
+      type: 'text',
     }
     setMessages(prev => [...prev, newMsg])
   }
@@ -148,17 +157,17 @@ export default function CollaborativeExamPage() {
       ...data,
       status: 'online',
       currentQuestion: 1,
-      contributionScore: 0
+      contributionScore: 0,
     }
     setTeam(prev => [...prev, newMember])
-    
+
     const systemMsg: ChatMessage = {
       id: `m${Date.now()}`,
       userId: 'system',
       userName: 'System',
       message: `${data.name} joined the team`,
       timestamp: new Date().toISOString(),
-      type: 'system'
+      type: 'system',
     }
     setMessages(prev => [...prev, systemMsg])
   }
@@ -170,12 +179,12 @@ export default function CollaborativeExamPage() {
       submittedBy: data.userId,
       timestamp: new Date().toISOString(),
       votes: [],
-      isSelected: false
+      isSelected: false,
     }
-    
+
     setAnswers(prev => ({
       ...prev,
-      [data.questionId]: [...(prev[data.questionId] || []), newAnswer]
+      [data.questionId]: [...(prev[data.questionId] || []), newAnswer],
     }))
 
     toast.success(`${data.userName} submitted an answer`)
@@ -188,14 +197,14 @@ export default function CollaborativeExamPage() {
         if (ans.submittedBy === data.answerId) {
           return {
             ...ans,
-            votes: [...ans.votes, data.userId]
+            votes: [...ans.votes, data.userId],
           }
         }
         return ans
       })
       return {
         ...prev,
-        [data.questionId]: updatedAnswers
+        [data.questionId]: updatedAnswers,
       }
     })
   }
@@ -213,7 +222,7 @@ export default function CollaborativeExamPage() {
       userName: 'You',
       message: newMessage,
       timestamp: new Date().toISOString(),
-      type: 'text'
+      type: 'text',
     }
 
     setMessages(prev => [...prev, message])
@@ -221,7 +230,7 @@ export default function CollaborativeExamPage() {
       type: 'team_message',
       userId: 'user1',
       userName: 'You',
-      message: newMessage
+      message: newMessage,
     })
 
     setNewMessage('')
@@ -235,7 +244,7 @@ export default function CollaborativeExamPage() {
       questionId,
       answer,
       userId: 'user1',
-      userName: 'You'
+      userName: 'You',
     })
 
     toast.success('Answer submitted to team for review')
@@ -248,7 +257,7 @@ export default function CollaborativeExamPage() {
       type: 'answer_voted',
       questionId,
       answerId,
-      userId: 'user1'
+      userId: 'user1',
     })
 
     toast.success('Vote recorded')
@@ -259,11 +268,11 @@ export default function CollaborativeExamPage() {
       const questionAnswers = prev[questionId] || []
       const updatedAnswers = questionAnswers.map(ans => ({
         ...ans,
-        isSelected: ans.submittedBy === answerId
+        isSelected: ans.submittedBy === answerId,
       }))
       return {
         ...prev,
-        [questionId]: updatedAnswers
+        [questionId]: updatedAnswers,
       }
     })
 
@@ -308,7 +317,6 @@ export default function CollaborativeExamPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto space-y-4">
-        
         {/* Header */}
         <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-xl shadow-xl p-6 text-white">
           <div className="flex items-center justify-between">
@@ -333,10 +341,8 @@ export default function CollaborativeExamPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          
           {/* Main Content - Question & Answers */}
           <div className="lg:col-span-2 space-y-4">
-            
             {/* Question */}
             <div className="bg-white rounded-xl shadow-lg p-6">
               <div className="flex items-start justify-between mb-4">
@@ -375,7 +381,11 @@ export default function CollaborativeExamPage() {
               {(currentQ.type === 'essay' || currentQ.type === 'coding') && (
                 <div className="space-y-3">
                   <textarea
-                    placeholder={currentQ.type === 'coding' ? 'Write your code here...' : 'Write your answer here...'}
+                    placeholder={
+                      currentQ.type === 'coding'
+                        ? 'Write your code here...'
+                        : 'Write your answer here...'
+                    }
                     className={`w-full p-4 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 ${
                       currentQ.type === 'coding' ? 'font-mono text-sm' : ''
                     }`}
@@ -393,8 +403,10 @@ export default function CollaborativeExamPage() {
 
             {/* Submitted Answers */}
             <div className="bg-white rounded-xl shadow-lg p-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">Team Answers ({questionAnswers.length})</h3>
-              
+              <h3 className="text-lg font-bold text-gray-900 mb-4">
+                Team Answers ({questionAnswers.length})
+              </h3>
+
               {questionAnswers.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <CheckCircle className="w-16 h-16 text-gray-300 mx-auto mb-2" />
@@ -428,7 +440,7 @@ export default function CollaborativeExamPage() {
                           </span>
                         )}
                       </div>
-                      
+
                       <div className="bg-gray-50 rounded-lg p-3 mb-3">
                         <p className="text-gray-900">{answer.answer}</p>
                       </div>
@@ -444,7 +456,7 @@ export default function CollaborativeExamPage() {
                         >
                           👍 {answer.votes.length}
                         </button>
-                        
+
                         {team[0].role === 'leader' && !answer.isSelected && (
                           <button
                             onClick={() => selectFinalAnswer(currentQ.id, answer.submittedBy)}
@@ -459,12 +471,10 @@ export default function CollaborativeExamPage() {
                 </div>
               )}
             </div>
-
           </div>
 
           {/* Sidebar - Team & Chat */}
           <div className="space-y-4">
-            
             {/* Team Members */}
             <div className="bg-white rounded-xl shadow-lg p-6">
               <div className="flex items-center justify-between mb-4">
@@ -482,21 +492,28 @@ export default function CollaborativeExamPage() {
 
               <div className="space-y-3">
                 {team.map(member => (
-                  <div key={member.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                    <div className={`relative w-10 h-10 rounded-full bg-gradient-to-br ${
-                      member.status === 'online' ? 'from-green-400 to-emerald-400' : 'from-gray-400 to-gray-500'
-                    } flex items-center justify-center text-white font-bold`}>
+                  <div
+                    key={member.id}
+                    className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"
+                  >
+                    <div
+                      className={`relative w-10 h-10 rounded-full bg-gradient-to-br ${
+                        member.status === 'online'
+                          ? 'from-green-400 to-emerald-400'
+                          : 'from-gray-400 to-gray-500'
+                      } flex items-center justify-center text-white font-bold`}
+                    >
                       {member.name[0]}
-                      <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${
-                        member.status === 'online' ? 'bg-green-500' : 'bg-gray-400'
-                      }`} />
+                      <div
+                        className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${
+                          member.status === 'online' ? 'bg-green-500' : 'bg-gray-400'
+                        }`}
+                      />
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-gray-900">{member.name}</span>
-                        {member.role === 'leader' && (
-                          <Shield className="w-4 h-4 text-yellow-600" />
-                        )}
+                        {member.role === 'leader' && <Shield className="w-4 h-4 text-yellow-600" />}
                       </div>
                       <div className="text-xs text-gray-600">
                         Q{member.currentQuestion} • {member.contributionScore} pts
@@ -517,7 +534,11 @@ export default function CollaborativeExamPage() {
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
-                    {videoEnabled ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
+                    {videoEnabled ? (
+                      <Video className="w-4 h-4" />
+                    ) : (
+                      <VideoOff className="w-4 h-4" />
+                    )}
                   </button>
                   <button
                     onClick={toggleAudio}
@@ -531,12 +552,7 @@ export default function CollaborativeExamPage() {
                   </button>
                 </div>
                 {videoEnabled && (
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    muted
-                    className="w-full rounded-lg mt-2"
-                  />
+                  <video ref={videoRef} autoPlay muted className="w-full rounded-lg mt-2" />
                 )}
               </div>
             </div>
@@ -551,29 +567,29 @@ export default function CollaborativeExamPage() {
               {/* Messages */}
               <div className="flex-1 overflow-y-auto space-y-3 mb-4">
                 {messages.map(msg => (
-                  <div key={msg.id} className={`${
-                    msg.type === 'system' ? 'text-center' : ''
-                  }`}>
+                  <div key={msg.id} className={`${msg.type === 'system' ? 'text-center' : ''}`}>
                     {msg.type === 'system' ? (
                       <div className="text-xs text-gray-600 bg-gray-100 inline-block px-3 py-1 rounded-full">
                         {msg.message}
                       </div>
                     ) : (
-                      <div className={`flex items-start gap-2 ${
-                        msg.userId === 'user1' ? 'flex-row-reverse' : ''
-                      }`}>
+                      <div
+                        className={`flex items-start gap-2 ${
+                          msg.userId === 'user1' ? 'flex-row-reverse' : ''
+                        }`}
+                      >
                         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-purple-400 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
                           {msg.userName[0]}
                         </div>
-                        <div className={`flex-1 ${
-                          msg.userId === 'user1' ? 'text-right' : ''
-                        }`}>
+                        <div className={`flex-1 ${msg.userId === 'user1' ? 'text-right' : ''}`}>
                           <div className="text-xs text-gray-600 mb-1">{msg.userName}</div>
-                          <div className={`inline-block px-3 py-2 rounded-lg ${
-                            msg.userId === 'user1'
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-100 text-gray-900'
-                          }`}>
+                          <div
+                            className={`inline-block px-3 py-2 rounded-lg ${
+                              msg.userId === 'user1'
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-100 text-gray-900'
+                            }`}
+                          >
                             {msg.message}
                           </div>
                           <div className="text-xs text-gray-500 mt-1">
@@ -592,8 +608,8 @@ export default function CollaborativeExamPage() {
                 <input
                   type="text"
                   value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                  onChange={e => setNewMessage(e.target.value)}
+                  onKeyPress={e => e.key === 'Enter' && sendMessage()}
                   placeholder="Type a message..."
                   className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
@@ -605,9 +621,7 @@ export default function CollaborativeExamPage() {
                 </button>
               </div>
             </div>
-
           </div>
-
         </div>
 
         {/* Navigation */}
@@ -619,7 +633,7 @@ export default function CollaborativeExamPage() {
           >
             Previous
           </button>
-          
+
           <div className="flex gap-2">
             {questions.map((_, idx) => (
               <button
@@ -629,8 +643,8 @@ export default function CollaborativeExamPage() {
                   currentQuestion === idx + 1
                     ? 'bg-blue-600 text-white'
                     : answers[idx + 1]?.length > 0
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-gray-100 text-gray-700'
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-gray-100 text-gray-700'
                 }`}
               >
                 {idx + 1}
@@ -646,7 +660,6 @@ export default function CollaborativeExamPage() {
             Next
           </button>
         </div>
-
       </div>
     </div>
   )
