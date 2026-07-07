@@ -83,10 +83,14 @@ class ProctoringEngine {
   private lastLookingAwayWarning = 0
   private lastAudioWarning = 0
   private lastHeadphoneWarning = 0
+  private lastFocusWarning = 0
   private lastStatusUpdate = 0
   private readonly STATUS_UPDATE_INTERVAL = 1000
   private lastBrightnessUpdate = 0
   private readonly BRIGHTNESS_UPDATE_INTERVAL = 2000
+  private readonly LOOKING_AWAY_GAZE_THRESHOLD = 0.42
+  private readonly LOOKING_AWAY_HEAD_THRESHOLD = 0.55
+  private readonly LOOKING_AWAY_GRACE_FRAMES = 5
 
   private status: ProctoringStatus = {
     isActive: false,
@@ -433,6 +437,23 @@ class ProctoringEngine {
     this.animFrameId = requestAnimationFrame(this.processFrame)
     this.frameCount++
 
+    if (typeof document !== 'undefined') {
+      const isHidden = document.hidden || !document.hasFocus()
+      if (isHidden && !this.status.isPaused) {
+        const now = Date.now()
+        if (now - this.lastFocusWarning > 1000) {
+          this.lastFocusWarning = now
+          this.addViolation({
+            type: 'TAB_SWITCH',
+            severity: 'HIGH',
+            message: 'Tab or window focus lost',
+          })
+        }
+        this.pauseExam('Tab/window focus lost. Return to the exam to resume.')
+        return
+      }
+    }
+
     if (!this.videoElement || this.videoElement.readyState < 2) return
     if (this.videoElement.videoWidth === 0) return
 
@@ -591,17 +612,18 @@ class ProctoringEngine {
     const gazeY = lookDown - lookUp
     const gazeMagnitude = Math.sqrt(gazeX * gazeX + gazeY * gazeY)
 
-    const isLookingAtScreen = gazeMagnitude < 0.3 && headDeviation < 0.3
-    this.status.lookingAtScreen = isLookingAtScreen
+    const isLookingAtScreen = gazeMagnitude < this.LOOKING_AWAY_GAZE_THRESHOLD && headDeviation < this.LOOKING_AWAY_HEAD_THRESHOLD
+
+    if (isLookingAtScreen) {
+      this.consecutiveLookingAway = Math.max(0, this.consecutiveLookingAway - 2)
+      this.status.lookingAtScreen = true
+    } else {
+      this.consecutiveLookingAway++
+      this.status.lookingAtScreen = this.consecutiveLookingAway < this.LOOKING_AWAY_GRACE_FRAMES
+    }
 
     const attentionPenalty = gazeMagnitude * 40 + (headDeviation > 1 ? Math.min(headDeviation * 30, 60) : 0)
     this.status.attentionLevel = Math.max(0, Math.min(100, 100 - attentionPenalty))
-
-    if (!isLookingAtScreen) {
-      this.consecutiveLookingAway++
-    } else {
-      this.consecutiveLookingAway = Math.max(0, this.consecutiveLookingAway - 1)
-    }
   }
 
   private evaluateViolations(): void {
@@ -632,12 +654,12 @@ class ProctoringEngine {
       }
     }
 
-    if (!this.status.lookingAtScreen && this.consecutiveLookingAway > 45) {
+    if (!this.status.lookingAtScreen && this.consecutiveLookingAway > 60) {
       if (now - this.lastLookingAwayWarning > 6000) {
         this.lastLookingAwayWarning = now
         this.addViolation({
           type: 'FACE_NOT_LOOKING',
-          severity: this.consecutiveLookingAway > 90 ? 'HIGH' : 'MEDIUM',
+          severity: this.consecutiveLookingAway > 120 ? 'HIGH' : 'MEDIUM',
           message: 'You are looking away from the screen',
           metadata: { attentionScore: this.status.attentionLevel },
         })
@@ -728,6 +750,7 @@ class ProctoringEngine {
   }
 
   pauseExam(reason: string): void {
+    if (this.status.isPaused && this.status.pauseReason === reason) return
     this.status.isPaused = true
     this.status.pauseReason = reason
     this.onPause?.(reason)

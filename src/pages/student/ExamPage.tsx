@@ -131,8 +131,18 @@ export default function ExamPage() {
   // ─── Fullscreen Lockdown ───────────────────────────────────────────────────
   const requestFullscreen = async () => {
     try {
-      if (document.documentElement.requestFullscreen) {
-        await document.documentElement.requestFullscreen()
+      const target = document.documentElement as HTMLElement & {
+        webkitRequestFullscreen?: () => Promise<void>
+        msRequestFullscreen?: () => Promise<void>
+      }
+      if (target.requestFullscreen) {
+        await target.requestFullscreen({ navigationUI: 'hide' } as FullscreenOptions)
+      } else if (target.webkitRequestFullscreen) {
+        await target.webkitRequestFullscreen()
+      } else if (target.msRequestFullscreen) {
+        await target.msRequestFullscreen()
+      }
+      if (document.fullscreenElement) {
         setIsFullscreen(true)
         setFullscreenExited(false)
       }

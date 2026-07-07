@@ -363,7 +363,17 @@ export default function PracticeMockExam() {
   // Enter fullscreen
   const enterFullscreen = async () => {
     try {
-      await document.documentElement.requestFullscreen()
+      const target = document.documentElement as HTMLElement & {
+        webkitRequestFullscreen?: () => Promise<void>
+        msRequestFullscreen?: () => Promise<void>
+      }
+      if (target.requestFullscreen) {
+        await target.requestFullscreen({ navigationUI: 'hide' } as FullscreenOptions)
+      } else if (target.webkitRequestFullscreen) {
+        await target.webkitRequestFullscreen()
+      } else if (target.msRequestFullscreen) {
+        await target.msRequestFullscreen()
+      }
       dispatch({ type: 'SET_FULLSCREEN', payload: true })
     } catch (error) {
       console.error('Fullscreen failed:', error)
@@ -887,7 +897,17 @@ export default function PracticeMockExam() {
                     if (examState.proctoringStatus) {
                       dispatch({ type: 'SET_PROCTORING_STATUS', payload: { ...examState.proctoringStatus, isPaused: false } as ProctoringStatus })
                     }
-                    document.documentElement.requestFullscreen().catch(() => {})
+                    const target = document.documentElement as HTMLElement & {
+                      webkitRequestFullscreen?: () => Promise<void>
+                      msRequestFullscreen?: () => Promise<void>
+                    }
+                    if (target.requestFullscreen) {
+                      target.requestFullscreen({ navigationUI: 'hide' } as FullscreenOptions).catch(() => {})
+                    } else if (target.webkitRequestFullscreen) {
+                      target.webkitRequestFullscreen().catch(() => {})
+                    } else if (target.msRequestFullscreen) {
+                      target.msRequestFullscreen().catch(() => {})
+                    }
                   }
                 }}
                 className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all"
