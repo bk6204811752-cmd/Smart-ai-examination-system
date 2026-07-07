@@ -198,6 +198,18 @@ export default function PreExamVerification() {
 
   const delay = (ms: number) => new Promise(r => setTimeout(r, ms))
 
+  const waitForVideoReady = async (timeoutMs: number = 8000) => {
+    const startedAt = Date.now()
+    while (Date.now() - startedAt < timeoutMs) {
+      const video = videoRef.current
+      if (video && video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+        return true
+      }
+      await delay(150)
+    }
+    return false
+  }
+
   const startVerification = async () => {
     setChecksRunning(true)
 
@@ -383,6 +395,13 @@ export default function PreExamVerification() {
       return
     }
 
+    const videoReady = await waitForVideoReady()
+    if (!videoReady) {
+      setFaceDetected(false)
+      updateCheck('face', 'failed', 'Camera frame not ready for face detection', 'Keep the camera uncovered and try again')
+      return
+    }
+
     let faceLandmarker: FaceLandmarker | null = null
     try {
       updateCheck('face', 'checking', 'Loading face detection AI model...')
@@ -401,37 +420,29 @@ export default function PreExamVerification() {
       ])
 
       updateCheck('face', 'checking', 'Scanning for your face...')
-      await delay(500)
+      const samples: number[] = []
+      let strongestCount = 0
 
-      const result = faceLandmarker.detectForVideo(videoRef.current!, performance.now())
-      const faceCount = result.faceLandmarks?.length || 0
+      for (let attempt = 0; attempt < 4; attempt++) {
+        await delay(250)
+        const result = faceLandmarker.detectForVideo(videoRef.current!, performance.now())
+        const faceCount = result.faceLandmarks?.length || 0
+        samples.push(faceCount)
+        strongestCount = Math.max(strongestCount, faceCount)
 
-      if (faceCount > 0) {
-        setFaceDetected(true)
-        updateCheck('face', 'passed', `Face detected ✓ (${faceCount} face${faceCount > 1 ? 's' : ''})`, 'Keep face centered and well-lit during exam')
-      } else {
-        // Retry after a short wait
-        await delay(1000)
-        const retryResult = faceLandmarker.detectForVideo(videoRef.current!, performance.now())
-        const retryCount = retryResult.faceLandmarks?.length || 0
-
-        if (retryCount > 0) {
+        if (faceCount > 0 && samples.filter(count => count > 0).length >= 2) {
           setFaceDetected(true)
-          updateCheck('face', 'passed', `Face detected ✓`, 'Keep face centered and well-lit during exam')
-        } else {
-          setFaceDetected(false)
-          updateCheck('face', 'warning', 'Face not clearly detected — please check positioning', 'Move closer to camera · Face camera directly · Remove glasses if possible')
+          updateCheck('face', 'passed', `Face detected ✓ (${faceCount} face${faceCount > 1 ? 's' : ''})`, 'Keep face centered and well-lit during exam')
+          return
         }
       }
+
+      setFaceDetected(false)
+      updateCheck('face', 'failed', 'No face detected — position yourself in front of the camera', 'Face the camera directly · Ensure your face is visible and well-lit')
     } catch (err) {
       console.warn('Face detection error:', err)
-      if (brightness >= 40) {
-        setFaceDetected(true)
-        updateCheck('face', 'warning', 'Face check limited — camera active ✓', 'Sit clearly in front of camera during exam')
-      } else {
-        setFaceDetected(false)
-        updateCheck('face', 'failed', 'Face detection failed — improve lighting', 'Turn on lights and reposition')
-      }
+      setFaceDetected(false)
+      updateCheck('face', 'failed', 'Face detection failed — try again after the camera loads', 'Turn on lights, face the camera, and rerun verification')
     } finally {
       faceLandmarker?.close()
     }
