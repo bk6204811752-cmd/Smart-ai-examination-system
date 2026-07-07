@@ -18,29 +18,27 @@ If `SMTP_USER` or `SMTP_PASSWORD` are empty, the system will:
 2. Set `needs_otp = False` in registration response
 3. Users won't receive verification codes
 
-## Solution: Configure Gmail SMTP
+## Solution: Configure Brevo SMTP
 
-### Step 1: Generate Gmail App Password
+### Step 1: Get Brevo SMTP credentials
 
-1. Go to your Google Account: https://myaccount.google.com/
-2. Enable 2-Factor Authentication (if not already enabled)
-3. Go to App Passwords: https://myaccount.google.com/apppasswords
-4. Select "Mail" and your device
-5. Click "Generate"
-6. Copy the 16-character password (e.g., `abcd efgh ijkl mnop`)
+1. Open Brevo and go to the SMTP & API settings page
+2. Copy the SMTP username shown in the SMTP tab
+3. Copy the SMTP key shown in the same tab
+4. Confirm the sender email is verified in Brevo
 
 ### Step 2: Update .env File
 
-Edit `/workspace/.env` and add your Gmail credentials:
+Edit `/workspace/.env` and add your Brevo credentials:
 
 ```env
 # ── Email / SMTP Configuration ──────────────────────────────────────────────────
-SMTP_HOST=smtp.gmail.com
+SMTP_HOST=smtp-relay.brevo.com
 SMTP_PORT=587
-SMTP_USER=your-email@gmail.com
-SMTP_PASSWORD=abcdefghijklmnop  # Your 16-char app password (no spaces)
+SMTP_USERNAME=your-brevo-smtp-username
+SMTP_PASSWORD=your-brevo-smtp-key
 SMTP_FROM_NAME=PCMT Smart Exam System
-SMTP_FROM_EMAIL=your-email@gmail.com
+SMTP_FROM_EMAIL=your-verified-sender@email.com
 SMTP_USE_TLS=true
 ```
 
@@ -69,16 +67,16 @@ Update the test email address in `test_email.py` to your email first.
 If deploying to production, set these environment variables:
 
 ```bash
-export SMTP_USER="your-email@gmail.com"
-export SMTP_PASSWORD="your-app-password"
-export SMTP_FROM_EMAIL="your-email@gmail.com"
+export SMTP_USERNAME="your-brevo-smtp-username"
+export SMTP_PASSWORD="your-brevo-smtp-key"
+export SMTP_FROM_EMAIL="your-verified-sender@email.com"
 export SMTP_FROM_NAME="PCMT Smart Exam System"
 ```
 
 ## Troubleshooting
 
-### Issue: "Less secure app access" error
-**Solution**: Gmail no longer supports less secure apps. You MUST use App Password.
+### Issue: Authentication failed
+**Solution**: Use the SMTP username and SMTP key from Brevo, not the API key.
 
 ### Issue: Connection timeout
 **Solution**: 
@@ -90,13 +88,13 @@ export SMTP_FROM_NAME="PCMT Smart Exam System"
 **Solution**:
 - Ensure you're using App Password, not regular password
 - Remove any spaces from the app password
-- Check 2FA is enabled on your Google account
+    - Make sure the sender email is verified in Brevo
 
 ### Issue: Email goes to spam
 **Solution**:
 - Add domain to email whitelist
-- Use a professional domain email instead of Gmail
-- Configure SPF/DKIM records for your domain
+    - Use a verified sender email from Brevo
+    - Configure SPF/DKIM records for deliverability
 
 ## Testing Registration Flow
 

@@ -40,16 +40,18 @@ def send_email(
     Falls back to SSL (port 465) if STARTTLS fails.
     Returns True on success, raises Exception on failure.
     """
-    smtp_user     = settings.SMTP_USER
+    smtp_user     = settings.SMTP_USERNAME or settings.SMTP_USER
     smtp_password = settings.SMTP_PASSWORD
-    smtp_host     = settings.SMTP_HOST or "smtp.gmail.com"
+    smtp_host     = settings.SMTP_HOST or "smtp-relay.brevo.com"
+    smtp_port     = int(settings.SMTP_PORT or 587)
+    smtp_use_tls  = bool(settings.SMTP_USE_TLS)
     from_email    = settings.SMTP_FROM_EMAIL or smtp_user
     from_name     = settings.SMTP_FROM_NAME or "Smart Examination System"
 
     if not smtp_user or not smtp_password:
         logger.warning(
-            f"SMTP not configured — SMTP_USER={repr(smtp_user)}, "
-            f"SMTP_PASSWORD={'set' if smtp_password else 'empty'}"
+          f"SMTP not configured — SMTP_USERNAME/SMTP_USER={repr(smtp_user)}, "
+          f"SMTP_PASSWORD={'set' if smtp_password else 'empty'}"
         )
         # Return False instead of raising exception when email not configured
         return False
@@ -70,36 +72,57 @@ def send_email(
     context = ssl.create_default_context()
     last_error: Optional[Exception] = None
 
-    # ── Attempt 1: STARTTLS on port 587 (works on Vercel / most cloud hosts) ──
-    try:
-        with smtplib.SMTP(smtp_host, 587, timeout=15) as server:
-            server.ehlo()
-            server.starttls(context=context)
-            server.ehlo()
-            server.login(smtp_user, smtp_password)
-            server.sendmail(from_email, recipients, msg.as_string())
-        logger.info(f"Email sent (STARTTLS:587) to {to_email}: {subject}")
-        return True
-    except Exception as e:
-        last_error = e
-        logger.warning(
-            f"SMTP STARTTLS:587 failed for {to_email} — "
-            f"{type(e).__name__}: {e} — trying SSL:465 fallback"
-        )
+    def _send_with_starttls(port: int) -> None:
+      with smtplib.SMTP(smtp_host, port, timeout=10) as server:
+        server.ehlo()
+        server.starttls(context=context)
+        server.ehlo()
+        server.login(smtp_user, smtp_password)
+        server.sendmail(from_email, recipients, msg.as_string())
 
-    # ── Attempt 2: SSL on port 465 (direct SSL, works locally) ───────────────
+    def _send_with_ssl(port: int) -> None:
+      with smtplib.SMTP_SSL(smtp_host, port, context=context, timeout=10) as server:
+        server.login(smtp_user, smtp_password)
+        server.sendmail(from_email, recipients, msg.as_string())
+
+    primary_label = f"{smtp_host}:{smtp_port}"
+
     try:
-        with smtplib.SMTP_SSL(smtp_host, 465, context=context, timeout=15) as server:
-            server.login(smtp_user, smtp_password)
-            server.sendmail(from_email, recipients, msg.as_string())
-        logger.info(f"Email sent (SSL:465) to {to_email}: {subject}")
-        return True
+      if smtp_port == 465:
+        _send_with_ssl(smtp_port)
+        logger.info(f"Email sent (SSL:{smtp_port}) to {to_email}: {subject}")
+      elif smtp_use_tls:
+        _send_with_starttls(smtp_port)
+        logger.info(f"Email sent (STARTTLS:{smtp_port}) to {to_email}: {subject}")
+      else:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
+          server.ehlo()
+          server.login(smtp_user, smtp_password)
+          server.sendmail(from_email, recipients, msg.as_string())
+        logger.info(f"Email sent (PLAIN:{smtp_port}) to {to_email}: {subject}")
+      return True
     except Exception as e:
-        last_error = e
-        logger.error(
-            f"SMTP SSL:465 also failed for {to_email} — "
-            f"{type(e).__name__}: {e}"
-        )
+      last_error = e
+      logger.warning(
+        f"SMTP delivery failed for {to_email} via {primary_label} — "
+        f"{type(e).__name__}: {e}"
+      )
+
+    fallback_port = 465 if smtp_port != 465 else 587
+    try:
+      if fallback_port == 465:
+        _send_with_ssl(fallback_port)
+        logger.info(f"Email sent (SSL:{fallback_port}) to {to_email}: {subject}")
+      else:
+        _send_with_starttls(fallback_port)
+        logger.info(f"Email sent (STARTTLS:{fallback_port}) to {to_email}: {subject}")
+      return True
+    except Exception as e:
+      last_error = e
+      logger.error(
+        f"SMTP fallback failed for {to_email} on port {fallback_port} — "
+        f"{type(e).__name__}: {e}"
+      )
 
     # Both methods failed
     logger.error(

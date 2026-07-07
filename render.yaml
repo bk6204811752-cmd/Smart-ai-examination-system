@@ -49,7 +49,7 @@ services:
       - key: TOTAL_TEACHERS
         value: "250"
       - key: SMTP_HOST
-        value: smtp.gmail.com
+        value: smtp-relay.brevo.com
       - key: SMTP_PORT
         value: "587"
       - key: SMTP_USE_TLS
@@ -66,8 +66,9 @@ services:
       # MONGODB_URI      → mongodb+srv://bk6204811752_db_user:...@cluster0.6ei5wi0.mongodb.net/pcmt_exam
       # DATABASE_NAME    → pcmt_exam
       # SECRET_KEY       → (strong 32+ char random key — generate: python -c "import secrets; print(secrets.token_urlsafe(48))")
-      # SMTP_USER        → bk6204811752@gmail.com
-      # SMTP_PASSWORD    → (gmail app password)
-      # SMTP_FROM_EMAIL  → bk6204811752@gmail.com
+      # SMTP_USERNAME    → SMTP username from Brevo SMTP settings
+      # SMTP_USER        → legacy alias for SMTP_USERNAME
+      # SMTP_PASSWORD    → Brevo SMTP key
+      # SMTP_FROM_EMAIL  → verified sender email
       # SMTP_FROM_NAME   → Smart Examination System
       # ADMIN_EMAIL      → bk6204811752@gmail.com

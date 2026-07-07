@@ -35,16 +35,16 @@ When credentials are empty, email sending is skipped silently.
 
 ## How to Fix (For End User)
 
-1. **Get Gmail App Password**
-   - Visit: https://myaccount.google.com/apppasswords
-   - Enable 2FA if needed
-   - Generate app password for "Mail"
+1. **Get Brevo SMTP credentials**
+   - Open the Brevo SMTP settings page
+   - Copy the SMTP username
+   - Copy the SMTP key
 
 2. **Update `.env` File**
    ```env
-   SMTP_USER=your-email@gmail.com
-   SMTP_PASSWORD=your-16-char-app-password
-   SMTP_FROM_EMAIL=your-email@gmail.com
+   SMTP_USERNAME=your-brevo-smtp-username
+   SMTP_PASSWORD=your-brevo-smtp-key
+   SMTP_FROM_EMAIL=your-verified-sender@email.com
    ```
 
 3. **Restart Backend**
@@ -54,7 +54,7 @@ When credentials are empty, email sending is skipped silently.
 
 4. **Test**
    ```bash
-   python test_registration_flow.py your-email@gmail.com
+   python test_registration_flow.py your-verified-sender@email.com
    ```
 
 ## System Behavior After Fix
@@ -98,5 +98,5 @@ This will:
 ## Security Notes
 - Never commit `.env` with real credentials to Git
 - Use different credentials for dev/prod
-- Gmail allows 500 emails/day
-- App passwords are more secure than regular passwords
+- Use the SMTP key, not the API key
+- Verify the sender email in Brevo before testing

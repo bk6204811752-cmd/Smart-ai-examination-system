@@ -30,11 +30,11 @@ class Settings(BaseSettings):
 
     # Application
     APP_NAME: str = "PCMT Smart AI Exam System"
-    APP_VERSION: str = "1.0.0"
+    APP_VERSION: str = "2.0.0"
     DEBUG: bool = True
     ENVIRONMENT: str = "development"
     SEED_DEMO_DATA: bool = False
-    ALLOW_IN_MEMORY_DB: bool = False
+    ALLOW_IN_MEMORY_DB: bool = False  # NEVER enable in production
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000,https://pcmt-ai-exam-system.vercel.app"
     # Note: In production set CORS_ORIGINS env var to your exact Vercel URL
     CORS_ORIGIN_REGEX: str = r"https://pcmt-ai-exam-system\.vercel\.app"
@@ -59,8 +59,9 @@ class Settings(BaseSettings):
     ADMIN_EMAIL: str = ""
 
     # Email / SMTP
-    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_HOST: str = "smtp-relay.brevo.com"
     SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
     SMTP_FROM_NAME: str = "Smart Examination System"
@@ -112,12 +113,36 @@ class Settings(BaseSettings):
         return (self.ENVIRONMENT or "").lower() in ["production", "prod"]
 
     def validate_runtime(self):
+        """Validate production configuration"""
         default_secret = "pcmt-super-secret-key-change-in-production-min-32-characters-required"
         import logging
         _log = logging.getLogger(__name__)
         
+        # SECRET_KEY validation
         if len(self.SECRET_KEY) < 32:
             raise RuntimeError("SECRET_KEY must be at least 32 characters long")
+        
+        if self.SECRET_KEY == default_secret:
+            raise RuntimeError(
+                "DEFAULT SECRET_KEY DETECTED IN PRODUCTION! "
+                "Generate a secure key with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+            )
+        
+        # In-memory database check
+        if self.ALLOW_IN_MEMORY_DB:
+            raise RuntimeError(
+                "ALLOW_IN_MEMORY_DB=true is FORBIDDEN in production! "
+                "Configure MONGODB_URI to a real MongoDB instance."
+            )
+        
+        # Email configuration check
+        if not self.SMTP_USER or not self.SMTP_PASSWORD:
+            _log.warning(
+                "⚠️  SMTP not configured! Email features (OTP, notifications) will fail. "
+                "Set SMTP_USER and SMTP_PASSWORD in environment."
+            )
+        
+        _log.info("✅ Production configuration validation passed")
         
         if self.is_production and self.SECRET_KEY == default_secret:
             if not self.ALLOW_IN_MEMORY_DB:
