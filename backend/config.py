@@ -149,10 +149,10 @@ class Settings(BaseSettings):
                 )
         
         # Email configuration check
-        if not self.SMTP_USER or not self.SMTP_PASSWORD:
+        if not (self.SMTP_USERNAME or self.SMTP_USER) or not self.SMTP_PASSWORD:
             _log.warning(
                 "⚠️  SMTP not configured! Email features (OTP, notifications) will fail. "
-                "Set SMTP_USER and SMTP_PASSWORD in environment."
+                "Set SMTP_USERNAME/SMTP_USER and SMTP_PASSWORD in environment."
             )
         
         _log.info("✅ Production configuration validation passed")

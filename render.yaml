@@ -63,12 +63,30 @@ services:
       - key: CORS_ORIGINS
         value: "https://pcmt-ai-exam-system.vercel.app"
       # ── SECRETS — Set these in Render Dashboard → Environment ──
+      - key: MONGODB_URI
+        sync: false
+      - key: DATABASE_NAME
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: SMTP_USERNAME
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM_EMAIL
+        sync: false
+      - key: SMTP_FROM_NAME
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
       # MONGODB_URI      → mongodb+srv://bk6204811752_db_user:...@cluster0.6ei5wi0.mongodb.net/pcmt_exam
       # DATABASE_NAME    → pcmt_exam
       # SECRET_KEY       → (strong 32+ char random key — generate: python -c "import secrets; print(secrets.token_urlsafe(48))")
-      # SMTP_USERNAME    → SMTP username from Brevo SMTP settings
-      # SMTP_USER        → legacy alias for SMTP_USERNAME
-      # SMTP_PASSWORD    → Brevo SMTP key
+      # SMTP_USERNAME    → b12a0d001@smtp-brevo.com
+      # SMTP_USER        → b12a0d001@smtp-brevo.com
+      # SMTP_PASSWORD    → (Set Brevo SMTP Key here)
       # SMTP_FROM_EMAIL  → verified sender email
       # SMTP_FROM_NAME   → Smart Examination System
       # ADMIN_EMAIL      → bk6204811752@gmail.com

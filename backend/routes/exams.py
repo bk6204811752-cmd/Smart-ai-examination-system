@@ -1,6 +1,6 @@
 """
 Exam Routes
-GET  /api/exams
+GET  /api/exams (with pagination)
 GET  /api/exams/{examId}
 POST /api/exams
 POST /api/exams/{examId}/submit
@@ -15,6 +15,8 @@ from datetime import datetime
 
 from database import get_db
 from middleware.auth import get_current_user, require_teacher_or_admin
+from utils.pagination import paginate, PaginationParams
+from utils.cache import cache, cache_key
 
 router = APIRouter(prefix="/api/exams", tags=["exams"])
 
@@ -65,9 +67,28 @@ class SubmitExamRequest(BaseModel):
 @router.get("")
 async def get_exams(
     program: Optional[str] = Query(None),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+    sort_by: Optional[str] = Query("created_at", description="Sort field"),
+    sort_order: int = Query(-1, description="Sort order: -1 (desc) or 1 (asc)"),
     db=Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
+    """Get exams with pagination"""
+    
+    # Check cache first
+    cache_k = cache_key(
+        "exams", 
+        current_user["role"], 
+        str(current_user["_id"]), 
+        program or "all",
+        page,
+        page_size
+    )
+    cached_result = cache.get(cache_k)
+    if cached_result:
+        return cached_result
+    
     query: dict = {"status": {"$in": ["active", "completed"]}}
 
     # Students only see exams for their program
@@ -82,9 +103,25 @@ async def get_exams(
         if program:
             query["program"] = program
 
-    cursor = db.exams.find(query).sort("_id", -1).limit(50)
-    exams = [serialize(e) async for e in cursor]
-    return exams
+    # Pagination
+    params = PaginationParams(
+        page=page,
+        page_size=page_size,
+        sort_by=sort_by,
+        sort_order=sort_order
+    )
+    
+    result = await paginate(
+        collection=db.exams,
+        query=query,
+        params=params,
+        serializer=serialize
+    )
+    
+    # Cache result for 5 minutes
+    cache.set(cache_k, result, ttl=300)
+    
+    return result
 
 
 @router.get("/{exam_id}")
@@ -137,6 +174,7 @@ async def create_exam(
 
     result = await db.exams.insert_one(exam_doc)
     exam_doc["_id"] = result.inserted_id
+    cache.clear()
     return serialize(exam_doc)
 
 
@@ -316,6 +354,7 @@ async def update_exam(
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Exam not found")
 
+    cache.clear()
     updated = await db.exams.find_one({"_id": oid})
     return serialize(updated)
 
@@ -336,5 +375,6 @@ async def delete_exam(
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Exam not found")
 
+    cache.clear()
     return {"message": "Exam deleted successfully"}
 

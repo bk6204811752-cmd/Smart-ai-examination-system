@@ -35,10 +35,17 @@ export default function ExamResultPage() {
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<SubmissionResult | null>(null)
   const [allResults, setAllResults] = useState<SubmissionResult[]>([])
+  const initialResult = (location.state as { result?: SubmissionResult } | null)?.result
 
   useEffect(() => {
+    if (initialResult) {
+      setResult(initialResult)
+      setLoading(false)
+      setError(null)
+      return
+    }
     loadResults()
-  }, [submissionId])
+  }, [submissionId, initialResult])
 
   const loadResults = async () => {
     try {

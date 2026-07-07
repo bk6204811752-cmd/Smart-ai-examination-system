@@ -29,6 +29,7 @@ from middleware.security import (
 )
 from utils.logging_config import setup_logging, get_logger
 from utils.file_validation import ensure_upload_dir_exists
+from utils.cache import cache
 
 # Setup logging
 setup_logging()
@@ -72,9 +73,11 @@ async def lifespan(app: FastAPI):
     await connect_db()
     ensure_upload_dir_exists()
 
-    # Seed demo data
-    db = get_db()
-    await seed_database(db)
+    # Seed demo data (only in development)
+    if not settings.is_production and settings.SEED_DEMO_DATA:
+        db = get_db()
+        await seed_database(db)
+        logger.info("Demo data seeded (development mode)")
 
     print(f"\n[OK] Backend ready at http://localhost:8000")
     print(f"[OK] API docs:   http://localhost:8000/docs")
@@ -92,6 +95,8 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
+    logger.info("Shutting down application...")
+    cache.clear()  # Clear cache
     await disconnect_db()
     logger.info("Backend shutdown complete")
 

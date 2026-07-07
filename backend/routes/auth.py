@@ -107,7 +107,7 @@ def _get_admin_email() -> Optional[str]:
 
 
 def _email_configured() -> bool:
-    return bool(settings.SMTP_USER and settings.SMTP_PASSWORD)
+    return bool((settings.SMTP_USERNAME or settings.SMTP_USER) and settings.SMTP_PASSWORD)
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────

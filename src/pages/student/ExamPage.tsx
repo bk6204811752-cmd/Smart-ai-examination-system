@@ -868,8 +868,8 @@ export default function ExamPage() {
         try { localStorage.removeItem(`exam_backup_${examId}`) } catch { /* ignore */ }
         toast.success('Exam submitted successfully!')
         setTimeout(() => {
-          if (result?._id) navigate(`/student/results/${result._id}`)
-          else navigate('/student/results')
+          if (result?._id) navigate(`/student/results/${result._id}`, { state: { result } })
+          else navigate('/student/results', { state: { result } })
         }, 500)
         return
       } catch (err) {

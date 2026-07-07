@@ -116,7 +116,7 @@ async def verify_otp(
 
     if otp_doc["otp"] != otp_code:
         # Check if we should allow sandbox mode dummy code '123456' when SMTP is not configured
-        if otp_code == "123456" and not (settings.SMTP_USER and settings.SMTP_PASSWORD):
+        if otp_code == "123456" and not ((settings.SMTP_USERNAME or settings.SMTP_USER) and settings.SMTP_PASSWORD):
             logger.info("🔑 [SANDBOX MODE] Bypassing OTP check with dummy code '123456'")
         else:
             await db.otps.update_one(
