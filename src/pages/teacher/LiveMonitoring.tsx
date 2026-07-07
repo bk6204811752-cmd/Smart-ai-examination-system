@@ -147,7 +147,7 @@ export default function LiveMonitoringPage() {
               return newS
             })
           })
-        } catch {}
+        } catch { /* noop */ }
       }, 3000) // Poll every 3s for better real-time feel
       return () => clearInterval(interval)
     }
@@ -173,7 +173,7 @@ export default function LiveMonitoringPage() {
         const data = await proctoringAPI.getFlags(examId)
         setFlags(data)
       }
-    } catch {}
+    } catch { /* noop */ }
   }
 
   const playAlertSound = useCallback(() => {
@@ -192,7 +192,7 @@ export default function LiveMonitoringPage() {
       gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3)
       oscillator.start(ctx.currentTime)
       oscillator.stop(ctx.currentTime + 0.3)
-    } catch {}
+    } catch { /* noop */ }
   }, [alertSoundEnabled])
 
   const initializeWebSocket = () => {

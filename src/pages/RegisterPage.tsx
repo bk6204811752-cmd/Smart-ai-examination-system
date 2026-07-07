@@ -38,6 +38,7 @@ export default function RegisterPage() {
   const [otpResendTimer, setOtpResendTimer] = useState(0)
   const [otpVerifying, setOtpVerifying] = useState(false)
   const [otpSent, setOtpSent] = useState(false)
+  const [isSandbox, setIsSandbox] = useState(false)
   const otpRefs = useRef<(HTMLInputElement | null)[]>([])
 
   const [formData, setFormData] = useState({
@@ -129,12 +130,20 @@ export default function RegisterPage() {
     }
     setOtpVerifying(true)
     try {
-      await authAPI.verifyOTP(registrationEmail, otpCode)
-      toast.success('✅ Email verified successfully!', {
-        duration: 6000,
-        description: 'Your account is pending admin approval. You will receive an email once approved.',
-      })
-      setTimeout(() => navigate('/login'), 4000)
+      const result = await authAPI.verifyOTP(registrationEmail, otpCode)
+      if (result.auto_approved) {
+        // Sandbox mode: account is immediately approved, redirect to login
+        toast.success('✅ Email verified & account approved!', {
+          duration: 6000,
+          description: '[Sandbox Mode] Your account is ready. You can now log in.',
+        })
+      } else {
+        toast.success('✅ Email verified successfully!', {
+          duration: 6000,
+          description: 'Your account is pending admin approval. You will receive an email once approved.',
+        })
+      }
+      setTimeout(() => navigate('/login'), 3000)
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'OTP verification failed')
       setOtp(['', '', '', '', '', ''])
@@ -155,11 +164,19 @@ export default function RegisterPage() {
           setRegistrationEmail(response.email || formData.email)
           setOtpSent(true)
           setOtpResendTimer(OTP_COUNTDOWN)
+          setIsSandbox(!!response.is_sandbox)
           setStep(3)
-          toast.success('📧 OTP sent to your email!', {
-            duration: 4000,
-            description: 'Please check your inbox and enter the 6-digit code.',
-          })
+          if (response.is_sandbox) {
+            toast.warning('📬 [Sandbox Mode] SMTP not configured. Use OTP: 123456', {
+              duration: 10000,
+              description: 'Check backend terminal logs for the actual generated OTP, or use 123456 as bypass.',
+            })
+          } else {
+            toast.success('📧 OTP sent to your email!', {
+              duration: 4000,
+              description: 'Please check your inbox and enter the 6-digit code.',
+            })
+          }
         } else {
           toast.success('🎉 Registration successful! Awaiting admin approval.', {
             duration: 6000,
@@ -170,7 +187,10 @@ export default function RegisterPage() {
       } else {
         login(response.user, response.access_token)
         toast.success('✅ Welcome to PCMT! Your account is ready.')
-        navigate('/student/dashboard')
+        const role = response.user?.role
+        if (role === 'admin') navigate('/admin/dashboard')
+        else if (role === 'teacher') navigate('/teacher/dashboard')
+        else navigate('/student/dashboard')
       }
     } catch (error: any) {
       toast.error(error.response?.data?.detail || 'Registration failed. Please try again.')
@@ -336,6 +356,7 @@ export default function RegisterPage() {
                   {(['student', 'teacher'] as const).map(r => (
                     <button
                       key={r}
+                      type="button"
                       onClick={() => update('role', r)}
                       className={`flex-1 py-2.5 rounded-lg text-sm font-semibold capitalize transition-all ${
                         formData.role === r
@@ -578,10 +599,20 @@ export default function RegisterPage() {
                     <Smartphone className="w-8 h-8 text-blue-600" />
                   </div>
                   <h3 className="text-xl font-bold text-gray-900 mb-1">Verify Your Email</h3>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-gray-500 mb-2">
                     Enter the 6-digit code sent to<br />
                     <span className="font-semibold text-gray-700">{registrationEmail}</span>
                   </p>
+                  {isSandbox && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-left mb-4 mt-2">
+                      <p className="text-xs text-amber-800 leading-relaxed">
+                        ⚠️ <strong>Sandbox Mode:</strong> Email service is inactive/unconfigured. Please use the dummy OTP code below to verify:
+                      </p>
+                      <div className="mt-1.5 text-center font-mono font-bold text-base text-amber-700 bg-amber-100/50 py-1 rounded">
+                        123456
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* OTP Input Boxes */}

@@ -129,9 +129,10 @@ export default function QuestionBankManagerPage() {
       switch (sortBy) {
         case 'usage': return b.usageCount - a.usageCount
         case 'score': return b.averageScore - a.averageScore
-        case 'difficulty':
+        case 'difficulty': {
           const order = { easy: 1, medium: 2, hard: 3 }
           return order[a.difficulty] - order[b.difficulty]
+        }
         case 'date':
         default:
           return new Date(b.createdDate).getTime() - new Date(a.createdDate).getTime()

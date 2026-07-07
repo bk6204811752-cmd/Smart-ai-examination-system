@@ -19,11 +19,12 @@ services:
       - key: ALLOW_IN_MEMORY_DB
         value: "false"
       - key: SEED_DEMO_DATA
-        value: "true"
+        value: "false"
+        # Note: ensure_demo_accounts() always seeds admin/teacher/student on startup regardless of this flag
       - key: APP_NAME
         value: "PCMT Smart AI Exam System"
       - key: APP_VERSION
-        value: "1.0.0"
+        value: "2.0.0"
       - key: ALGORITHM
         value: HS256
       - key: ACCESS_TOKEN_EXPIRE_MINUTES

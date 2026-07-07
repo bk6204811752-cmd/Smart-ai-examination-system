@@ -249,7 +249,7 @@ export const useScreenReader = (): boolean => {
     const checkScreenReader = () => {
       const isUsingScreenReader = 
         window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
-        // @ts-ignore
+        // @ts-ignore - navigator.userAgent string checks for screen readers
         (navigator.userAgent.includes('NVDA') || navigator.userAgent.includes('JAWS'))
       
       setIsScreenReader(isUsingScreenReader)

@@ -28,7 +28,6 @@ const MODE_CONFIG = {
 export default function CommunicationModal({ isOpen, onClose, mode, onToast }: Props) {
   const cfg = MODE_CONFIG[mode]
   const [users, setUsers] = useState<UserSummary[]>([])
-  const [loading, setLoading] = useState(false)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
 

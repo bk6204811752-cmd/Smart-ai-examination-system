@@ -259,3 +259,107 @@ async def seed_database(db):
             print(f"   Created result: {exam['title']} - {percentage}%")
 
     print(" Database seeding complete!")
+
+
+# ── Always-On Demo Account Seeder ─────────────────────────────────────────────
+# These 3 accounts are ALWAYS created on startup (regardless of SEED_DEMO_DATA)
+# so the Quick Demo buttons on the login page always work.
+
+CORE_DEMO_ACCOUNTS = [
+    {
+        "email": "admin@pcmt.edu.in",
+        "password": "Admin@123",        # Passes strength validator
+        "full_name": "Admin User",
+        "role": "admin",
+        "status": "approved",
+        "is_active": True,
+        "email_verified": True,
+        "department": "Administration",
+    },
+    {
+        "email": "teacher@pcmt.edu.in",
+        "password": "Teacher@123",      # Passes strength validator
+        "full_name": "Prof. Rajesh Kumar",
+        "role": "teacher",
+        "status": "approved",
+        "is_active": True,
+        "email_verified": True,
+        "department": "Computer Science",
+    },
+    {
+        "email": "student@pcmt.edu.in",
+        "password": "Student@123",      # Passes strength validator
+        "full_name": "Priya Sharma",
+        "role": "student",
+        "status": "approved",
+        "is_active": True,
+        "email_verified": True,
+        "program": "BCA",
+        "semester": 4,
+        "cgpa": 8.5,
+    },
+]
+
+
+async def ensure_demo_accounts(db):
+    """
+    Always ensure the 3 demo accounts exist in the database on startup.
+    Creates them if missing. Updates status/password if they exist but are broken.
+    Called every startup — safe to call multiple times.
+    """
+    from utils.password import hash_password
+
+    created = 0
+    fixed = 0
+    for acc in CORE_DEMO_ACCOUNTS:
+        existing = await db.users.find_one({"email": acc["email"]})
+        if not existing:
+            # Create fresh demo account
+            doc = {
+                **acc,
+                "password": hash_password(acc["password"]),
+                "avatar": None,
+                "cgpa": acc.get("cgpa"),
+                "created_at": datetime.utcnow().isoformat(),
+                "last_login": None,
+                "preferences": {
+                    "theme": "light", "fontSize": "medium", "language": "en",
+                    "notifications": {
+                        "email": True, "push": True, "sms": False,
+                        "examReminders": True, "resultNotifications": True, "systemUpdates": True
+                    },
+                    "accessibility": {
+                        "highContrast": False, "largeText": False,
+                        "colorBlindMode": "none", "screenReader": False, "keyboardOnly": False
+                    }
+                },
+                "statistics": {
+                    "totalExamsTaken": 0, "averageScore": 0,
+                    "studyHours": 0, "rank": 0, "achievements": []
+                }
+            }
+            await db.users.insert_one(doc)
+            created += 1
+            print(f"   [DEMO] Created: {acc['email']} (password: {acc['password']})")
+        else:
+            # Fix broken accounts (unverified, pending, suspended)
+            if existing.get("status") not in ("approved",) or not existing.get("email_verified") or not existing.get("is_active"):
+                await db.users.update_one(
+                    {"email": acc["email"]},
+                    {"$set": {
+                        "status": "approved",
+                        "is_active": True,
+                        "email_verified": True,
+                        "password": hash_password(acc["password"]),
+                    }}
+                )
+                fixed += 1
+                print(f"   [DEMO] Fixed: {acc['email']} (status restored to approved)")
+
+    if created > 0 or fixed > 0:
+        print(f" [DEMO] Demo accounts ready: {created} created, {fixed} fixed")
+        print(f"   admin@pcmt.edu.in   / Admin@123")
+        print(f"   teacher@pcmt.edu.in / Teacher@123")
+        print(f"   student@pcmt.edu.in / Student@123")
+    else:
+        print(" [DEMO] Demo accounts already exist and are healthy.")

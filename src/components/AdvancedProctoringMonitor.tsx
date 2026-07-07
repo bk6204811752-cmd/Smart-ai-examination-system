@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { advancedProctoringAPI } from '../lib/advancedAPIs'
-import { Camera, AlertTriangle, Eye, Brain, Activity, Volume2, Smartphone } from 'lucide-react'
+import { Camera, AlertTriangle, Eye, Brain, Activity } from 'lucide-react'
 
 interface ProctoringAnalysis {
   violations: Array<{
@@ -168,13 +168,6 @@ export default function AdvancedProctoringMonitor({
     if (score < 50) return 'text-yellow-500'
     if (score < 70) return 'text-orange-500'
     return 'text-red-500'
-  }
-
-  const getRiskBg = (score: number) => {
-    if (score < 30) return 'bg-green-500'
-    if (score < 50) return 'bg-yellow-500'
-    if (score < 70) return 'bg-orange-500'
-    return 'bg-red-500'
   }
 
   const getEmotionEmoji = (emotion: string) => {

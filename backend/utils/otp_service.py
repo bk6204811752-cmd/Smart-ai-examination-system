@@ -54,21 +54,23 @@ async def store_otp(
     email: str,
     otp_code: str,
     expire_minutes: int = None,
+    otp_type: str = "email_verification",
 ) -> bool:
-    """Store OTP for an email, invalidating any previous OTPs for same email."""
+    """Store OTP for an email, invalidating any previous OTPs of the same type for that email."""
     await ensure_otp_indexes(db)
     if expire_minutes is None:
         expire_minutes = settings.OTP_EXPIRE_MINUTES
 
-    # Invalidate previous OTPs for this email
+    # Only invalidate previous OTPs of the SAME type (don't cancel password-reset OTPs when sending email-verification OTPs and vice versa)
     await db.otps.update_many(
-        {"email": email.lower(), "used": False},
+        {"email": email.lower(), "used": False, "type": otp_type},
         {"$set": {"used": True, "invalidated_at": datetime.now(timezone.utc)}},
     )
 
     await db.otps.insert_one({
         "email": email.lower(),
         "otp": otp_code,
+        "type": otp_type,
         "created_at": datetime.now(timezone.utc),
         "expires_at": datetime.now(timezone.utc) + timedelta(minutes=expire_minutes),
         "used": False,
@@ -82,6 +84,7 @@ async def verify_otp(
     email: str,
     otp_code: str,
     max_attempts: int = 5,
+    otp_type: str = "email_verification",
 ) -> tuple[bool, str]:
     """
     Verify an OTP for the given email.
@@ -91,11 +94,17 @@ async def verify_otp(
     """
     email = email.lower()
 
-    # Find the latest unused OTP for this email
+    # Find the latest unused OTP of matching type for this email
     # NOTE: Use find().sort() instead of find_one(sort=) for in-memory DB compatibility
-    cursor = db.otps.find({"email": email, "used": False}).sort("created_at", -1)
+    cursor = db.otps.find({"email": email, "used": False, "type": otp_type}).sort("created_at", -1)
     docs = await cursor.to_list(length=1)
     otp_doc = docs[0] if docs else None
+
+    # Fallback: if no typed OTP found, look for untyped legacy OTPs (backward compat)
+    if not otp_doc:
+        cursor2 = db.otps.find({"email": email, "used": False}).sort("created_at", -1)
+        docs2 = await cursor2.to_list(length=1)
+        otp_doc = docs2[0] if docs2 else None
 
     if not otp_doc:
         return False, "No OTP found. Please request a new one."

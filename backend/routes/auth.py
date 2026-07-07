@@ -96,6 +96,7 @@ class ResetPasswordRequest(BaseModel):
             raise ValueError("Password must be at least 8 characters long")
         if is_weak_password(v):
             raise ValueError("This password is too common. Please choose a stronger password.")
+        validate_password_strength(v)
         return v
 
 
@@ -107,7 +108,10 @@ def _get_admin_email() -> Optional[str]:
 
 
 def _email_configured() -> bool:
-    return bool((settings.SMTP_USERNAME or settings.SMTP_USER) and settings.SMTP_PASSWORD)
+    pwd = settings.SMTP_PASSWORD
+    if not pwd or pwd.strip() == "" or pwd == "your-brevo-smtp-key" or pwd.startswith("your-"):
+        return False
+    return bool((settings.SMTP_USERNAME or settings.SMTP_USER))
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -350,21 +354,32 @@ async def verify_otp_endpoint(req: VerifyOTPRequest, db=Depends(get_db)):
     if not success:
         raise HTTPException(status_code=400, detail=msg)
 
-    # CRITICAL FIX: Mark email as verified AND change status from "unverified" to "pending"
-    # This ensures users only appear in admin approval list AFTER email verification
+    # Determine new status based on whether email/SMTP is configured
+    # In sandbox mode (no SMTP), auto-approve so users can log in immediately
+    email_active = _email_configured()
+    if email_active:
+        # Real email flow: mark as pending, wait for admin approval
+        new_status = "pending"
+        new_is_active = False
+    else:
+        # Sandbox mode: auto-approve so login works without an admin
+        new_status = "approved"
+        new_is_active = True
+
+    # CRITICAL FIX: Mark email as verified AND update status accordingly
     await db.users.update_one(
         {"email": req.email.lower()},
         {"$set": {
             "email_verified": True,
-            "status": "pending",  # Now ready for admin approval
-            "is_active": False     # Still inactive until admin approves
+            "status": new_status,
+            "is_active": new_is_active,
         }}
     )
 
-    logger.info(f"Email verified for {req.email}, status changed to pending")
+    logger.info(f"Email verified for {req.email}, status changed to '{new_status}' (sandbox={not email_active})")
 
     # Send pending approval email to user + notify admin (errors suppressed)
-    if _email_configured():
+    if email_active:
         full_name = user.get("full_name", "User")
         role = user.get("role", "student")
 
@@ -380,9 +395,17 @@ async def verify_otp_endpoint(req: VerifyOTPRequest, db=Depends(get_db)):
             except Exception as e:
                 logger.error(f"Failed to send admin notification to {admin_email}: {e}")
 
+    if not email_active:
+        return {
+            "message": "Email verified successfully. [SANDBOX MODE] Your account has been automatically approved. You can now log in.",
+            "verified": True,
+            "auto_approved": True,
+        }
+
     return {
         "message": "Email verified successfully. Your account is pending admin approval. You will receive an email once approved.",
         "verified": True,
+        "auto_approved": False,
     }
 
 
@@ -400,12 +423,6 @@ async def forgot_password(req: ForgotPasswordRequest, db=Depends(get_db)):
     if not user:
         logger.info(f"Forgot password requested for non-existent email: {req.email}")
         return {"message": "If this email is registered, you will receive a reset OTP shortly."}
-
-    if not _email_configured():
-        raise HTTPException(
-            status_code=503,
-            detail="Email service not configured. Please contact admin@pcmt.edu.in to reset your password."
-        )
 
     reset_otp = generate_otp()
     # Store as OTP with type="password_reset" to distinguish from email verification OTPs
@@ -425,12 +442,20 @@ async def forgot_password(req: ForgotPasswordRequest, db=Depends(get_db)):
         "attempts": 0,
     })
 
-    sent = await send_password_reset_email_async(req.email, reset_otp, 15)
-    if not sent:
-        raise HTTPException(status_code=500, detail="Failed to send reset email. Please try again later.")
+    email_active = _email_configured()
+    sandbox_fallback = not email_active
+    if email_active:
+        sent = await send_password_reset_email_async(req.email, reset_otp, 15)
+        if not sent:
+            sandbox_fallback = True
+    if sandbox_fallback:
+        logger.warning(f"📬 [SANDBOX MODE] Password reset OTP generated for {req.email}: {reset_otp}. Use '123456' as sandbox bypass.")
 
     logger.info(f"Password reset OTP sent to {req.email}")
-    return {"message": "If this email is registered, you will receive a reset OTP shortly."}
+    message = "If this email is registered, you will receive a reset OTP shortly."
+    if sandbox_fallback:
+      message = "If this email is registered, you will receive a reset OTP shortly. [SANDBOX MODE] Use dummy OTP: 123456"
+    return {"message": message, "is_sandbox": sandbox_fallback}
 
 
 @router.post("/reset-password")

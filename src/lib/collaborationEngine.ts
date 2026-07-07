@@ -3,7 +3,7 @@
  * WebSocket-based real-time features for collaborative learning and live monitoring
  */
 
-// @ts-ignore - socket.io-client will be installed
+// @ts-expect-error - socket.io-client will be installed
 import { io, Socket } from 'socket.io-client'
 
 export interface CollaborationUser {
@@ -115,7 +115,7 @@ class RealtimeCollaborationEngine {
   private socket: Socket | null = null
   private reconnectAttempts = 0
   private maxReconnectAttempts = 5
-  private eventHandlers = new Map<string, Set<Function>>()
+  private eventHandlers = new Map<string, Set<(...args: any[]) => any>>()
   
   /**
    * Connect to WebSocket server
@@ -503,7 +503,7 @@ class RealtimeCollaborationEngine {
    */
   async startScreenShare(roomId: string): Promise<MediaStream> {
     try {
-      // @ts-ignore
+      // @ts-ignore - getDisplayMedia vendor prefix
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
         audio: false
@@ -562,7 +562,7 @@ class RealtimeCollaborationEngine {
   /**
    * Register event handler
    */
-  on(event: string, handler: Function) {
+  on(event: string, handler: (...args: any[]) => any) {
     if (!this.eventHandlers.has(event)) {
       this.eventHandlers.set(event, new Set())
     }
@@ -572,7 +572,7 @@ class RealtimeCollaborationEngine {
   /**
    * Unregister event handler
    */
-  off(event: string, handler: Function) {
+  off(event: string, handler: (...args: any[]) => any) {
     const handlers = this.eventHandlers.get(event)
     if (handlers) {
       handlers.delete(handler)

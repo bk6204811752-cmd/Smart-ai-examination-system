@@ -287,7 +287,7 @@ export const wsManager = new WebSocketManager()
 
 // Expose in development
 if (import.meta.env.DEV) {
-  ;(window as any).wsManager = wsManager
+  (window as any).wsManager = wsManager
 }
 
 /**

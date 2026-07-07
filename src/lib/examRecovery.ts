@@ -228,5 +228,5 @@ export const examRecoveryService = new ExamRecoveryService()
 
 // Expose in development
 if (import.meta.env.DEV) {
-  ;(window as any).examRecoveryService = examRecoveryService
+  (window as any).examRecoveryService = examRecoveryService
 }

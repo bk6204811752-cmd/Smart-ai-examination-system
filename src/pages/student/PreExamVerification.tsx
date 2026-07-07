@@ -297,7 +297,7 @@ export default function PreExamVerification() {
         animFrameRef.current = requestAnimationFrame(draw)
       }
       draw()
-    } catch { }
+    } catch { /* noop */ }
   }
 
   const checkMicrophone = async () => {
@@ -569,7 +569,7 @@ export default function PreExamVerification() {
   const handleProceed = () => {
     if (!canProceed) return
     if (stream) {
-      ;(window as any).__preExamStream = stream
+      (window as any).__preExamStream = stream
     }
     if (mode === 'practice' && practiceTestId) {
       navigate(`/practice/mock/${practiceTestId}`)

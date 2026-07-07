@@ -25,7 +25,7 @@ export class ReliableWebSocket {
   private heartbeatInterval: number = 30000
   private heartbeatTimer: number | null = null
   private messageQueue: QueuedMessage[] = []
-  private messageHandlers = new Map<string, Function[]>()
+  private messageHandlers = new Map<string, ((...args: any[]) => any)[]>()
   private onConnectCallback: (() => void) | null = null
   private onDisconnectCallback: (() => void) | null = null
   private onErrorCallback: ((error: any) => void) | null = null
@@ -149,7 +149,7 @@ export class ReliableWebSocket {
   /**
    * Register message handler
    */
-  on(messageType: string, handler: Function): void {
+  on(messageType: string, handler: (...args: any[]) => any): void {
     if (!this.messageHandlers.has(messageType)) {
       this.messageHandlers.set(messageType, [])
     }
@@ -159,7 +159,7 @@ export class ReliableWebSocket {
   /**
    * Unregister message handler
    */
-  off(messageType: string, handler: Function): void {
+  off(messageType: string, handler: (...args: any[]) => any): void {
     const handlers = this.messageHandlers.get(messageType)
     if (handlers) {
       const index = handlers.indexOf(handler)

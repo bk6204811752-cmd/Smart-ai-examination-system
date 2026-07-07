@@ -209,7 +209,7 @@ class ProctoringEngine {
       source.connect(analyser)
       this.audioAnalyser = analyser
       this.audioDataArray = new Uint8Array(analyser.frequencyBinCount)
-    } catch { }
+    } catch { /* noop */ }
   }
 
   private setupBlockingHandlers(): void {
@@ -297,7 +297,7 @@ class ProctoringEngine {
   private setupScreenSecurity(): void {
     this.originalGetDisplayMedia = (navigator.mediaDevices as any).getDisplayMedia
     if (this.originalGetDisplayMedia) {
-      ;(navigator.mediaDevices as any).getDisplayMedia = () => {
+      (navigator.mediaDevices as any).getDisplayMedia = () => {
         const now = Date.now()
         if (now - this.lastScreenShareViolation > 5000) {
           this.lastScreenShareViolation = now
@@ -376,7 +376,7 @@ class ProctoringEngine {
 
   private removeScreenSecurity(): void {
     if (this.originalGetDisplayMedia) {
-      ;(navigator.mediaDevices as any).getDisplayMedia = this.originalGetDisplayMedia
+      (navigator.mediaDevices as any).getDisplayMedia = this.originalGetDisplayMedia
       this.originalGetDisplayMedia = null
     }
     if (this.screenSecurityInterval !== null) {
@@ -728,7 +728,7 @@ class ProctoringEngine {
 
     this.status.violations = [...this.status.violations, violation].slice(-50)
 
-    let severityWeight = base.severity === 'CRITICAL' ? 15 : base.severity === 'HIGH' ? 10 : base.severity === 'MEDIUM' ? 5 : 2
+    const severityWeight = base.severity === 'CRITICAL' ? 15 : base.severity === 'HIGH' ? 10 : base.severity === 'MEDIUM' ? 5 : 2
     this.status.suspiciousActivityScore = Math.min(100, this.status.suspiciousActivityScore + severityWeight)
 
     this.onViolation?.(violation)
@@ -850,7 +850,7 @@ class ProctoringEngine {
         }
         this.mediaRecorder.start(5000)
         this.status.sessionRecording = true
-      } catch { }
+      } catch { /* noop */ }
     }
   }
 

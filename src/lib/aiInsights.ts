@@ -420,5 +420,5 @@ export const aiInsightsEngine = new AIInsightsEngine()
 
 // Expose in development
 if (import.meta.env.DEV) {
-  ;(window as any).aiInsightsEngine = aiInsightsEngine
+  (window as any).aiInsightsEngine = aiInsightsEngine
 }

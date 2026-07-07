@@ -27,8 +27,9 @@ export default function LoginPage() {
 
   const validate = () => {
     const errors: typeof fieldErrors = {}
-    if (!email) errors.email = 'Email is required'
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = 'Enter a valid email'
+    const normalizedEmail = email.trim()
+    if (!normalizedEmail) errors.email = 'Email is required'
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) errors.email = 'Enter a valid email'
     if (!password) errors.password = 'Password is required'
     else if (password.length < 6) errors.password = 'Password must be at least 6 characters'
     setFieldErrors(errors)
@@ -41,7 +42,7 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const data = await authAPI.login(email, password)
+      const data = await authAPI.login(email.trim().toLowerCase(), password)
       if (data.access_token) {
         login(data.user, data.access_token)
         toast.success(`Welcome back, ${data.user?.full_name || data.user?.name || 'User'}! 👋`)
@@ -52,17 +53,23 @@ export default function LoginPage() {
         else navigate('/student/dashboard')
       }
     } catch (err: any) {
+      const status = err?.response?.status
+      const detail = err?.response?.data?.detail || err?.message
+
       if (!err.response) {
-        // Network error — in production the Render free-tier backend may be waking up
+        // Network error — backend not reachable
         const isDev = import.meta.env.DEV
         if (isDev) {
           toast.error('Cannot connect to server. Please ensure the backend is running on port 8000.')
         } else {
           toast.error('Server is starting up — please wait 30 seconds and try again. (Backend cold start)', { duration: 6000 })
         }
+      } else if (status === 403 && detail?.toLowerCase().includes('pending')) {
+        toast.error('Your account is pending admin approval. You will be notified once approved.', { duration: 6000 })
+      } else if (status === 403 && detail?.toLowerCase().includes('unverified')) {
+        toast.error('Please verify your email first. Check your inbox for the OTP.', { duration: 6000 })
       } else {
-        const msg = err?.response?.data?.detail || err?.message || 'Invalid credentials. Please try again.'
-        toast.error(msg)
+        toast.error(detail || 'Invalid credentials. Please try again.')
       }
     } finally {
       setLoading(false)
@@ -70,9 +77,9 @@ export default function LoginPage() {
   }
 
   const demoAccounts = [
-    { role: 'Student', email: 'student@pcmt.edu.in', password: 'student123', color: 'from-blue-500 to-cyan-500' },
-    { role: 'Teacher', email: 'teacher@pcmt.edu.in', password: 'teacher123', color: 'from-purple-500 to-indigo-500' },
-    { role: 'Admin', email: 'admin@pcmt.edu.in', password: 'admin123', color: 'from-emerald-500 to-teal-500' },
+    { role: 'Student', email: 'student@pcmt.edu.in', password: 'Student@123', color: 'from-blue-500 to-cyan-500' },
+    { role: 'Teacher', email: 'teacher@pcmt.edu.in', password: 'Teacher@123', color: 'from-purple-500 to-indigo-500' },
+    { role: 'Admin', email: 'admin@pcmt.edu.in', password: 'Admin@123', color: 'from-emerald-500 to-teal-500' },
   ]
 
   return (

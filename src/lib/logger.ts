@@ -282,7 +282,7 @@ export const logger = new Logger()
 // Development helpers
 if (import.meta.env.DEV) {
   // Expose logger globally for debugging
-  ;(window as any).logger = logger
+  (window as any).logger = logger
 }
 
 // Export performance and action tracking

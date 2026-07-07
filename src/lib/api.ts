@@ -174,6 +174,10 @@ api.interceptors.response.use(
       // ── Other errors ──────────────────────────────────────────────────────
       switch (status) {
         case 403:
+          if (originalRequest?.url?.includes('/api/auth/')) {
+            logger.warn('Auth request forbidden', { url: originalRequest?.url })
+            break
+          }
           logger.error('Access forbidden', { url: originalRequest?.url })
           toast.error('You do not have permission to access this resource')
           break
@@ -183,7 +187,7 @@ api.interceptors.response.use(
           logger.error('Resource not found', { url: originalRequest?.url })
           break
           
-        case 429:
+        case 429: {
           // Rate limited - retry after delay
           const retryAfter = parseInt(error.response.headers['retry-after'] || '60', 10)
           logger.warn(`Rate limited - retry after ${retryAfter}s`)
@@ -195,11 +199,12 @@ api.interceptors.response.use(
             return api.request(originalRequest)
           }
           break
+        }
           
         case 500:
         case 502:
         case 503:
-        case 504:
+        case 504: {
           // Server errors - retry once with short delay (max 1 retry, 2s cap)
           const maxRetries = 1
           originalRequest._retryCount = originalRequest._retryCount || 0
@@ -223,6 +228,7 @@ api.interceptors.response.use(
             }
           }
           break
+        }
           
         default:
           // Generic error

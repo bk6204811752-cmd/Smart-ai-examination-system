@@ -48,10 +48,10 @@ def send_email(
     from_email    = settings.SMTP_FROM_EMAIL or smtp_user
     from_name     = settings.SMTP_FROM_NAME or "Smart Examination System"
 
-    if not smtp_user or not smtp_password:
+    if not smtp_user or not smtp_password or smtp_password == "your-brevo-smtp-key" or smtp_password.startswith("your-"):
         logger.warning(
           f"SMTP not configured — SMTP_USERNAME/SMTP_USER={repr(smtp_user)}, "
-          f"SMTP_PASSWORD={'set' if smtp_password else 'empty'}"
+          f"SMTP_PASSWORD={'placeholder/empty' if not smtp_password or smtp_password == 'your-brevo-smtp-key' or smtp_password.startswith('your-') else 'set'}"
         )
         # Return False instead of raising exception when email not configured
         return False

@@ -53,7 +53,7 @@ from routes.questions import router as questions_router
 from routes.plagiarism import router as plagiarism_router
 from routes.templates import router as templates_router
 
-from utils.seeder import seed_database
+from utils.seeder import seed_database, ensure_demo_accounts
 
 
 # ── Lifespan (startup/shutdown) ──────────────────────────────────────────────
@@ -73,9 +73,13 @@ async def lifespan(app: FastAPI):
     await connect_db()
     ensure_upload_dir_exists()
 
-    # Seed demo data (only in development)
+    # Always ensure the 3 core demo accounts exist (admin/teacher/student)
+    # This fixes the login deadlock where no accounts exist in a fresh DB
+    db = get_db()
+    await ensure_demo_accounts(db)
+
+    # Seed additional sample exam data (only in development)
     if not settings.is_production and settings.SEED_DEMO_DATA:
-        db = get_db()
         await seed_database(db)
         logger.info("Demo data seeded (development mode)")
 
@@ -83,12 +87,12 @@ async def lifespan(app: FastAPI):
     print(f"[OK] API docs:   http://localhost:8000/docs")
     print(f"[OK] Alt docs:   http://localhost:8000/redoc")
     
-    # Only show demo accounts in development
+    # Always show demo account credentials
     if settings.DEBUG:
-        print(f"\n[*] Demo accounts (Development Only):")
-        print(f"   student  -> student@pcmt.edu.in  / student123")
-        print(f"   teacher  -> teacher@pcmt.edu.in  / teacher123")
-        print(f"   admin    -> admin@pcmt.edu.in    / admin123\n")
+        print(f"\n[*] Demo Accounts:")
+        print(f"   admin    -> admin@pcmt.edu.in    / Admin@123")
+        print(f"   teacher  -> teacher@pcmt.edu.in  / Teacher@123")
+        print(f"   student  -> student@pcmt.edu.in  / Student@123\n")
     else:
         logger.info("Production environment - demo credentials hidden")
 
@@ -158,7 +162,7 @@ from fastapi import Depends
 from database import get_db as _get_db
 
 def get_db_override():
-    return get_db()
+    return _get_db()
 
 app.dependency_overrides[_get_db] = get_db_override
 

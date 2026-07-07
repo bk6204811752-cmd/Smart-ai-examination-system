@@ -32,6 +32,7 @@ export default function ForgotPasswordPage() {
   const [showConfirmPwd, setShowConfirmPwd] = useState(false)
   const [pwdErrors, setPwdErrors] = useState<{ newPassword?: string; confirmPassword?: string }>({})
   const [isResetting, setIsResetting] = useState(false)
+  const [isSandbox, setIsSandbox] = useState(false)
 
   // OTP countdown
   const startCountdown = () => {
@@ -61,16 +62,25 @@ export default function ForgotPasswordPage() {
   // Step 0: Send reset OTP
   const handleSendOTP = async () => {
     setEmailError('')
-    if (!email.trim()) { setEmailError('Email is required'); return }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setEmailError('Enter a valid email address'); return }
+    const normalizedEmail = email.trim().toLowerCase()
+    if (!normalizedEmail) { setEmailError('Email is required'); return }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) { setEmailError('Enter a valid email address'); return }
 
     setIsSending(true)
     try {
-      await authAPI.forgotPassword(email.trim().toLowerCase())
-      toast.success('📧 OTP sent!', {
-        description: 'Check your email for the password reset OTP.',
-        duration: 5000,
-      })
+      const response = await authAPI.forgotPassword(normalizedEmail)
+      setIsSandbox(!!response.is_sandbox)
+      if (response.is_sandbox) {
+        toast.warning('📬 [Sandbox Mode] SMTP not configured. Use OTP: 123456', {
+          description: 'Check backend terminal logs for the actual generated OTP, or use 123456 as bypass.',
+          duration: 10000,
+        })
+      } else {
+        toast.success('📧 OTP sent!', {
+          description: 'Check your email for the password reset OTP.',
+          duration: 5000,
+        })
+      }
       setStep(1)
       startCountdown()
       setTimeout(() => otpRefs.current[0]?.focus(), 200)
@@ -85,8 +95,16 @@ export default function ForgotPasswordPage() {
   const handleResendOTP = async () => {
     if (otpResendTimer > 0) return
     try {
-      await authAPI.forgotPassword(email.trim().toLowerCase())
-      toast.success('OTP resent to your email')
+      const response = await authAPI.forgotPassword(email.trim().toLowerCase())
+      setIsSandbox(!!response.is_sandbox)
+      if (response.is_sandbox) {
+        toast.warning('📬 [Sandbox Mode] SMTP not configured. Use OTP: 123456', {
+          description: 'Check backend terminal logs for the actual generated OTP, or use 123456 as bypass.',
+          duration: 10000,
+        })
+      } else {
+        toast.success('OTP resent to your email')
+      }
       startCountdown()
       setOtp(['', '', '', '', '', ''])
       setTimeout(() => otpRefs.current[0]?.focus(), 100)
@@ -283,10 +301,20 @@ export default function ForgotPasswordPage() {
                   <div className="w-16 h-16 bg-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
                     <Smartphone className="w-8 h-8 text-indigo-600" />
                   </div>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-gray-500 mb-2">
                     Enter the 6-digit code sent to<br />
                     <span className="font-semibold text-gray-700">{email}</span>
                   </p>
+                  {isSandbox && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-left mb-4 mt-2">
+                      <p className="text-xs text-amber-800 leading-relaxed">
+                        ⚠️ <strong>Sandbox Mode:</strong> Email service is inactive/unconfigured. Please use the dummy OTP code below to verify:
+                      </p>
+                      <div className="mt-1.5 text-center font-mono font-bold text-base text-amber-700 bg-amber-100/50 py-1 rounded">
+                        123456
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* OTP boxes */}

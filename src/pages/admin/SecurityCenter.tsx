@@ -195,7 +195,7 @@ export default function SecurityCenterPage() {
         description: 'Security event resolved by admin',
       })
       setEvents(prev => prev.map(e => e.id === eventId ? { ...e, resolved: true } : e))
-    } catch { }
+    } catch { /* noop */ }
   }
 
   const handleBlockIP = async () => {

@@ -62,7 +62,7 @@ export const isTouchDevice = (): boolean => {
   return (
     'ontouchstart' in window ||
     navigator.maxTouchPoints > 0 ||
-    // @ts-ignore - Legacy support
+    // @ts-expect-error - Legacy support
     (navigator.msMaxTouchPoints > 0)
   )
 }
@@ -220,7 +220,7 @@ export const lockOrientation = async (orientation: 'portrait' | 'landscape' | 'p
   if (!('orientation' in screen)) return false
   
   try {
-    // @ts-ignore - Screen Orientation API
+    // @ts-expect-error - Screen Orientation API
     await screen.orientation.lock(orientation)
     return true
   } catch (error) {
@@ -245,11 +245,11 @@ export const unlockOrientation = (): void => {
 export const isFullscreen = (): boolean => {
   return !!(
     document.fullscreenElement ||
-    // @ts-ignore - Vendor prefixes
+    // @ts-expect-error - Vendor prefixes
     document.webkitFullscreenElement ||
-    // @ts-ignore
+    // @ts-expect-error
     document.mozFullScreenElement ||
-    // @ts-ignore
+    // @ts-expect-error
     document.msFullscreenElement
   )
 }
@@ -405,7 +405,7 @@ export const hasMicrophone = async (): Promise<boolean> => {
  * Get network information
  */
 export const getNetworkInfo = () => {
-  // @ts-ignore - Experimental API
+  // @ts-expect-error - Experimental API
   const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection
   
   if (!connection) {
@@ -436,13 +436,13 @@ export const isOnline = (): boolean => {
  * Get battery status (if available)
  */
 export const getBatteryStatus = async () => {
-  // @ts-ignore - Experimental API
+  // @ts-ignore - Experimental Network Information API
   if (!('getBattery' in navigator)) {
     return null
   }
   
   try {
-    // @ts-ignore
+    // @ts-expect-error
     const battery = await navigator.getBattery()
     return {
       level: battery.level * 100, // 0-100%
@@ -459,14 +459,14 @@ export const getBatteryStatus = async () => {
  * Prevent screen sleep (during exams)
  */
 export const preventScreenSleep = async (): Promise<WakeLockSentinel | null> => {
-  // @ts-ignore - Experimental API
+  // @ts-ignore - Experimental Wake Lock API check
   if (!('wakeLock' in navigator)) {
     console.warn('Wake Lock API not supported')
     return null
   }
   
   try {
-    // @ts-ignore
+    // @ts-ignore - Experimental Wake Lock API request
     const wakeLock = await navigator.wakeLock.request('screen')
     console.log('Screen wake lock activated')
     return wakeLock

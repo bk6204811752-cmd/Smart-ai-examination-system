@@ -166,7 +166,7 @@ export default function TeacherDashboard() {
       gain.gain.setValueAtTime(0.1, ctx.currentTime)
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4)
       osc.start(); osc.stop(ctx.currentTime + 0.4)
-    } catch {}
+    } catch { /* noop */ }
   }
 
   const addActivity = (act: any) => {

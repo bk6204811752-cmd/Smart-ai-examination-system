@@ -71,7 +71,7 @@ export default function ExamTemplatesLibrary() {
       return new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime()
     })
 
-  const useTemplate = (t: ExamTemplate) => navigate('/teacher/create-exam', { state: { template: t } })
+  const applyTemplate = (t: ExamTemplate) => navigate('/teacher/create-exam', { state: { template: t } })
 
   const duplicateTemplate = async (t: ExamTemplate) => {
     try {
@@ -241,7 +241,7 @@ export default function ExamTemplatesLibrary() {
                     <span>by {template.createdBy}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => useTemplate(template)}
+                    <button onClick={() => applyTemplate(template)}
                       className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-4 py-2 rounded-lg font-medium hover:from-blue-700 hover:to-cyan-700 transition-all flex items-center justify-center gap-2">
                       <Download className="w-4 h-4" /> Use Template
                     </button>
@@ -344,7 +344,7 @@ export default function ExamTemplatesLibrary() {
             </div>
             <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
               <button onClick={() => setPreviewTemplate(null)} className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium">Close</button>
-              <button onClick={() => { useTemplate(previewTemplate); setPreviewTemplate(null) }}
+              <button onClick={() => { applyTemplate(previewTemplate); setPreviewTemplate(null) }}
                 className="px-6 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg hover:from-blue-700 hover:to-cyan-700 font-medium flex items-center gap-2">
                 <Download className="w-4 h-4" /> Use This Template
               </button>
