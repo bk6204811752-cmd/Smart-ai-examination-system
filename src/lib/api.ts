@@ -11,7 +11,6 @@ const API_URL =
   (import.meta as any).env?.VITE_API_URL ||
   ((import.meta as any).env?.DEV ? 'http://localhost:8000' : RENDER_BACKEND)
 
-
 // Offline request queue
 interface QueuedRequest {
   config: InternalAxiosRequestConfig
@@ -61,7 +60,7 @@ api.interceptors.request.use(
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`
     }
-    
+
     // Disabled: API request logging (too verbose)
     // Uncomment only when debugging API issues
     // if (import.meta.env.DEV && import.meta.env.VITE_DEBUG === 'true') {
@@ -70,7 +69,7 @@ api.interceptors.request.use(
     //     data: config.data
     //   })
     // }
-    
+
     return config
   },
   (error: AxiosError) => {
@@ -95,7 +94,10 @@ const processFailedQueue = (error: any, token: string | null = null) => {
 api.interceptors.response.use(
   (response: AxiosResponse) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean; _retryCount?: number }
+    const originalRequest = error.config as InternalAxiosRequestConfig & {
+      _retry?: boolean
+      _retryCount?: number
+    }
 
     // Network error - queue request if offline
     if (!error.response && !isOnline) {
@@ -114,10 +116,13 @@ api.interceptors.response.use(
       // ── 401 Unauthorized: Try token refresh first ─────────────────────────
       if (status === 401) {
         const currentToken = useAuthStore.getState().token
-        const isAuthEndpoint = originalRequest?.url?.includes('/api/auth/')
+        // Only skip refresh for truly public auth endpoints (login, register, OTP)
+        // DO NOT skip for /api/auth/me, /api/auth/change-password etc. (they need refresh)
+        const publicAuthEndpoints = ['/api/auth/login', '/api/auth/register', '/api/auth/send-otp', '/api/auth/verify-otp', '/api/auth/forgot-password', '/api/auth/reset-password', '/api/auth/refresh']
+        const isPublicAuthEndpoint = publicAuthEndpoints.some(ep => originalRequest?.url?.includes(ep))
 
-        // Skip refresh for auth endpoints (wrong password etc) or if no token
-        if (!currentToken || isAuthEndpoint || originalRequest._retry) {
+        // Skip refresh for public auth endpoints (wrong password etc) or if no token
+        if (!currentToken || isPublicAuthEndpoint || originalRequest._retry) {
           return Promise.reject(error)
         }
 
@@ -126,10 +131,11 @@ api.interceptors.response.use(
           return new Promise((resolve, reject) => {
             failedQueue.push({
               resolve: (token: string) => {
-                if (originalRequest.headers) originalRequest.headers.Authorization = `Bearer ${token}`
+                if (originalRequest.headers)
+                  originalRequest.headers.Authorization = `Bearer ${token}`
                 resolve(api(originalRequest))
               },
-              reject
+              reject,
             })
           })
         }
@@ -156,16 +162,16 @@ api.interceptors.response.use(
 
           logger.info('Token refreshed successfully')
           return api(originalRequest)
-
         } catch (refreshError) {
           // Refresh failed → logout
           processFailedQueue(refreshError, null)
           logger.warn('Token refresh failed — logging out')
           useAuthStore.getState().logout()
           toast.error('Session expired. Please login again.')
-          setTimeout(() => { window.location.href = '/login' }, 1500)
+          setTimeout(() => {
+            window.location.href = '/login'
+          }, 1500)
           return Promise.reject(refreshError)
-
         } finally {
           isRefreshing = false
         }
@@ -181,18 +187,18 @@ api.interceptors.response.use(
           logger.error('Access forbidden', { url: originalRequest?.url })
           toast.error('You do not have permission to access this resource')
           break
-          
+
         case 404:
           // Not found - only log, don't show toast (too noisy for dashboard API calls)
           logger.error('Resource not found', { url: originalRequest?.url })
           break
-          
+
         case 429: {
           // Rate limited - retry after delay
           const retryAfter = parseInt(error.response.headers['retry-after'] || '60', 10)
           logger.warn(`Rate limited - retry after ${retryAfter}s`)
           toast.warning(`Too many requests. Please wait ${retryAfter} seconds.`)
-          
+
           if (originalRequest && !originalRequest._retry) {
             originalRequest._retry = true
             await new Promise(resolve => setTimeout(resolve, retryAfter * 1000))
@@ -200,7 +206,7 @@ api.interceptors.response.use(
           }
           break
         }
-          
+
         case 500:
         case 502:
         case 503:
@@ -208,33 +214,42 @@ api.interceptors.response.use(
           // Server errors - retry once with short delay (max 1 retry, 2s cap)
           const maxRetries = 1
           originalRequest._retryCount = originalRequest._retryCount || 0
-          
+
           if (originalRequest._retryCount < maxRetries) {
             originalRequest._retryCount++
             const delay = Math.min(1000 * originalRequest._retryCount, 2000)
-            
-            logger.warn(`Server error ${status} - retrying (${originalRequest._retryCount}/${maxRetries})`, {
-              url: originalRequest?.url,
-              delay
-            })
-            
+
+            logger.warn(
+              `Server error ${status} - retrying (${originalRequest._retryCount}/${maxRetries})`,
+              {
+                url: originalRequest?.url,
+                delay,
+              }
+            )
+
             await new Promise(resolve => setTimeout(resolve, delay))
             return api.request(originalRequest)
           } else {
-            logger.error('Server error - max retries exceeded', { status, url: originalRequest?.url })
+            logger.error('Server error - max retries exceeded', {
+              status,
+              url: originalRequest?.url,
+            })
             // Don't show toast for analytics/dashboard calls to avoid notification spam
-            if (!originalRequest?.url?.includes('/analytics/') && !originalRequest?.url?.includes('/security/')) {
+            if (
+              !originalRequest?.url?.includes('/analytics/') &&
+              !originalRequest?.url?.includes('/security/')
+            ) {
               toast.error('Server is experiencing issues. Please try again later.')
             }
           }
           break
         }
-          
+
         default:
           // Generic error
           logger.error(`API Error ${status}`, {
             url: originalRequest?.url,
-            message: errorData?.message || error.message
+            message: errorData?.message || error.message,
           })
           toast.error(errorData?.message || 'An unexpected error occurred')
       }
@@ -244,14 +259,16 @@ api.interceptors.response.use(
       if (isDev) {
         toast.error('Cannot connect to server. Please ensure the backend is running.')
       } else {
-        toast.error('Server is starting up — please wait 30 seconds and try again.', { duration: 6000 })
+        toast.error('Server is starting up — please wait 30 seconds and try again.', {
+          duration: 6000,
+        })
       }
     } else {
       // Error setting up request
       logger.error('Request setup error', error)
       toast.error('An error occurred while making the request')
     }
-    
+
     return Promise.reject(error)
   }
 )
@@ -294,8 +311,16 @@ export const authAPI = {
 
 // Exam API
 export const examAPI = {
-  getExams: async (program?: string) => {
-    const response = await api.get('/api/exams', { params: { program } })
+  getExams: async (
+    program?: string,
+    page: number = 1,
+    pageSize: number = 20,
+    sortBy?: string,
+    sortOrder?: number
+  ) => {
+    const response = await api.get('/api/exams', {
+      params: { program, page, page_size: pageSize, sort_by: sortBy, sort_order: sortOrder },
+    })
     return response.data
   },
   getExam: async (examId: string) => {
@@ -324,6 +349,14 @@ export const resultsAPI = {
   },
   getResult: async (submissionId: string) => {
     const response = await api.get(`/api/results/${submissionId}`)
+    return response.data
+  },
+  getExamResults: async (examId: string) => {
+    const response = await api.get(`/api/results/export/${examId}`)
+    return response.data
+  },
+  getDetailedResult: async (submissionId: string) => {
+    const response = await api.get(`/api/results/${submissionId}/detailed`)
     return response.data
   },
 }
@@ -410,7 +443,7 @@ export const sessionAPI = {
   startSession: async (examId: string, data: any) => {
     const response = await api.post('/api/sessions/start', {
       exam_id: examId,
-      ...data
+      ...data,
     })
     return response.data
   },
@@ -431,8 +464,8 @@ export const sessionAPI = {
 // Notifications API
 export const notificationsAPI = {
   getNotifications: async (unreadOnly: boolean = false, limit: number = 50) => {
-    const response = await api.get('/api/notifications', { 
-      params: { unread_only: unreadOnly, limit } 
+    const response = await api.get('/api/notifications', {
+      params: { unread_only: unreadOnly, limit },
     })
     return response.data
   },
@@ -512,7 +545,7 @@ export const analyticsAPI = {
   },
   getStudentHistory: async (studentId: string, days: number = 90) => {
     const response = await api.get(`/api/analytics/student/${studentId}/history`, {
-      params: { days }
+      params: { days },
     })
     return response.data
   },
@@ -524,11 +557,7 @@ export const analyticsAPI = {
     const response = await api.get('/api/analytics/system/health')
     return response.data
   },
-  generateReport: async (data: {
-    start_date: string
-    end_date: string
-    type?: string
-  }) => {
+  generateReport: async (data: { start_date: string; end_date: string; type?: string }) => {
     const response = await api.post('/api/analytics/report', data)
     return response.data
   },
@@ -538,7 +567,9 @@ export const analyticsAPI = {
     return response.data
   },
   getSecurityAlerts: async () => {
-    const response = await api.get('/api/security/events', { params: { per_page: 10, resolved: false } })
+    const response = await api.get('/api/security/events', {
+      params: { per_page: 10, resolved: false },
+    })
     const events = response.data.events || []
     return events.map((ev: any) => ({
       type: ev.severity === 'critical' || ev.severity === 'high' ? 'warning' : 'info',
@@ -566,11 +597,23 @@ export const analyticsAPI = {
 }
 
 export const plagiarismAPI = {
-  checkText: async (data: { text: string; content_type?: string; language?: string; student_name?: string; student_id?: string }) => {
+  checkText: async (data: {
+    text: string
+    content_type?: string
+    language?: string
+    student_name?: string
+    student_id?: string
+  }) => {
     const response = await api.post('/api/plagiarism/check', data)
     return response.data
   },
-  submitForComparison: async (data: { text: string; content_type?: string; language?: string; student_name?: string; student_id?: string }) => {
+  submitForComparison: async (data: {
+    text: string
+    content_type?: string
+    language?: string
+    student_name?: string
+    student_id?: string
+  }) => {
     const response = await api.post('/api/plagiarism/submit', data)
     return response.data
   },

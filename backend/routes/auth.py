@@ -12,15 +12,15 @@ POST /api/auth/refresh
 POST /api/auth/change-password
 """
 
-import asyncio
 from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr, field_validator
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from bson import ObjectId
 
 from database import get_db
-from middleware.auth import create_access_token, get_current_user
+from middleware.auth import create_access_token, get_current_user, verify_token_allow_expired
 from config import settings
 from utils.password import hash_password, verify_password
 from utils.password_validation import validate_password_strength, is_weak_password
@@ -36,6 +36,7 @@ from utils.otp_service import generate_otp, ensure_otp_indexes, store_otp, verif
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+security_scheme = HTTPBearer()
 
 
 def serialize_user(user: dict) -> dict:
@@ -68,6 +69,13 @@ class RegisterRequest(BaseModel):
             raise ValueError("This password is too common. Please choose a stronger password.")
         validate_password_strength(v)
         return v
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, v):
+        if v.lower() not in ["student", "teacher", "admin"]:
+            raise ValueError("Invalid role")
+        return v.lower()
 
 
 class SendOTPRequest(BaseModel):
@@ -209,8 +217,6 @@ async def register(request: Request, reg_data: RegisterRequest, db=Depends(get_d
             raise HTTPException(status_code=400, detail="Email already registered")
 
     role = reg_data.role.lower()
-    if role not in ["student", "teacher", "admin"]:
-        raise HTTPException(status_code=400, detail="Invalid role")
 
     # Admin: immediate access, no OTP needed
     if role == "admin":
@@ -524,10 +530,28 @@ async def update_me(updates: dict, db=Depends(get_db), current_user: dict = Depe
 
 
 @router.post("/refresh")
-async def refresh_token(current_user: dict = Depends(get_current_user)):
-    """Refresh JWT token — returns a new token with fresh expiry"""
+async def refresh_token(
+    credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
+    db=Depends(get_db)
+):
+    """
+    Refresh JWT token — accepts even an expired token (within 7 days of expiry).
+    This prevents the 'session expired on login' issue where the token expired
+    between browser visits and the refresh call itself was rejected.
+    """
+    payload = verify_token_allow_expired(credentials.credentials)
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+
+    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    if user.get("status") in ["suspended", "rejected"]:
+        raise HTTPException(status_code=403, detail="Account is not active")
+
     token = create_access_token(
-        {"sub": str(current_user["_id"]), "role": current_user["role"]},
+        {"sub": str(user["_id"]), "role": user["role"]},
         expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     return {"access_token": token, "token_type": "bearer"}
@@ -547,8 +571,10 @@ async def change_password(
     """Change password for current user"""
     if not verify_password(request.current_password, current_user["password"]):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
-    if len(request.new_password) < 8:
-        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+    try:
+        validate_password_strength(request.new_password)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     if is_weak_password(request.new_password):
         raise HTTPException(status_code=400, detail="This password is too common. Please choose a stronger password.")
     await db.users.update_one(

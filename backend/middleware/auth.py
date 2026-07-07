@@ -4,7 +4,7 @@ JWT Authentication Middleware
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError, jwt
+from jose import JWTError, ExpiredSignatureError, jwt
 from datetime import datetime, timedelta
 from typing import Optional
 from bson import ObjectId
@@ -29,6 +29,29 @@ def verify_token(token: str) -> dict:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+def verify_token_allow_expired(token: str) -> dict:
+    """
+    Decode a JWT token even if it has expired.
+    Used exclusively by the /api/auth/refresh endpoint so that
+    clients can renew their session without being immediately logged out.
+    Raises 401 only for completely invalid (tampered/wrong-key) tokens.
+    """
+    try:
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+            options={"verify_exp": False},  # Allow expired tokens
+        )
+        return payload
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token — cannot refresh",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
