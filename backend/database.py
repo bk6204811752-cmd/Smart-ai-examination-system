@@ -36,6 +36,7 @@ class InMemoryCursor:
         self._sort_key = None
         self._sort_rev = False
         self._limit_n = None
+        self._skip_n = 0
 
     def sort(self, field, direction=1):
         self._sort_key = field
@@ -46,10 +47,16 @@ class InMemoryCursor:
         self._limit_n = n
         return self
 
+    def skip(self, n):
+        self._skip_n = n
+        return self
+
     def _get_docs(self):
         docs = list(self._docs)
         if self._sort_key:
             docs = sorted(docs, key=lambda d: str(d.get(self._sort_key, "")), reverse=self._sort_rev)
+        if self._skip_n:
+            docs = docs[self._skip_n:]
         if self._limit_n:
             docs = docs[:self._limit_n]
         return docs
