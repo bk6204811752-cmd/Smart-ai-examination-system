@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { useAuthStore } from '../store/globalStore'
 import { authAPI } from '../lib/api'
 import { toast } from 'sonner'
+import { supabase } from '../lib/supabase'
 import {
   GraduationCap, Eye, EyeOff, Shield, Lock, Mail,
   Sparkles, ChevronRight, Brain, BarChart3
@@ -42,12 +43,26 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const data = await authAPI.login(email.trim().toLowerCase(), password)
-      if (data.access_token) {
-        login(data.user, data.access_token)
-        toast.success(`Welcome back, ${data.user?.full_name || data.user?.name || 'User'}! 👋`)
+      // 1. Authenticate using Supabase
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      })
 
-        const role = data.user?.role
+      if (error) throw error
+
+      if (data.session) {
+        const token = data.session.access_token
+        // Set token temporarily so backend profile fetch is authenticated
+        login(null, token)
+
+        // 2. Fetch profile from MongoDB
+        const userProfile = await authAPI.getCurrentUser()
+        login(userProfile, token)
+
+        toast.success(`Welcome back, ${userProfile.full_name || 'User'}! 👋`)
+
+        const role = userProfile.role
         if (role === 'admin') navigate('/admin/dashboard')
         else if (role === 'teacher') navigate('/teacher/dashboard')
         else navigate('/student/dashboard')
@@ -56,7 +71,10 @@ export default function LoginPage() {
       const status = err?.response?.status
       const detail = err?.response?.data?.detail || err?.message
 
-      if (!err.response) {
+      if (err.message && !err.response) {
+        // Handle raw Supabase authentication errors
+        toast.error(err.message)
+      } else if (!err.response) {
         // Network error — backend not reachable
         const isDev = import.meta.env.DEV
         if (isDev) {
@@ -67,11 +85,12 @@ export default function LoginPage() {
       } else if (status === 403 && detail?.toLowerCase().includes('pending')) {
         toast.error('Your account is pending admin approval. You will be notified once approved.', { duration: 6000 })
       } else if (status === 403 && detail?.toLowerCase().includes('unverified')) {
-        toast.error('Please verify your email first. Check your inbox for the OTP.', { duration: 6000 })
+        toast.error('Please verify your email first. Check your inbox for the confirmation link.', { duration: 6000 })
       } else {
         toast.error(detail || 'Invalid credentials. Please try again.')
       }
-    } finally {
+    }
+ finally {
       setLoading(false)
     }
   }

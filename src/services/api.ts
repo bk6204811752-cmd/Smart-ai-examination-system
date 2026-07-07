@@ -6,6 +6,7 @@
 import { logger } from '../lib/logger'
 import { cache } from './cache'
 import config from '../config/production'
+import { supabase } from '../lib/supabase'
 
 interface RequestConfig {
   method?: string
@@ -68,12 +69,13 @@ class APIService {
 
           const timeoutId = setTimeout(() => controller.abort(), timeout)
 
+          const authHeaders = await this.getAuthHeaders()
           const fetchOptions: RequestInit = {
             method,
             signal: controller.signal,
             headers: {
               'Content-Type': 'application/json',
-              ...this.getAuthHeaders(),
+              ...authHeaders,
               ...options.headers
             }
           }
@@ -194,8 +196,9 @@ class APIService {
   /**
    * Get authentication headers
    */
-  private getAuthHeaders(): Record<string, string> {
-    const token = localStorage.getItem('token')
+  private async getAuthHeaders(): Promise<Record<string, string>> {
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token || localStorage.getItem('token')
     return token ? { Authorization: `Bearer ${token}` } : {}
   }
 

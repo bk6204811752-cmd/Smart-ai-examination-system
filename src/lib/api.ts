@@ -2,6 +2,7 @@ import axios, { AxiosError, InternalAxiosRequestConfig, AxiosResponse } from 'ax
 import { useAuthStore } from '../store/globalStore'
 import { logger } from './logger'
 import { toast } from 'sonner'
+import { supabase } from './supabase'
 
 // Backend URL:
 //   Production → VITE_API_URL env var (set in Vercel Dashboard → points to Render)
@@ -55,8 +56,10 @@ export const api = axios.create({
 
 // Request interceptor with auth token and logging
 api.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    const token = useAuthStore.getState().token
+  async (config: InternalAxiosRequestConfig) => {
+    // Dynamically retrieve token from Supabase session (handles silent refresh automatically)
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token || useAuthStore.getState().token
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -77,18 +80,6 @@ api.interceptors.request.use(
     return Promise.reject(error)
   }
 )
-
-// ── Token Refresh State ──────────────────────────────────────────────────────
-let isRefreshing = false
-let failedQueue: Array<{ resolve: (token: string) => void; reject: (err: any) => void }> = []
-
-const processFailedQueue = (error: any, token: string | null = null) => {
-  failedQueue.forEach(({ resolve, reject }) => {
-    if (error) reject(error)
-    else resolve(token!)
-  })
-  failedQueue = []
-}
 
 // Response interceptor with comprehensive error handling
 api.interceptors.response.use(
@@ -113,68 +104,26 @@ api.interceptors.response.use(
       const status = error.response.status
       const errorData = error.response.data as any
 
-      // ── 401 Unauthorized: Try token refresh first ─────────────────────────
+      // ── 401 Unauthorized: Session is invalid or expired ─────────────────────────
       if (status === 401) {
-        const currentToken = useAuthStore.getState().token
-        // Only skip refresh for truly public auth endpoints (login, register, OTP)
-        // DO NOT skip for /api/auth/me, /api/auth/change-password etc. (they need refresh)
-        const publicAuthEndpoints = ['/api/auth/login', '/api/auth/register', '/api/auth/send-otp', '/api/auth/verify-otp', '/api/auth/forgot-password', '/api/auth/reset-password', '/api/auth/refresh']
+        // Only skip logout for public auth endpoints (login, register, forgot-password etc)
+        const publicAuthEndpoints = ['/api/auth/login', '/api/auth/register', '/api/auth/send-otp', '/api/auth/verify-otp', '/api/auth/forgot-password', '/api/auth/reset-password']
         const isPublicAuthEndpoint = publicAuthEndpoints.some(ep => originalRequest?.url?.includes(ep))
 
-        // Skip refresh for public auth endpoints (wrong password etc) or if no token
-        if (!currentToken || isPublicAuthEndpoint || originalRequest._retry) {
+        if (isPublicAuthEndpoint) {
           return Promise.reject(error)
         }
 
-        // If already refreshing, queue this request
-        if (isRefreshing) {
-          return new Promise((resolve, reject) => {
-            failedQueue.push({
-              resolve: (token: string) => {
-                if (originalRequest.headers)
-                  originalRequest.headers.Authorization = `Bearer ${token}`
-                resolve(api(originalRequest))
-              },
-              reject,
-            })
-          })
-        }
-
-        // Mark as refreshing
-        originalRequest._retry = true
-        isRefreshing = true
-
+        logger.warn('Token invalid or expired — logging out')
         try {
-          // Attempt token refresh
-          const refreshRes = await axios.post(
-            `${API_URL}/api/auth/refresh`,
-            {},
-            { headers: { Authorization: `Bearer ${currentToken}` }, timeout: 10000 }
-          )
-          const newToken: string = refreshRes.data.access_token
-
-          // Update token in store (keep existing user data)
-          useAuthStore.getState().setToken(newToken)
-
-          // Update default header + retry queued requests
-          if (originalRequest.headers) originalRequest.headers.Authorization = `Bearer ${newToken}`
-          processFailedQueue(null, newToken)
-
-          logger.info('Token refreshed successfully')
-          return api(originalRequest)
-        } catch (refreshError) {
-          // Refresh failed → logout
-          processFailedQueue(refreshError, null)
-          logger.warn('Token refresh failed — logging out')
-          useAuthStore.getState().logout()
-          toast.error('Session expired. Please login again.')
-          setTimeout(() => {
-            window.location.href = '/login'
-          }, 1500)
-          return Promise.reject(refreshError)
-        } finally {
-          isRefreshing = false
-        }
+          await supabase.auth.signOut()
+        } catch (_) {}
+        useAuthStore.getState().logout()
+        toast.error('Session expired. Please login again.')
+        setTimeout(() => {
+          window.location.href = '/login'
+        }, 1500)
+        return Promise.reject(error)
       }
 
       // ── Other errors ──────────────────────────────────────────────────────

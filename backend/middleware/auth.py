@@ -23,7 +23,13 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 
 def verify_token(token: str) -> dict:
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        # verify_aud=False is required since Supabase aud claim defaults to "authenticated"
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+            options={"verify_aud": False}
+        )
         return payload
     except JWTError:
         raise HTTPException(
@@ -45,7 +51,7 @@ def verify_token_allow_expired(token: str) -> dict:
             token,
             settings.SECRET_KEY,
             algorithms=[settings.ALGORITHM],
-            options={"verify_exp": False},  # Allow expired tokens
+            options={"verify_exp": False, "verify_aud": False},  # Allow expired tokens and ignore aud claim
         )
         return payload
     except JWTError:
@@ -61,13 +67,13 @@ async def get_current_user(
     db=Depends(get_db)
 ):
     payload = verify_token(credentials.credentials)
-    user_id = payload.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Invalid token payload")
+    email = payload.get("email")
+    if not email:
+        raise HTTPException(status_code=401, detail="Invalid token payload: missing email claim")
 
-    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    user = await db.users.find_one({"email": email.lower()})
     if not user:
-        raise HTTPException(status_code=401, detail="User not found")
+        raise HTTPException(status_code=401, detail="User profile not found in system database")
     if user.get("status") == "suspended":
         raise HTTPException(status_code=403, detail="Account suspended")
 

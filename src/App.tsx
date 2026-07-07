@@ -6,6 +6,8 @@ import { performanceMonitor } from './lib/performanceMonitor'
 import { offlineStorage } from './lib/offlineStorage'
 import { logger } from './lib/logger'
 import AccessibilityPanel from './components/AccessibilityPanel'
+import { supabase } from './lib/supabase'
+import { authAPI } from './lib/api'
 
 // ─── Layouts ────────────────────────────────────────────────────────────────
 const StudentLayout = lazy(() => import('./components/layouts/StudentLayout'))
@@ -97,6 +99,29 @@ const queryClient = new QueryClient({
 
 function App() {
   const { user, isAuthenticated } = useAuthStore()
+
+  useEffect(() => {
+    // Synchronize Supabase authentication state with Zustand
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (session) {
+          const token = session.access_token
+          useAuthStore.getState().setToken(token)
+          try {
+            const userProfile = await authAPI.getCurrentUser()
+            useAuthStore.getState().login(userProfile, token)
+          } catch (error) {
+            logger.error('Failed to load user profile on auth change', error)
+          }
+        } else {
+          useAuthStore.getState().logout()
+        }
+      }
+    )
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [])
 
   useEffect(() => {
     let cleanupInterval: NodeJS.Timeout | null = null

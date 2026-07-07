@@ -141,10 +141,10 @@ interface AuthState {
 }
 
 interface AuthActions {
-  login: (user: User, token: string) => void
+  login: (user: User | null, token: string) => void
   logout: () => void
   updateUser: (updates: Partial<User>) => void
-  setUser: (user: User) => void // compatibility alias
+  setUser: (user: User | null) => void // compatibility alias
   setToken: (token: string) => void // compatibility alias
   updatePreferences: (preferences: Partial<UserPreferences>) => void
   refreshSession: () => void
@@ -158,7 +158,7 @@ export const useAuthStore = create<AuthState & AuthActions>()(
         user: null,
         token: null,
         isAuthenticated: false,
-
+ 
         // Actions
         login: (user, token) =>
           set({
@@ -166,19 +166,19 @@ export const useAuthStore = create<AuthState & AuthActions>()(
             token,
             isAuthenticated: true,
           }),
-
+ 
         logout: () =>
           set({
             user: null,
             token: null,
             isAuthenticated: false,
           }),
-
+ 
         updateUser: updates =>
           set(state => ({
             user: state.user ? { ...state.user, ...updates } : null,
           })),
-
+ 
         updatePreferences: preferences =>
           set(state => ({
             user: state.user
@@ -188,34 +188,15 @@ export const useAuthStore = create<AuthState & AuthActions>()(
                 }
               : null,
           })),
-
-        // Session refresh: calls refresh endpoint to extend JWT expiry
-        refreshSession: async () => {
-          try {
-            const { default: axios } = await import('axios')
-            const token = get().token
-            if (!token) return
-            const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000'
-            const res = await axios.post(
-              `${API_URL}/api/auth/refresh`,
-              {},
-              {
-                headers: { Authorization: `Bearer ${token}` },
-              }
-            )
-            if (res.data?.access_token) {
-              set({ token: res.data.access_token })
-            }
-          } catch (e) {
-            // Silent fail - token refresh handled by api.ts interceptor
-          }
-        },
-
+ 
+        // Session refresh: no-op since Supabase client handles it dynamically
+        refreshSession: async () => {},
+ 
         // Compatibility aliases for legacy code
-        setUser: (user: User) =>
+        setUser: (user: User | null) =>
           set(() => ({
             user,
-            isAuthenticated: true,
+            isAuthenticated: !!user,
           })),
         setToken: (token: string) => set({ token }),
       })),
@@ -279,7 +260,6 @@ export const useExamStore = create<ExamState & ExamActions>()(
 
       updateExam: (id, updates) =>
         set(state => {
-          // @ts-expect-error - Zustand state mutation
           const index = state.exams.findIndex((e: any) => e._id === id)
           if (index !== -1) {
             state.exams[index] = { ...state.exams[index], ...updates }
@@ -291,7 +271,6 @@ export const useExamStore = create<ExamState & ExamActions>()(
 
       deleteExam: id =>
         set(state => {
-          // @ts-expect-error - Zustand state mutation
           state.exams = state.exams.filter((e: any) => e._id !== id)
           if (state.currentExam?._id === id) {
             state.currentExam = null

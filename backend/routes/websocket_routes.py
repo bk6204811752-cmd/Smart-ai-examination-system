@@ -31,12 +31,24 @@ async def verify_ws_token(token: str) -> dict:
         if not token:
             raise ValueError("No token provided")
         
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id = payload.get("sub")
-        if not user_id:
-            raise ValueError("No user in token")
+        # verify_aud=False is required since Supabase aud claim defaults to "authenticated"
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+            options={"verify_aud": False}
+        )
+        email = payload.get("email")
+        if not email:
+            raise ValueError("No email in token")
         
-        role = payload.get("role", "student")
+        db = get_db()
+        user = await db.users.find_one({"email": email.lower()})
+        if not user:
+            raise ValueError("User profile not found in system database")
+        
+        user_id = str(user["_id"])
+        role = user.get("role", "student")
         return {"user_id": user_id, "role": role}
     except JWTError as e:
         logger.warning(f"WebSocket JWT verification failed: {e}")

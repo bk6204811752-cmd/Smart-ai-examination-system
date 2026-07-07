@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { useAuthStore } from '../store/globalStore'
 import { authAPI } from '../lib/api'
 import { toast } from 'sonner'
+import { supabase } from '../lib/supabase'
 import {
   GraduationCap,
   Mail,
@@ -179,50 +180,57 @@ export default function RegisterPage() {
   const handleSubmit = async () => {
     setIsLoading(true)
     try {
-      const response = await authAPI.register(formData)
-
-      if (response.pending) {
-        if (response.needs_otp) {
-          setNeedsOTP(true)
-          setRegistrationEmail(response.email || formData.email)
-          setOtpSent(true)
-          setOtpResendTimer(OTP_COUNTDOWN)
-          setIsSandbox(!!response.is_sandbox)
-          setStep(3)
-          if (response.is_sandbox) {
-            toast.warning('📬 [Sandbox Mode] SMTP not configured. Use OTP: 123456', {
-              duration: 10000,
-              description:
-                'Check backend terminal logs for the actual generated OTP, or use 123456 as bypass.',
-            })
-          } else {
-            toast.success('📧 OTP sent to your email!', {
-              duration: 4000,
-              description: 'Please check your inbox and enter the 6-digit code.',
-            })
+      // 1. Register with Supabase
+      const { data, error } = await supabase.auth.signUp({
+        email: formData.email.trim().toLowerCase(),
+        password: formData.password,
+        options: {
+          data: {
+            full_name: formData.full_name,
+            role: formData.role,
           }
-        } else {
-          toast.success('🎉 Registration successful! Awaiting admin approval.', {
-            duration: 6000,
-            description: 'You will be notified once your account is activated.',
-          })
-          setTimeout(() => navigate('/login'), 3000)
         }
-      } else {
-        login(response.user, response.access_token)
-        toast.success('✅ Welcome to PCMT! Your account is ready.')
-        const role = response.user?.role
-        if (role === 'admin') navigate('/admin/dashboard')
-        else if (role === 'teacher') navigate('/teacher/dashboard')
-        else navigate('/student/dashboard')
+      })
+
+      if (error) throw error
+
+      if (data.user) {
+        // 2. Create profile in MongoDB
+        const response = await authAPI.register({
+          email: formData.email.trim().toLowerCase(),
+          full_name: formData.full_name,
+          role: formData.role,
+          program: formData.program,
+          semester: formData.semester,
+          department: formData.department
+        })
+
+        // If email confirmation is enabled on Supabase, the session will be null
+        if (!data.session) {
+          toast.success('🎉 Registration successful!', {
+            duration: 10000,
+            description: 'Please check your inbox for the Supabase confirmation link to verify your email.',
+          })
+          setTimeout(() => navigate('/login'), 4000)
+        } else {
+          // Instantly logged in (if email confirmation is disabled)
+          const token = data.session.access_token
+          login(response.user, token)
+          toast.success('✅ Welcome to PCMT! Your account is ready.')
+          const role = response.user?.role
+          if (role === 'admin') navigate('/admin/dashboard')
+          else if (role === 'teacher') navigate('/teacher/dashboard')
+          else navigate('/student/dashboard')
+        }
       }
-    } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Registration failed. Please try again.')
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || err.message || 'Registration failed. Please try again.')
       setStep(0)
     } finally {
       setIsLoading(false)
     }
   }
+
 
   const passwordStrength = (pwd: string) => {
     let score = 0

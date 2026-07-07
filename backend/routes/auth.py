@@ -55,7 +55,7 @@ class LoginRequest(BaseModel):
 
 class RegisterRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: Optional[str] = None
     full_name: str
     role: str = "student"
     program: Optional[str] = None
@@ -65,6 +65,8 @@ class RegisterRequest(BaseModel):
     @field_validator("password")
     @classmethod
     def validate_password(cls, v):
+        if v is None:
+            return v
         if is_weak_password(v):
             raise ValueError("This password is too common. Please choose a stronger password.")
         validate_password_strength(v)
@@ -205,67 +207,36 @@ async def login(request: Request, login_data: LoginRequest, db=Depends(get_db)):
 
 @router.post("/register")
 async def register(request: Request, reg_data: RegisterRequest, db=Depends(get_db)):
-    # Check if email already registered
+    # Check if email already registered in MongoDB
     existing = await db.users.find_one({"email": reg_data.email.lower()})
     if existing:
-        # If user is unverified (previous failed attempt), delete and allow re-registration
-        if existing.get("status") == "unverified" and not existing.get("email_verified"):
-            await db.users.delete_one({"email": reg_data.email.lower()})
-            await db.otps.delete_many({"email": reg_data.email.lower()})
-            logger.info(f"Deleted stale unverified user for re-registration: {reg_data.email}")
-        else:
-            raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=400, detail="Email already registered in system")
 
     role = reg_data.role.lower()
 
-    # Admin: immediate access, no OTP needed
-    if role == "admin":
-        user_doc = {
-            "email": reg_data.email.lower(),
-            "password": hash_password(reg_data.password),
-            "full_name": reg_data.full_name,
-            "role": role,
-            "status": "approved",
-            "is_active": True,
-            "email_verified": True,
-            "program": reg_data.program,
-            "semester": reg_data.semester,
-            "department": reg_data.department,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "avatar": None,
-            "cgpa": None,
-            "preferences": {
-                "theme": "light", "fontSize": "medium", "language": "en",
-                "notifications": {"email": True, "push": True, "sms": False,
-                    "examReminders": True, "resultNotifications": True, "systemUpdates": True},
-                "accessibility": {"highContrast": False, "largeText": False,
-                    "colorBlindMode": "none", "screenReader": False, "keyboardOnly": False}
-            },
-            "statistics": {"totalExamsTaken": 0, "averageScore": 0,
-                "studyHours": 0, "rank": 0, "achievements": []}
-        }
-        result = await db.users.insert_one(user_doc)
-        user_doc["_id"] = result.inserted_id
-        token = create_access_token(
-            {"sub": str(result.inserted_id), "role": role},
-            expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-        )
-        return {"access_token": token, "token_type": "bearer", "user": serialize_user(user_doc), "pending": False}
-
-    # Check if SMTP is configured. If not, we will proceed in Sandbox Mode.
+    # Determine status and active flag
     email_active = _email_configured()
-    if not email_active:
-        logger.warning("📬 [SANDBOX MODE] SMTP not configured. Registration will proceed using dummy OTP verification (123456).")
+    
+    if role == "admin":
+        status_val = "approved"
+        is_active_val = True
+    elif email_active:
+        # Real email flow: mark as pending, wait for admin approval
+        status_val = "pending"
+        is_active_val = False
+    else:
+        # Sandbox mode: auto-approve
+        status_val = "approved"
+        is_active_val = True
 
-    # Create user as "unverified" — they cannot login until OTP is verified
     user_doc = {
         "email": reg_data.email.lower(),
-        "password": hash_password(reg_data.password),
+        "password": hash_password(reg_data.password) if reg_data.password else None,
         "full_name": reg_data.full_name,
         "role": role,
-        "status": "unverified",   # Changes to "pending" only after OTP verified
-        "is_active": False,        # Inactive until admin approves
-        "email_verified": False,   # False until OTP verified
+        "status": status_val,
+        "is_active": is_active_val,
+        "email_verified": True,  # Set True since Supabase handles email verification
         "program": reg_data.program,
         "semester": reg_data.semester,
         "department": reg_data.department,
@@ -284,42 +255,30 @@ async def register(request: Request, reg_data: RegisterRequest, db=Depends(get_d
     }
 
     result = await db.users.insert_one(user_doc)
-    inserted_id = result.inserted_id
-    logger.info(f"New user created (unverified): {reg_data.email} (role: {role})")
+    user_doc["_id"] = result.inserted_id
+    logger.info(f"New user profile created in MongoDB: {reg_data.email} (role: {role}, status: {status_val})")
 
-    # ── Send OTP ──
-    otp_code = generate_otp()
-    await store_otp(db, reg_data.email, otp_code)
-    
-    sent = False
-    sandbox_fallback = not email_active
-
-    if email_active:
+    # Send pending approval email if not immediately approved
+    if email_active and status_val == "pending":
         try:
-            sent = await send_otp_email_async(reg_data.email, otp_code, settings.OTP_EXPIRE_MINUTES)
-            if not sent:
-                logger.warning(f"OTP email send returned False for {reg_data.email}. Falling back to Sandbox Mode.")
-                sandbox_fallback = True
-            else:
-                logger.info(f"✅ OTP sent successfully to {reg_data.email}")
+            await send_registration_pending_email_async(reg_data.email, reg_data.full_name)
         except Exception as e:
-            logger.warning(f"Exception sending OTP email to {reg_data.email}: {e}. Falling back to Sandbox Mode.")
-            sandbox_fallback = True
+            logger.error(f"Failed to send pending email to {reg_data.email}: {e}")
 
-    if sandbox_fallback:
-        logger.info(f"📬 [SANDBOX MODE] OTP generated for {reg_data.email}: {otp_code}. Use '123456' as sandbox bypass.")
+        admin_email = _get_admin_email()
+        if admin_email and admin_email != reg_data.email:
+            try:
+                await send_admin_new_user_email_async(admin_email, reg_data.full_name, reg_data.email, role)
+            except Exception as e:
+                logger.error(f"Failed to send admin notification email: {e}")
 
-    message = "Registration successful! Please check your email for the OTP verification code."
-    if sandbox_fallback:
-        message = "Registration successful! [SANDBOX MODE] SMTP connection failed or not configured. Use dummy OTP: 123456"
-
+    # Return structure matching what front-end expects
     return {
-        "message": message,
-        "pending": True,
-        "needs_otp": True,   # Always True now — OTP is mandatory
-        "email": reg_data.email,
-        "is_sandbox": sandbox_fallback,
+        "message": "Registration successful! Account pending admin approval." if status_val == "pending" else "Registration successful!",
+        "pending": status_val == "pending",
+        "user": serialize_user(user_doc)
     }
+
 
 
 @router.post("/send-otp")
