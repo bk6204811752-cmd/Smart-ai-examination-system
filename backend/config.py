@@ -117,23 +117,36 @@ class Settings(BaseSettings):
         default_secret = "pcmt-super-secret-key-change-in-production-min-32-characters-required"
         import logging
         _log = logging.getLogger(__name__)
+        render_env = os.getenv("RENDER", "").lower()
+        render_demo_mode = self.is_production and render_env == "true" and self.ALLOW_IN_MEMORY_DB
         
         # SECRET_KEY validation
         if len(self.SECRET_KEY) < 32:
-            raise RuntimeError("SECRET_KEY must be at least 32 characters long")
+            if render_demo_mode:
+                _log.warning("SECRET_KEY is shorter than 32 characters in Render demo mode.")
+            else:
+                raise RuntimeError("SECRET_KEY must be at least 32 characters long")
         
         if self.SECRET_KEY == default_secret:
-            raise RuntimeError(
-                "DEFAULT SECRET_KEY DETECTED IN PRODUCTION! "
-                "Generate a secure key with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
-            )
+            if render_demo_mode:
+                _log.warning("DEFAULT SECRET_KEY detected in Render demo mode.")
+            else:
+                raise RuntimeError(
+                    "DEFAULT SECRET_KEY DETECTED IN PRODUCTION! "
+                    "Generate a secure key with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+                )
         
         # In-memory database check
         if self.ALLOW_IN_MEMORY_DB:
-            raise RuntimeError(
-                "ALLOW_IN_MEMORY_DB=true is FORBIDDEN in production! "
-                "Configure MONGODB_URI to a real MongoDB instance."
-            )
+            if render_demo_mode:
+                _log.warning(
+                    "ALLOW_IN_MEMORY_DB=true detected on Render. Running in demo mode with in-memory storage."
+                )
+            else:
+                raise RuntimeError(
+                    "ALLOW_IN_MEMORY_DB=true is FORBIDDEN in production! "
+                    "Configure MONGODB_URI to a real MongoDB instance."
+                )
         
         # Email configuration check
         if not self.SMTP_USER or not self.SMTP_PASSWORD:
@@ -154,12 +167,12 @@ class Settings(BaseSettings):
                 _log.warning("Using default SECRET_KEY in production with in-memory DB — demo mode only")
         
         if self.is_production and self.DEBUG:
-            if not self.ALLOW_IN_MEMORY_DB:
+            if not render_demo_mode:
                 raise RuntimeError("DEBUG mode cannot be enabled in production")
             else:
                 _log.warning("DEBUG=True in production — allowed for demo/development Vercel deployment")
         
-        if self.is_production and self.ENVIRONMENT not in ["production", "prod"] and not self.ALLOW_IN_MEMORY_DB:
+        if self.is_production and self.ENVIRONMENT not in ["production", "prod"] and not render_demo_mode:
             raise RuntimeError(f"Invalid ENVIRONMENT for production: {self.ENVIRONMENT}")
 
 
