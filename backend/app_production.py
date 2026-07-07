@@ -173,6 +173,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # ── Health Check ─────────────────────────────────────────────────────────────
 
+from database import is_using_memory
+
 @app.get("/api/health", tags=["health"])
 async def health_check():
     return {
@@ -180,6 +182,7 @@ async def health_check():
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,
         "college": settings.COLLEGE_NAME,
+        "database": "in-memory" if is_using_memory() else "mongodb",
     }
 
 
