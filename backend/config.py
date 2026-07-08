@@ -73,6 +73,10 @@ class Settings(BaseSettings):
     OTP_EXPIRE_MINUTES: int = 10
     OTP_LENGTH: int = 6
 
+    # Supabase Settings
+    SUPABASE_URL: str = ""
+    VITE_SUPABASE_URL: str = ""
+
     # AI/ML
     PROCTORING_ENABLED: bool = True
     FACE_DETECTION_INTERVAL: int = 2

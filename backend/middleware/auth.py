@@ -4,12 +4,17 @@ JWT Authentication Middleware
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError, ExpiredSignatureError, jwt
+from jose import JWTError, ExpiredSignatureError, jwt, jwk
 from datetime import datetime, timedelta
 from typing import Optional
 from bson import ObjectId
+import time
+import httpx
+import logging
 from config import settings
 from database import get_db
+
+logger = logging.getLogger(__name__)
 
 security = HTTPBearer()
 
@@ -21,9 +26,51 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
+_jwks_cache = None
+_jwks_last_fetched = 0
+
+def get_supabase_jwks(supabase_url: str) -> dict:
+    global _jwks_cache, _jwks_last_fetched
+    now = time.time()
+    # Cache for 1 hour to prevent constant network requests
+    if _jwks_cache is None or (now - _jwks_last_fetched > 3600):
+        try:
+            jwks_url = f"{supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
+            response = httpx.get(jwks_url, timeout=5.0)
+            response.raise_for_status()
+            _jwks_cache = response.json()
+            _jwks_last_fetched = now
+            logger.info("Successfully fetched and cached Supabase JWKS public keys")
+        except Exception as e:
+            logger.error(f"Failed to fetch Supabase JWKS from {supabase_url}: {e}")
+            if _jwks_cache is None:
+                raise RuntimeError("Could not fetch Supabase JWKS and no cache is available") from e
+    return _jwks_cache
+
+
 def verify_token(token: str) -> dict:
     try:
-        # verify_aud=False is required since Supabase aud claim defaults to "authenticated"
+        supabase_url = settings.SUPABASE_URL or settings.VITE_SUPABASE_URL
+        if supabase_url:
+            try:
+                jwks = get_supabase_jwks(supabase_url)
+                header = jwt.get_unverified_header(token)
+                kid = header.get("kid")
+                if kid:
+                    key_data = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
+                    if key_data:
+                        public_key = jwk.construct(key_data)
+                        payload = jwt.decode(
+                            token,
+                            public_key.to_pem(),
+                            algorithms=["ES256", "HS256"],
+                            options={"verify_aud": False}
+                        )
+                        return payload
+            except Exception as e:
+                logger.warning(f"JWKS verification failed, trying fallback: {e}")
+
+        # Fallback to local symmetric verification using SECRET_KEY / SUPABASE_JWT_SECRET
         key = settings.SUPABASE_JWT_SECRET or settings.SECRET_KEY
         payload = jwt.decode(
             token,
@@ -32,10 +79,10 @@ def verify_token(token: str) -> dict:
             options={"verify_aud": False}
         )
         return payload
-    except JWTError:
+    except JWTError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
+            detail=f"Invalid or expired token: {str(e)}",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -43,23 +90,40 @@ def verify_token(token: str) -> dict:
 def verify_token_allow_expired(token: str) -> dict:
     """
     Decode a JWT token even if it has expired.
-    Used exclusively by the /api/auth/refresh endpoint so that
-    clients can renew their session without being immediately logged out.
-    Raises 401 only for completely invalid (tampered/wrong-key) tokens.
     """
     try:
+        supabase_url = settings.SUPABASE_URL or settings.VITE_SUPABASE_URL
+        if supabase_url:
+            try:
+                jwks = get_supabase_jwks(supabase_url)
+                header = jwt.get_unverified_header(token)
+                kid = header.get("kid")
+                if kid:
+                    key_data = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
+                    if key_data:
+                        public_key = jwk.construct(key_data)
+                        payload = jwt.decode(
+                            token,
+                            public_key.to_pem(),
+                            algorithms=["ES256", "HS256"],
+                            options={"verify_exp": False, "verify_aud": False}
+                        )
+                        return payload
+            except Exception as e:
+                logger.warning(f"JWKS verification (expired allowed) failed, trying fallback: {e}")
+
         key = settings.SUPABASE_JWT_SECRET or settings.SECRET_KEY
         payload = jwt.decode(
             token,
             key,
             algorithms=[settings.ALGORITHM],
-            options={"verify_exp": False, "verify_aud": False},  # Allow expired tokens and ignore aud claim
+            options={"verify_exp": False, "verify_aud": False},
         )
         return payload
-    except JWTError:
+    except JWTError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token — cannot refresh",
+            detail=f"Invalid token — cannot refresh: {str(e)}",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
