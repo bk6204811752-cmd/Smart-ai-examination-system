@@ -131,6 +131,7 @@ if settings.is_production:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=settings.CORS_ORIGIN_REGEX if settings.CORS_ORIGIN_REGEX else None,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],  # Not "*"
     allow_headers=["Content-Type", "Authorization"],  # Not "*"
@@ -145,6 +146,7 @@ if settings.is_production:
             # Render backend domains
             "*.onrender.com",
             # Vercel frontend (making requests to backend)
+            "*.vercel.app",
             "pcmt-ai-exam-system.vercel.app",
             # Local dev
             "localhost",

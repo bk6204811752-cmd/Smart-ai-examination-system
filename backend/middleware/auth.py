@@ -24,9 +24,10 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 def verify_token(token: str) -> dict:
     try:
         # verify_aud=False is required since Supabase aud claim defaults to "authenticated"
+        key = settings.SUPABASE_JWT_SECRET or settings.SECRET_KEY
         payload = jwt.decode(
             token,
-            settings.SECRET_KEY,
+            key,
             algorithms=[settings.ALGORITHM],
             options={"verify_aud": False}
         )
@@ -47,9 +48,10 @@ def verify_token_allow_expired(token: str) -> dict:
     Raises 401 only for completely invalid (tampered/wrong-key) tokens.
     """
     try:
+        key = settings.SUPABASE_JWT_SECRET or settings.SECRET_KEY
         payload = jwt.decode(
             token,
-            settings.SECRET_KEY,
+            key,
             algorithms=[settings.ALGORITHM],
             options={"verify_exp": False, "verify_aud": False},  # Allow expired tokens and ignore aud claim
         )

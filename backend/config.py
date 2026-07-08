@@ -23,6 +23,7 @@ class Settings(BaseSettings):
 
     # JWT - Must use strong environment variable in production
     SECRET_KEY: str = "pcmt-super-secret-key-change-in-production-min-32-characters-required"
+    SUPABASE_JWT_SECRET: str = ""
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours (was 30 min)
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
@@ -37,7 +38,7 @@ class Settings(BaseSettings):
     ALLOW_IN_MEMORY_DB: bool = False  # NEVER enable in production
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000,https://pcmt-ai-exam-system.vercel.app"
     # Note: In production set CORS_ORIGINS env var to your exact Vercel URL
-    CORS_ORIGIN_REGEX: str = r"https://pcmt-ai-exam-system\.vercel\.app"
+    CORS_ORIGIN_REGEX: str = r"https://.*\.vercel\.app"
     
     # Security & Rate Limiting
     RATE_LIMIT_ENABLED: bool = True
