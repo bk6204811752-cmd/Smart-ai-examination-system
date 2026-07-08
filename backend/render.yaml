@@ -61,7 +61,13 @@ services:
       - key: RATE_LIMIT_ENABLED
         value: "true"
       - key: CORS_ORIGINS
-        value: "https://pcmt-ai-exam-system.vercel.app"
+        value: "https://pcmt-ai-exam-system.vercel.app,https://pcmt-ai-exam-system-git-main-bk6204811752s-projects.vercel.app"
+      - key: CORS_ORIGIN_REGEX
+        value: "https://.*\\.vercel\\.app"
+      - key: SUPABASE_URL
+        value: "https://sixxpcglbnzctglaxijfkr.supabase.co"
+      - key: VITE_SUPABASE_URL
+        value: "https://sixxpcglbnzctglaxijfkr.supabase.co"
       # ── SECRETS — Set these in Render Dashboard manually ──
       - key: MONGODB_URI
         sync: false

@@ -133,11 +133,29 @@ async def get_current_user(
     db=Depends(get_db)
 ):
     payload = verify_token(credentials.credentials)
-    email = payload.get("email")
-    if not email:
-        raise HTTPException(status_code=401, detail="Invalid token payload: missing email claim")
 
-    user = await db.users.find_one({"email": email.lower()})
+    # Backend-generated tokens use sub=str(user["_id"]) (MongoDB ObjectId)
+    # Supabase tokens use sub=supabase_user_uuid AND may include email
+    user_sub = payload.get("sub")
+    email = payload.get("email")
+
+    user = None
+
+    # Try lookup by MongoDB ObjectId first (backend JWT)
+    if user_sub:
+        try:
+            user = await db.users.find_one({"_id": ObjectId(user_sub)})
+        except Exception:
+            pass  # sub is not a valid ObjectId → try email fallback
+
+    # Fallback: lookup by email (Supabase JWT has email claim)
+    if not user and email:
+        user = await db.users.find_one({"email": email.lower()})
+
+    # Final fallback: treat sub as email (some token configs use email as sub)
+    if not user and user_sub and "@" in user_sub:
+        user = await db.users.find_one({"email": user_sub.lower()})
+
     if not user:
         raise HTTPException(status_code=401, detail="User profile not found in system database")
     if user.get("status") == "suspended":

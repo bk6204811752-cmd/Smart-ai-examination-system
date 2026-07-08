@@ -2,15 +2,15 @@ import axios, { AxiosError, InternalAxiosRequestConfig, AxiosResponse } from 'ax
 import { useAuthStore } from '../store/globalStore'
 import { logger } from './logger'
 import { toast } from 'sonner'
-import { supabase } from './supabase'
 
-// Backend URL:
-//   Production → VITE_API_URL env var (set in Vercel Dashboard → points to Render)
-//   Development → http://localhost:8000 (local FastAPI server)
+// Backend URL resolution:
+//   1. VITE_API_URL env var (set in Vercel Dashboard → points to Render)
+//   2. Development → http://localhost:8000 (local FastAPI server)
+//   3. Production fallback → hardcoded Render URL (never empty string!)
 const RENDER_BACKEND = 'https://pcmt-ai-exam-backend.onrender.com'
 const API_URL =
   (import.meta as any).env?.VITE_API_URL ||
-  ((import.meta as any).env?.DEV ? 'http://localhost:8000' : '')
+  ((import.meta as any).env?.DEV ? 'http://localhost:8000' : RENDER_BACKEND)
 
 // Offline request queue
 interface QueuedRequest {
@@ -57,21 +57,12 @@ export const api = axios.create({
 // Request interceptor with auth token and logging
 api.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
-    // Dynamically retrieve token from Supabase session (handles silent refresh automatically)
-    const { data: { session } } = await supabase.auth.getSession()
-    const token = session?.access_token || useAuthStore.getState().token
+    // Use backend JWT from localStorage (set on login)
+    // Also check Zustand store as fallback
+    const token = localStorage.getItem('token') || useAuthStore.getState().token
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`
     }
-
-    // Disabled: API request logging (too verbose)
-    // Uncomment only when debugging API issues
-    // if (import.meta.env.DEV && import.meta.env.VITE_DEBUG === 'true') {
-    //   logger.debug(`API Request: ${config.method?.toUpperCase()} ${config.url}`, {
-    //     params: config.params,
-    //     data: config.data
-    //   })
-    // }
 
     return config
   },
@@ -115,9 +106,7 @@ api.interceptors.response.use(
         }
 
         logger.warn('Token invalid or expired — logging out')
-        try {
-          await supabase.auth.signOut()
-        } catch (_) {}
+        localStorage.removeItem('token')
         useAuthStore.getState().logout()
         toast.error('Session expired. Please login again.')
         setTimeout(() => {

@@ -160,19 +160,25 @@ export const useAuthStore = create<AuthState & AuthActions>()(
         isAuthenticated: false,
  
         // Actions
-        login: (user, token) =>
+        login: (user, token) => {
+          // Store token in localStorage for API request interceptor
+          if (token) localStorage.setItem('token', token)
           set({
             user,
             token,
             isAuthenticated: true,
-          }),
+          })
+        },
  
-        logout: () =>
+        logout: () => {
+          // Clear token from localStorage on logout
+          localStorage.removeItem('token')
           set({
             user: null,
             token: null,
             isAuthenticated: false,
-          }),
+          })
+        },
  
         updateUser: updates =>
           set(state => ({

@@ -6,7 +6,6 @@ import { performanceMonitor } from './lib/performanceMonitor'
 import { offlineStorage } from './lib/offlineStorage'
 import { logger } from './lib/logger'
 import AccessibilityPanel from './components/AccessibilityPanel'
-import { supabase } from './lib/supabase'
 import { authAPI } from './lib/api'
 
 // ─── Layouts ────────────────────────────────────────────────────────────────
@@ -101,26 +100,26 @@ function App() {
   const { user, isAuthenticated } = useAuthStore()
 
   useEffect(() => {
-    // Synchronize Supabase authentication state with Zustand
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (session) {
-          const token = session.access_token
-          useAuthStore.getState().setToken(token)
-          try {
-            const userProfile = await authAPI.getCurrentUser()
-            useAuthStore.getState().login(userProfile, token)
-          } catch (error) {
-            logger.error('Failed to load user profile on auth change', error)
-          }
-        } else {
+    // Restore user session from backend JWT token (stored in localStorage)
+    // We no longer use Supabase for authentication — backend issues its own JWTs
+    const restoreSession = async () => {
+      const token = localStorage.getItem('token')
+      const currentUser = useAuthStore.getState().user
+      if (token && !currentUser) {
+        // Token exists but no user in memory — fetch profile from backend
+        useAuthStore.getState().setToken(token)
+        try {
+          const userProfile = await authAPI.getCurrentUser()
+          useAuthStore.getState().login(userProfile, token)
+        } catch (error) {
+          // Token invalid or expired — clear it
+          logger.warn('Stored token invalid, clearing session')
+          localStorage.removeItem('token')
           useAuthStore.getState().logout()
         }
       }
-    )
-    return () => {
-      subscription.unsubscribe()
     }
+    restoreSession()
   }, [])
 
   useEffect(() => {

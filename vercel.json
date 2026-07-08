@@ -6,10 +6,6 @@
   "installCommand": "npm ci",
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/index.py"
-    },
-    {
       "handle": "filesystem"
     },
     {
