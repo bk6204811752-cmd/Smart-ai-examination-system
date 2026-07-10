@@ -115,7 +115,7 @@ export default function AITutorPage() {
 
     // Simulate AI response
     setTimeout(() => {
-      const aiResponse = generateAIResponse(input, selectedSubject)
+      const aiResponse = generateAIResponse(input)
       addMessage(aiResponse)
       setIsTyping(false)
     }, 1500)

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuthStore } from '../store/globalStore'
-import { notificationsAPI } from '../lib/api'
+import { notificationsAPI, userAPI } from '../lib/api'
 import { toast } from 'sonner'
 import {
   Bell,
@@ -211,17 +211,39 @@ export default function NotificationCenterPage() {
   }
 
   const handleSendNotification = async () => {
-    // Mock send notification
-    console.log('Sending notification:', newNotification)
-    setShowCreateModal(false)
-    setNewNotification({
-      type: 'announcement',
-      title: '',
-      message: '',
-      priority: 'medium',
-      targetRole: 'all',
-      targetUsers: [],
-    })
+    try {
+      let userIDs: string[] = []
+      if (newNotification.targetRole === 'all') {
+        const allUsers = await userAPI.getUsers()
+        userIDs = allUsers.map((u: any) => u._id)
+      } else {
+        const allUsers = await userAPI.getUsers()
+        userIDs = allUsers
+          .filter((u: any) => u.role === newNotification.targetRole)
+          .map((u: any) => u._id)
+      }
+      await notificationsAPI.sendNotification({
+        user_ids: userIDs,
+        title: newNotification.title,
+        message: newNotification.message,
+        type: newNotification.type,
+        priority: newNotification.priority,
+        channels: ['push'],
+      })
+      toast.success('Notification sent successfully')
+      setShowCreateModal(false)
+      setNewNotification({
+        type: 'announcement',
+        title: '',
+        message: '',
+        priority: 'medium',
+        targetRole: 'all',
+        targetUsers: [],
+      })
+      loadNotifications()
+    } catch (error) {
+      toast.error('Failed to send notification')
+    }
   }
 
   // Calculate stats from notifications

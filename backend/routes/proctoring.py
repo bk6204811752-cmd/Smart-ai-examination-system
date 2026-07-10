@@ -14,6 +14,7 @@ from bson import ObjectId
 
 from database import get_db
 from middleware.auth import get_current_user, require_teacher_or_admin
+from utils.notifications_helper import create_notification
 
 router = APIRouter(prefix="/api/proctoring", tags=["proctoring"])
 
@@ -82,6 +83,25 @@ async def create_flag(
     }
     result = await db.proctoring_flags.insert_one(flag_doc)
     flag_doc["_id"] = str(result.inserted_id)
+
+    # Notify teachers monitoring this exam about the violation
+    try:
+        exam = await db.exams.find_one({"_id": ObjectId(data.exam_id)})
+        if exam:
+            created_by = exam.get("created_by")
+            teacher_id = str(created_by) if created_by else None
+            if teacher_id:
+                await create_notification(
+                    user_id=teacher_id,
+                    title="Proctoring Violation",
+                    message=f"{current_user.get('full_name', 'A student')}: {violation_type.replace('_', ' ').title()}",
+                    type="error",
+                    action_url=f"/teacher/live-monitoring/{data.exam_id}",
+                    priority="urgent",
+                )
+    except Exception:
+        pass
+
     return flag_doc
 
 

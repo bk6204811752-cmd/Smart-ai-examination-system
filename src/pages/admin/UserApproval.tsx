@@ -26,7 +26,7 @@ interface PendingUser {
   semester?: number
   department?: string
   created_at: string
-  status: 'pending' | 'approved' | 'rejected' | 'suspended'
+  status: 'pending' | 'approved' | 'rejected' | 'suspended' | 'unverified'
   email_verified?: boolean
   cgpa?: number
   rejection_reason?: string
@@ -37,7 +37,7 @@ export default function UserApprovalManagement() {
   const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([])
   const [allUsers, setAllUsers] = useState<PendingUser[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending')
+  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'suspended' | 'unverified'>('pending')
   const [searchQuery, setSearchQuery] = useState('')
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [viewUser, setViewUser] = useState<PendingUser | null>(null)
@@ -366,7 +366,11 @@ export default function UserApprovalManagement() {
                               ? 'bg-green-100 text-green-800'
                               : user.status === 'rejected'
                                 ? 'bg-red-100 text-red-800'
-                                : 'bg-yellow-100 text-yellow-800'
+                                : user.status === 'suspended'
+                                  ? 'bg-orange-100 text-orange-800'
+                                  : user.status === 'unverified'
+                                    ? 'bg-gray-100 text-gray-800'
+                                    : 'bg-yellow-100 text-yellow-800'
                           }`}
                         >
                           {user.status === 'approved' && (
@@ -375,7 +379,11 @@ export default function UserApprovalManagement() {
                           {user.status === 'rejected' && (
                             <XCircle className="w-3 h-3 mr-1 inline" />
                           )}
+                          {user.status === 'suspended' && (
+                            <AlertCircle className="w-3 h-3 mr-1 inline" />
+                          )}
                           {user.status === 'pending' && <Clock className="w-3 h-3 mr-1 inline" />}
+                          {user.status === 'unverified' && <Clock className="w-3 h-3 mr-1 inline" />}
                           {(user.status || 'pending').charAt(0).toUpperCase() +
                             (user.status || 'pending').slice(1)}
                         </span>
@@ -495,7 +503,11 @@ export default function UserApprovalManagement() {
                             ? 'bg-green-100 text-green-700'
                             : viewUser.status === 'rejected'
                               ? 'bg-red-100 text-red-700'
-                              : 'bg-amber-100 text-amber-700'
+                              : viewUser.status === 'suspended'
+                                ? 'bg-orange-100 text-orange-700'
+                                : viewUser.status === 'unverified'
+                                  ? 'bg-gray-100 text-gray-700'
+                                  : 'bg-amber-100 text-amber-700'
                         }`}
                       >
                         {(viewUser.status || 'pending').charAt(0).toUpperCase() +

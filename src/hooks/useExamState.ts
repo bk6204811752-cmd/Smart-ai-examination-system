@@ -188,10 +188,10 @@ function examReducer(state: ExamState, action: ExamAction): ExamState {
   }
 }
 
-export function useExamState(initialTimeRemaining: number = 3600): [ExamState, Dispatch<ExamAction>] {
+export function useExamState(durationMinutes: number = 60): [ExamState, Dispatch<ExamAction>] {
   const [state, dispatch] = useReducer(examReducer, {
     ...initialState,
-    timeRemaining: initialTimeRemaining
+    timeRemaining: durationMinutes * 60
   })
   
   return [state, dispatch]

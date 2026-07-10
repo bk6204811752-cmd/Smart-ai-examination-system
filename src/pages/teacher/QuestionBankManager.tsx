@@ -15,6 +15,7 @@ import {
   X,
   Save,
   Loader2,
+  TrendingUp,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { questionBankAPI } from '../../lib/api'

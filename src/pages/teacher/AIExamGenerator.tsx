@@ -17,6 +17,7 @@ interface ExamBlueprint {
 
 export default function AIExamGenerator() {
   const [generating, setGenerating] = useState(false)
+  const [, setGeneratedExam] = useState<any>(null)
   const [blueprint, setBlueprint] = useState<ExamBlueprint | null>(null)
   const [config, setConfig] = useState({
     title: '',

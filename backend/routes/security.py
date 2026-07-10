@@ -10,6 +10,7 @@ POST   /api/security/log-event      — Log a security event (internal)
 POST   /api/security/log-access     — Log an access record (internal)
 """
 
+import re
 from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List

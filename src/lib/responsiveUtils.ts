@@ -242,7 +242,6 @@ export const lockOrientation = async (
  */
 export const unlockOrientation = (): void => {
   if ('orientation' in screen) {
-    // @ts-expect-error - Screen Orientation API
     screen.orientation.unlock()
   }
 }
@@ -446,14 +445,12 @@ export const isOnline = (): boolean => {
  * Get battery status (if available)
  */
 export const getBatteryStatus = async () => {
-  // @ts-expect-error - Experimental Network Information API
   if (!('getBattery' in navigator)) {
     return null
   }
 
   try {
-    // @ts-expect-error - Battery API
-    const battery = await navigator.getBattery()
+    const battery = await (navigator as any).getBattery()
     return {
       level: battery.level * 100, // 0-100%
       charging: battery.charging,
@@ -469,14 +466,12 @@ export const getBatteryStatus = async () => {
  * Prevent screen sleep (during exams)
  */
 export const preventScreenSleep = async (): Promise<WakeLockSentinel | null> => {
-  // @ts-expect-error - Experimental Wake Lock API check
   if (!('wakeLock' in navigator)) {
     console.warn('Wake Lock API not supported')
     return null
   }
 
   try {
-    // @ts-expect-error - Experimental Wake Lock API request
     const wakeLock = await navigator.wakeLock.request('screen')
     console.log('Screen wake lock activated')
     return wakeLock

@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Plus, Trash2, Save, Calendar, Clock, Users, BookOpen } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { Plus, Trash2, Save, Calendar, Clock, Users, BookOpen, Edit3 } from 'lucide-react'
 import { toast } from 'sonner'
 import { examAPI } from '../../lib/api'
 
@@ -16,7 +16,10 @@ interface Question {
 
 export default function CreateExamPage() {
   const navigate = useNavigate()
+  const { examId } = useParams()
+  const isEditing = !!examId
   const [loading, setLoading] = useState(false)
+  const [fetching, setFetching] = useState(isEditing)
   const [examData, setExamData] = useState({
     title: '',
     description: '',
@@ -43,6 +46,63 @@ export default function CreateExamPage() {
     }
   ])
 
+  useEffect(() => {
+    if (!examId) return
+    const fetchExam = async () => {
+      try {
+        const exam = await examAPI.getExam(examId)
+        const scheduled = exam.scheduled_time
+          ? exam.scheduled_time.replace('Z', '').slice(0, 16)
+          : ''
+
+        setExamData({
+          title: exam.title || '',
+          description: exam.instructions || '',
+          duration: exam.duration || 60,
+          program: exam.program || 'BCA',
+          course: exam.subject || '',
+          exam_type: exam.exam_type || 'practice',
+          proctoring_level: exam.proctoring_level || 'strict',
+          scheduled_date: scheduled,
+          passing_score: exam.passing_marks || 60,
+          shuffle_questions: exam.shuffle_questions ?? true,
+          show_results: exam.show_results ?? true,
+        })
+
+        if (exam.questions && exam.questions.length > 0) {
+          const mapped = exam.questions.map((q: any, i: number) => {
+            const correctAnswer = q.type === 'mcq' || q.type === 'multiple_select'
+              ? q.correct_answer
+              : q.correct_answer ?? ''
+
+            const correctAnswerValue = q.type === 'mcq' && typeof correctAnswer === 'number'
+              ? (q.options[correctAnswer] ?? '')
+              : q.type === 'multiple_select' && Array.isArray(correctAnswer)
+                ? correctAnswer.map((idx: number) => q.options[idx] ?? '')
+                : correctAnswer
+
+            return {
+              id: String(i + 1),
+              question: q.question || '',
+              type: q.question_type || q.type || 'mcq',
+              options: q.options || ['', '', '', ''],
+              correct_answer: correctAnswerValue,
+              points: q.marks || 1,
+              explanation: q.explanation || '',
+            }
+          })
+          setQuestions(mapped)
+        }
+      } catch (err) {
+        toast.error('Failed to load exam for editing')
+        navigate('/teacher/dashboard')
+      } finally {
+        setFetching(false)
+      }
+    }
+    fetchExam()
+  }, [examId, navigate])
+
   const addQuestion = () => {
     const newQuestion: Question = {
       id: Date.now().toString(),
@@ -61,7 +121,7 @@ export default function CreateExamPage() {
   }
 
   const updateQuestion = (id: string, field: string, value: any) => {
-    setQuestions(questions.map(q => 
+    setQuestions(questions.map(q =>
       q.id === id ? { ...q, [field]: value } : q
     ))
   }
@@ -96,9 +156,42 @@ export default function CreateExamPage() {
     }))
   }
 
+  const buildPayload = () => ({
+    title: examData.title,
+    subject: examData.course,
+    instructions: examData.description,
+    scheduled_time: examData.scheduled_date,
+    passing_marks: examData.passing_score,
+    duration: examData.duration,
+    program: examData.program,
+    exam_type: examData.exam_type,
+    proctoring_level: examData.proctoring_level,
+    shuffle_questions: examData.shuffle_questions,
+    show_results: examData.show_results,
+    difficulty: 'Medium',
+    total_questions: questions.length,
+    questions: questions.map(q => {
+      const correctAnswer = q.type === 'mcq'
+        ? q.options.indexOf(q.correct_answer)
+        : q.type === 'multiple_select'
+          ? (q.correct_answer || []).map((a: string) => q.options.indexOf(a))
+          : q.correct_answer
+
+      return {
+        question: q.question,
+        question_type: q.type,
+        options: q.options,
+        correct_answer: correctAnswer,
+        marks: q.points,
+        difficulty: 'Medium',
+        explanation: q.explanation
+      }
+    })
+  })
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!examData.title || !examData.course || !examData.scheduled_date) {
       toast.error('Please fill in all required fields: Title, Course, and Scheduled Date')
       return
@@ -138,56 +231,56 @@ export default function CreateExamPage() {
 
     setLoading(true)
     try {
-      const payload = {
-        title: examData.title,
-        subject: examData.course,
-        instructions: examData.description,
-        scheduled_time: examData.scheduled_date,
-        passing_marks: examData.passing_score,
-        duration: examData.duration,
-        program: examData.program,
-        exam_type: examData.exam_type,
-        proctoring_level: examData.proctoring_level,
-        shuffle_questions: examData.shuffle_questions,
-        show_results: examData.show_results,
-        difficulty: 'Medium',
-        total_questions: questions.length,
-        questions: questions.map(q => {
-          const correctAnswer = q.type === 'mcq'
-            ? q.options.indexOf(q.correct_answer)
-            : q.type === 'multiple_select'
-              ? (q.correct_answer || []).map((a: string) => q.options.indexOf(a))
-              : q.correct_answer
-
-          return {
-            question: q.question,
-            question_type: q.type,
-            options: q.options,
-            correct_answer: correctAnswer,
-            marks: q.points,
-            difficulty: 'Medium',
-            explanation: q.explanation
-          }
-        })
+      const payload = buildPayload()
+      if (isEditing) {
+        await examAPI.updateExam(examId, payload)
+        toast.success('Exam updated successfully!')
+      } else {
+        await examAPI.createExam(payload)
+        toast.success('Exam created successfully!')
       }
-      
-      await examAPI.createExam(payload)
-      toast.success('Exam created successfully!')
       navigate('/teacher/dashboard')
     } catch (error) {
-      console.error('Failed to create exam:', error)
-      toast.error('Failed to create exam. Please try again.')
+      console.error('Failed to save exam:', error)
+      toast.error(`Failed to ${isEditing ? 'update' : 'create'} exam. Please try again.`)
     } finally {
       setLoading(false)
     }
+  }
+
+  if (fetching) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-5xl mx-auto px-4">
+          <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4" />
+            <p className="text-gray-500">Loading exam data...</p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-5xl mx-auto px-4">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Create New Exam</h1>
-          <p className="text-gray-600">Fill in the details below to create a new examination</p>
+          <div className="flex items-center gap-3 mb-2">
+            {isEditing && (
+              <span className="flex items-center gap-1.5 px-3 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-full">
+                <Edit3 className="w-3.5 h-3.5" />
+                EDIT MODE
+              </span>
+            )}
+            <h1 className="text-3xl font-bold text-gray-900">
+              {isEditing ? 'Edit Exam' : 'Create New Exam'}
+            </h1>
+          </div>
+          <p className="text-gray-600">
+            {isEditing
+              ? 'Update the exam details, questions, and settings below.'
+              : 'Fill in the details below to create a new examination'}
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -452,7 +545,7 @@ export default function CreateExamPage() {
                                 type={question.type === 'mcq' ? 'radio' : 'checkbox'}
                                 name={`correct_${question.id}`}
                                 checked={
-                                  question.type === 'mcq' 
+                                  question.type === 'mcq'
                                     ? question.correct_answer === option
                                     : question.correct_answer?.includes(option)
                                 }
@@ -558,7 +651,7 @@ export default function CreateExamPage() {
               className="flex items-center space-x-2 px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition"
             >
               <Save className="w-5 h-5" />
-              <span>{loading ? 'Creating...' : 'Create Exam'}</span>
+              <span>{loading ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Update Exam' : 'Create Exam')}</span>
             </button>
           </div>
         </form>

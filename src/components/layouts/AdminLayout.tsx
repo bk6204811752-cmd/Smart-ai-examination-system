@@ -2,13 +2,14 @@ import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/globalStore'
 import { motion, AnimatePresence } from 'framer-motion'
+import NotificationBell from '../NotificationBell'
 import {
   Home,
   Users,
   Shield,
   Settings,
   LogOut,
-  Bell,
+  Bell as BellIcon,
   Activity,
   Lock,
   UserCheck,
@@ -26,7 +27,7 @@ const navItems = [
   { icon: Activity, label: 'Accessibility', to: '/admin/accessibility' },
   { icon: Lock, label: 'Proctoring Config', to: '/admin/proctoring-settings' },
   { icon: Webhook, label: 'Webhooks', to: '/admin/webhooks' },
-  { icon: Bell, label: 'Notifications', to: '/notifications' },
+  { icon: BellIcon, label: 'Notifications', to: '/notifications' },
   { icon: Settings, label: 'Settings', to: '/settings' },
 ]
 
@@ -185,12 +186,7 @@ export default function AdminLayout({ children, title, subtitle }: AdminLayoutPr
               )}
             </div>
             <div className="flex items-center gap-2">
-              <Link
-                to="/notifications"
-                className="relative p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
-              >
-                <Bell className="w-5 h-5" />
-              </Link>
+              <NotificationBell />
               <button
                 onClick={handleLogout}
                 className="hidden lg:flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-600 transition-colors px-3 py-2 rounded-xl hover:bg-red-50"

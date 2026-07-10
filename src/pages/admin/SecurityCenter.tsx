@@ -115,6 +115,7 @@ export default function SecurityCenterPage() {
   const [logsPages, setLogsPages] = useState(1)
 
   const [events, setEvents] = useState<SecurityEvent[]>([])
+  const [, setEventsTotal] = useState(0)
   const [eventsPage, setEventsPage] = useState(1)
   const [eventsPages, setEventsPages] = useState(1)
 

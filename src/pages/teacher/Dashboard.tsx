@@ -23,7 +23,9 @@ import {
   ArrowUpRight,
   ArrowRight,
   Search,
+  Edit3,
 } from 'lucide-react'
+import { useAuthStore } from '../../store/globalStore'
 import { WebSocketClient } from '../../lib/websocket'
 
 interface ExamData {
@@ -138,8 +140,9 @@ export default function TeacherDashboard() {
   useEffect(() => {
     const ws = new WebSocketClient()
     wsRef.current = ws
-    const teacherId = 'teacher'
-    ws.connect({ userId: teacherId, role: 'teacher', examId: 'dashboard' })
+    const user = useAuthStore.getState().user
+    const userId = user?._id || user?.email || 'unknown'
+    ws.connect({ userId, role: 'teacher', examId: 'dashboard' })
     setWsStatus('connecting')
 
     ws.onStatusChange(s => {
@@ -228,7 +231,7 @@ export default function TeacherDashboard() {
   const loadExams = async () => {
     try {
       const examsData = await examAPI.getExams()
-      setMyExams(examsData)
+      setMyExams(examsData?.data ?? examsData ?? [])
     } catch (err) {
       console.error(err)
     } finally {
@@ -586,6 +589,13 @@ export default function TeacherDashboard() {
                       <div className="flex items-center gap-2 shrink-0">
                         <StatusBadge status={exam.status} />
                         <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                          <Link
+                            to={`/teacher/edit-exam/${exam._id}`}
+                            className="p-1.5 rounded-lg hover:bg-amber-50 text-gray-400 hover:text-amber-600 transition-all"
+                            title="Edit Exam"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </Link>
                           <Link
                             to={`/teacher/live-monitoring?exam=${exam._id}`}
                             className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-all"

@@ -50,7 +50,8 @@ interface UserStats {
   name: string
   email: string
   role: string
-  status: 'active' | 'inactive' | 'suspended'
+  status: string
+  is_active: boolean
   lastActive: string
   examsCompleted?: number
   examsCreated?: number
@@ -193,7 +194,8 @@ export default function AdminDashboard() {
         name: user.full_name,
         email: user.email,
         role: user.role,
-        status: user.is_active ? 'active' : 'inactive',
+        status: user.status || 'unknown',
+        is_active: user.is_active,
         lastActive: user.last_login ? new Date(user.last_login).toLocaleString() : 'Never',
         examsCompleted: user.exams_completed || 0,
         examsCreated: user.exams_created || 0,
@@ -233,7 +235,6 @@ export default function AdminDashboard() {
   }
 
   const handleEditUser = (user: UserStats) => {
-    setSelectedUser(user)
     showToast(`Editing user: ${user.name}`, 'info')
     // In production, this would open an edit modal
   }
@@ -318,11 +319,15 @@ export default function AdminDashboard() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'active':
+      case 'approved':
         return 'bg-green-100 text-green-800'
-      case 'inactive':
+      case 'pending':
+        return 'bg-amber-100 text-amber-800'
+      case 'unverified':
         return 'bg-gray-100 text-gray-800'
       case 'suspended':
+        return 'bg-red-100 text-red-800'
+      case 'rejected':
         return 'bg-red-100 text-red-800'
       default:
         return 'bg-blue-100 text-blue-800'
@@ -884,7 +889,7 @@ export default function AdminDashboard() {
                   <Eye className="w-5 h-5 mr-2 text-green-600" />
                   Live Users
                   <span className="ml-2 px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full">
-                    {liveUsers.filter(u => u.status === 'active').length} online
+                    {liveUsers.filter(u => u.status === 'approved').length} online
                   </span>
                 </h3>
                 <button
@@ -906,10 +911,10 @@ export default function AdminDashboard() {
                     <div className="flex items-center space-x-3">
                       <div
                         className={`w-2 h-2 rounded-full ${
-                          user.status === 'active'
+                          user.status === 'approved'
                             ? 'bg-green-500'
-                            : user.status === 'inactive'
-                              ? 'bg-gray-400'
+                            : user.status === 'pending' || user.status === 'unverified'
+                              ? 'bg-amber-400'
                               : 'bg-red-500'
                         }`}
                       ></div>
@@ -919,7 +924,7 @@ export default function AdminDashboard() {
                           <span
                             className={`text-xs px-2 py-0.5 rounded ${getStatusColor(user.status)}`}
                           >
-                            {user.role}
+                            {user.status.charAt(0).toUpperCase() + user.status.slice(1)}
                           </span>
                           <span className="text-xs text-gray-500">{user.lastActive}</span>
                         </div>
@@ -1204,10 +1209,10 @@ export default function AdminDashboard() {
                       <div className="flex items-center space-x-4">
                         <div
                           className={`w-3 h-3 rounded-full ${
-                            user.status === 'active'
+                            user.status === 'approved'
                               ? 'bg-green-500'
-                              : user.status === 'inactive'
-                                ? 'bg-gray-400'
+                              : user.status === 'pending' || user.status === 'unverified'
+                                ? 'bg-amber-400'
                                 : 'bg-red-500'
                           }`}
                         ></div>
@@ -1248,7 +1253,7 @@ export default function AdminDashboard() {
                         >
                           <Trash2 className="w-4 h-4 text-red-600" />
                         </button>
-                        {user.status === 'active' ? (
+                        {user.status === 'approved' && user.is_active ? (
                           <button
                             onClick={() => handleSuspendUser(user)}
                             className="p-2 hover:bg-gray-200 rounded-lg transition"

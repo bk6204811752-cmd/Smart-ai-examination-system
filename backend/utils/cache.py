@@ -94,9 +94,12 @@ class SimpleCache:
 cache = SimpleCache()
 
 
+import hashlib
+
 def cache_key(*args) -> str:
-    """Generate cache key from arguments"""
-    return ":".join(str(arg) for arg in args)
+    """Generate cache key from arguments using hash to avoid collisions"""
+    raw = ":".join(str(arg) for arg in args)
+    return hashlib.sha256(raw.encode()).hexdigest()
 
 
 # ── Decorator for caching function results ──────────────────────────────────
@@ -115,7 +118,7 @@ def cached(ttl: int = 300, key_prefix: str = ""):
             # Generate cache key
             key_parts = [key_prefix or func.__name__]
             key_parts.extend(str(arg) for arg in args)
-            key_parts.extend(f"{k}={v}" for k, v in sorted(kwargs.items()))
+            key_parts.extend(f"{k}={v}" for k, v in sorted(kwargs.items(), key=lambda x: x[0]))
             key = cache_key(*key_parts)
             
             # Try cache first

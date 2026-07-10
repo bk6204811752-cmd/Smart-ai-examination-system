@@ -27,6 +27,7 @@ import { useAuthStore } from '../../store/globalStore'
 import { toast } from 'sonner'
 import StudentDetailModal from '../../components/StudentDetailModal'
 import ExamChat from '../../components/ExamChat'
+import { TeacherAudioPlayer } from '../../utils/audioStreamer'
 
 interface StudentSession {
   student_id: string
@@ -74,7 +75,7 @@ export default function LiveMonitoringPage() {
   const [wsStatus, setWsStatus] = useState<
     'connecting' | 'connected' | 'disconnected' | 'reconnecting' | 'error'
   >('disconnected')
-  const [frameUpdateTrigger, setFrameUpdateTrigger] = useState(0)
+
   const [searchQuery, setSearchQuery] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'flagged' | 'submitted'>(
     'all'
@@ -89,6 +90,10 @@ export default function LiveMonitoringPage() {
   const user = useAuthStore(state => state.user)
 
   const streamRefreshIntervalRef = useRef<number | null>(null)
+  const audioPlayerRef = useRef<TeacherAudioPlayer | null>(null)
+  const [listeningStudentId, setListeningStudentId] = useState<string | null>(null)
+  const [audioVolume, setAudioVolume] = useState(80)
+  const [audioStats, setAudioStats] = useState<{ received: number; played: number; dropped: number } | null>(null)
 
   useEffect(() => {
     if (examId) {
@@ -124,6 +129,10 @@ export default function LiveMonitoringPage() {
     }
 
     return () => {
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.stop()
+        audioPlayerRef.current = null
+      }
       if (wsClientRef.current) {
         wsClientRef.current.disconnect()
         wsClientRef.current = null
@@ -145,7 +154,8 @@ export default function LiveMonitoringPage() {
         try {
           const sessionsData = await sessionAPI.getSessions(examId)
           setSessions(prev => {
-            const newSessions = Array.isArray(sessionsData) ? sessionsData : []
+            const raw = Array.isArray(sessionsData) ? sessionsData : []
+            const newSessions = deduplicateSessions(raw)
             // Merge: keep real-time WS updates (audio, face detection, etc.) but update DB data
             return newSessions.map(newS => {
               const existing = prev.find(s => s.student_id === newS.student_id)
@@ -177,13 +187,23 @@ export default function LiveMonitoringPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoRefresh, examId])
 
+  const deduplicateSessions = (data: StudentSession[]): StudentSession[] => {
+    const seen = new Set<string>()
+    return data.filter(s => {
+      if (seen.has(s.student_id)) return false
+      seen.add(s.student_id)
+      return true
+    })
+  }
+
   const loadExamData = async () => {
     try {
       const data = await examAPI.getExam(examId!)
       setExam(data)
       try {
         const sessionsData = await sessionAPI.getSessions(examId!)
-        setSessions(Array.isArray(sessionsData) ? sessionsData : [])
+        const raw = Array.isArray(sessionsData) ? sessionsData : []
+        setSessions(deduplicateSessions(raw))
       } catch {
         setSessions([])
       }
@@ -250,7 +270,6 @@ export default function LiveMonitoringPage() {
       if (!studentId || !data.frame) return
       setVideoStreams(prev => ({ ...prev, [studentId]: data.frame }))
       setLastFrameTime(prev => ({ ...prev, [studentId]: Date.now() }))
-      setFrameUpdateTrigger(prev => prev + 1)
     })
 
     wsClient.on('ai_violation', (data: any) => {
@@ -330,7 +349,6 @@ export default function LiveMonitoringPage() {
         })
         if (Object.keys(streams).length > 0) {
           setVideoStreams(prev => ({ ...prev, ...streams }))
-          setFrameUpdateTrigger(prev => prev + 1)
         }
       }
     })
@@ -360,6 +378,32 @@ export default function LiveMonitoringPage() {
             setSessions(Array.isArray(sessionsData) ? sessionsData : [])
           })
           .catch(() => {})
+      }
+    })
+
+    // Track when students submit their exam
+    wsClient.on('student_submitted', (data: any) => {
+      if (data.student_id) {
+        toast.success(`Student submitted: ${data.student_id}`, { duration: 3000 })
+        setSessions(prev =>
+          prev.map(s => {
+            if (s.student_id === data.student_id) {
+              return { ...s, status: 'submitted' as const, last_activity: new Date().toISOString() }
+            }
+            return s
+          })
+        )
+        // Remove video feed
+        setVideoStreams(prev => {
+          const updated = { ...prev }
+          delete updated[data.student_id]
+          return updated
+        })
+        setLastFrameTime(prev => {
+          const updated = { ...prev }
+          delete updated[data.student_id]
+          return updated
+        })
       }
     })
 
@@ -403,10 +447,18 @@ export default function LiveMonitoringPage() {
       message: string
     ) => {
       try {
-        if (wsClientRef.current) {
-          wsClientRef.current.send({
+        const ws = wsClientRef.current
+        if (ws && ws.isConnected()) {
+          ws.send({
             type: 'intervention',
             exam_id: examId,
+            student_id: studentId,
+            action,
+            message,
+          })
+        } else {
+          await proctoringAPI.intervene({
+            exam_id: examId!,
             student_id: studentId,
             action,
             message,
@@ -440,6 +492,51 @@ export default function LiveMonitoringPage() {
     },
     [examId]
   )
+
+  const handleListenToggle = useCallback(
+    (studentId: string) => {
+      const ws = wsClientRef.current
+      if (!ws || !ws.isConnected()) {
+        toast.error('WebSocket not connected')
+        return
+      }
+      if (listeningStudentId === studentId) {
+        audioPlayerRef.current?.stop()
+        audioPlayerRef.current = null
+        setListeningStudentId(null)
+        setAudioStats(null)
+        ws.send({ type: 'audio_stream_stop', exam_id: examId, student_id: studentId })
+        toast.info('Stopped listening')
+      } else {
+        audioPlayerRef.current?.stop()
+        const player = new TeacherAudioPlayer()
+        player.volume = audioVolume / 100
+        audioPlayerRef.current = player
+        player.start(ws, studentId).catch(e => console.error('[Listen] Audio player start failed:', e))
+        setListeningStudentId(studentId)
+        ws.send({ type: 'audio_stream_request', exam_id: examId, student_id: studentId })
+        toast.success(`Listening to student audio`)
+      }
+    },
+    [examId, listeningStudentId, audioVolume]
+  )
+
+  const handleVolumeChange = useCallback((val: number) => {
+    setAudioVolume(val)
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.volume = val / 100
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!listeningStudentId) { setAudioStats(null); return }
+    const interval = setInterval(() => {
+      if (audioPlayerRef.current) {
+        setAudioStats(audioPlayerRef.current.stats)
+      }
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [listeningStudentId])
 
   const getTimeElapsed = (startTime: string) => {
     const elapsed = Date.now() - new Date(startTime).getTime()
@@ -795,7 +892,6 @@ export default function LiveMonitoringPage() {
                   </div>
                   <button
                     onClick={() => {
-                      setFrameUpdateTrigger(p => p + 1)
                       toast.success('Refreshed', { duration: 1000 })
                     }}
                     className="text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded-lg border border-gray-700 hover:bg-gray-700 transition flex items-center gap-1.5"
@@ -813,7 +909,7 @@ export default function LiveMonitoringPage() {
 
                     return (
                       <motion.div
-                        key={`${studentId}-${frameUpdateTrigger}`}
+                        key={studentId}
                         whileHover={{ scale: 1.02 }}
                         onClick={() => {
                           setSelectedStudent(studentId)
@@ -829,8 +925,7 @@ export default function LiveMonitoringPage() {
                       >
                         <div className="relative">
                           <img
-                            key={`img-${studentId}-${lastFrame || Date.now()}`}
-                            src={`${frameData}#${Date.now()}`}
+                            src={frameData}
                             alt={student?.student_name || studentId}
                             className="w-full h-28 object-cover bg-gray-900"
                             loading="eager"
@@ -1079,7 +1174,8 @@ export default function LiveMonitoringPage() {
 
                             {/* Paused Badge */}
                             {session.is_paused && (
-                              <div className="px-2 py-0.5 bg-red-950/80 border border-red-700/60 text-red-400 text-[10px] font-bold rounded">
+                              <div className="px-2 py-0.5 bg-red-950/80 border border-red-700/60 text-red-400 text-[10px] font-bold rounded flex items-center gap-1">
+                                <div className="w-1.5 h-1.5 bg-red-400 rounded-full animate-pulse" />
                                 PAUSED
                               </div>
                             )}
@@ -1102,30 +1198,31 @@ export default function LiveMonitoringPage() {
                               >
                                 ⚠
                               </button>
-                              <button
-                                onClick={() =>
-                                  handleIntervene(
-                                    session.student_id,
-                                    'pause',
-                                    'Your exam has been paused by the proctor.'
-                                  )
-                                }
-                                title="Pause exam"
-                                className="px-2 py-1 bg-orange-950/60 border border-orange-700/50 text-orange-400 text-[10px] font-bold rounded hover:bg-orange-900/70 transition"
-                              >
-                                ⏸
-                              </button>
-                              {session.is_paused && (
+                              {!session.is_paused ? (
+                                <button
+                                  onClick={() =>
+                                    handleIntervene(
+                                      session.student_id,
+                                      'pause',
+                                      'Your exam has been paused by the proctor. Object detection and monitoring have been stopped.'
+                                    )
+                                  }
+                                  title="Pause exam - stops all monitoring"
+                                  className="px-2 py-1 bg-orange-950/60 border border-orange-700/50 text-orange-400 text-[10px] font-bold rounded hover:bg-orange-900/70 transition"
+                                >
+                                  ⏸
+                                </button>
+                              ) : (
                                 <button
                                   onClick={() =>
                                     handleIntervene(
                                       session.student_id,
                                       'resume',
-                                      'Your exam has been resumed by the proctor.'
+                                      'Your exam has been resumed. Monitoring is now active again.'
                                     )
                                   }
-                                  title="Resume exam"
-                                  className="px-2 py-1 bg-green-950/60 border border-green-700/50 text-green-400 text-[10px] font-bold rounded hover:bg-green-900/70 transition"
+                                  title="Resume exam - restarts monitoring"
+                                  className="px-2 py-1 bg-green-950/60 border border-green-700/50 text-green-400 text-[10px] font-bold rounded hover:bg-green-900/70 transition animate-pulse"
                                 >
                                   ▶
                                 </button>
@@ -1139,6 +1236,21 @@ export default function LiveMonitoringPage() {
                                 className="px-2 py-1 bg-blue-950/60 border border-blue-700/50 text-blue-400 text-[10px] font-bold rounded hover:bg-blue-900/70 transition"
                               >
                                 🔍
+                              </button>
+                              <button
+                                onClick={() => handleListenToggle(session.student_id)}
+                                title={
+                                  listeningStudentId === session.student_id
+                                    ? 'Stop listening'
+                                    : 'Listen to audio'
+                                }
+                                className={`px-2 py-1 border text-[10px] font-bold rounded transition ${
+                                  listeningStudentId === session.student_id
+                                    ? 'bg-green-950/60 border-green-700/50 text-green-400 hover:bg-green-900/70 animate-pulse'
+                                    : 'bg-purple-950/60 border-purple-700/50 text-purple-400 hover:bg-purple-900/70'
+                                }`}
+                              >
+                                {listeningStudentId === session.student_id ? '🔊' : '🎧'}
                               </button>
                             </div>
                           </div>
@@ -1220,6 +1332,63 @@ export default function LiveMonitoringPage() {
                 )}
               </div>
             </div>
+
+            {/* Audio Listen Panel */}
+            {listeningStudentId && (
+              <div className="bg-gray-900/80 rounded-xl border border-green-800/40 p-5 backdrop-blur">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                  <h3 className="font-bold text-green-400 flex items-center gap-2">
+                    <Mic className="w-4 h-4" />
+                    Live Audio
+                  </h3>
+                </div>
+                <p className="text-xs text-gray-400 mb-3">
+                  Listening to: <span className="text-white font-semibold">{sessions.find(s => s.student_id === listeningStudentId)?.student_name || listeningStudentId}</span>
+                </p>
+
+                {/* Volume Slider */}
+                <div className="mb-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs text-gray-500">Volume</span>
+                    <span className="text-xs text-gray-400 font-mono">{audioVolume}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={audioVolume}
+                    onChange={e => handleVolumeChange(Number(e.target.value))}
+                    className="w-full h-1.5 bg-gray-800 rounded-full appearance-none cursor-pointer accent-green-500"
+                  />
+                </div>
+
+                {/* Audio Stats */}
+                {audioStats && (
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-gray-800/50 rounded-lg p-2">
+                      <div className="text-xs font-bold text-green-400">{audioStats.received}</div>
+                      <div className="text-[10px] text-gray-500">Received</div>
+                    </div>
+                    <div className="bg-gray-800/50 rounded-lg p-2">
+                      <div className="text-xs font-bold text-blue-400">{audioStats.played}</div>
+                      <div className="text-[10px] text-gray-500">Played</div>
+                    </div>
+                    <div className="bg-gray-800/50 rounded-lg p-2">
+                      <div className={`text-xs font-bold ${audioStats.dropped > 0 ? 'text-yellow-400' : 'text-gray-500'}`}>{audioStats.dropped}</div>
+                      <div className="text-[10px] text-gray-500">Dropped</div>
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => handleListenToggle(listeningStudentId)}
+                  className="w-full mt-3 py-2 bg-red-950/50 border border-red-800/50 text-red-400 rounded-lg text-xs font-semibold hover:bg-red-900/50 transition"
+                >
+                  Stop Listening
+                </button>
+              </div>
+            )}
 
             {/* Class Analytics */}
             <div className="bg-gray-900/80 rounded-xl border border-gray-800 p-5 backdrop-blur">

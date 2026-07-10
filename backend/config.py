@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     DATABASE_NAME: str = "pcmt_exam"
 
     # JWT - Must use strong environment variable in production
-    SECRET_KEY: str = "pcmt-super-secret-key-change-in-production-min-32-characters-required"
+    SECRET_KEY: str = ""
     SUPABASE_JWT_SECRET: str = ""
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours (was 30 min)
@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     OTP_EXPIRE_MINUTES: int = 10
     OTP_LENGTH: int = 6
 
-    # Supabase Settings
+    # Supabase Settings (DISABLED - Invalid domain, fallback to local JWT verification)
     SUPABASE_URL: str = ""
     VITE_SUPABASE_URL: str = ""
 

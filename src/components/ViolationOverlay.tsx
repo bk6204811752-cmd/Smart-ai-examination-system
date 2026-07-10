@@ -13,6 +13,8 @@ export type ViolationOverlayType =
   | 'CAMERA_BLOCKED'
   | 'SUSPICIOUS_BEHAVIOR'
   | 'IDENTITY_MISMATCH'
+  | 'PHONE_DETECTED'
+  | 'UNAUTHORIZED_DEVICE'
 
 interface ViolationOverlayProps {
   type: ViolationOverlayType | null
@@ -126,6 +128,23 @@ const violationConfig: Record<
     glowColor: 'shadow-red-600/80',
     requireAction: true,
     actionLabel: 'Contact Proctor',
+  },
+  PHONE_DETECTED: {
+    icon: AlertTriangle,
+    title: '🚨 MOBILE PHONE DETECTED',
+    color: 'text-red-400',
+    bgColor: 'from-red-950/98 via-red-900/95 to-rose-950/98',
+    borderColor: 'border-red-500',
+    glowColor: 'shadow-red-500/70',
+    requireAction: false,
+  },
+  UNAUTHORIZED_DEVICE: {
+    icon: AlertTriangle,
+    title: '⚠️ UNAUTHORIZED OBJECT DETECTED',
+    color: 'text-orange-400',
+    bgColor: 'from-orange-950/95 via-orange-900/90 to-red-950/95',
+    borderColor: 'border-orange-500',
+    glowColor: 'shadow-orange-500/50',
   },
 }
 

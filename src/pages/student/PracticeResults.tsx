@@ -681,7 +681,7 @@ export default function PracticeResults() {
                         </div>
                       )}
 
-                      {q.type === 'true_false' && (
+                      {(q.type === 'true_false' || q.type === 'true-false') && (
                         <div className="flex gap-4">
                           {['True', 'False'].map(opt => {
                             const isUserAns = userAns === opt
@@ -709,7 +709,7 @@ export default function PracticeResults() {
                         </div>
                       )}
 
-                      {(q.type === 'short_answer' ||
+                      {(q.type === 'short_answer' || q.type === 'short-answer' ||
                         q.type === 'essay' ||
                         q.type === 'code' ||
                         q.type === 'descriptive') && (
@@ -732,6 +732,42 @@ export default function PracticeResults() {
                               {q.correctAnswer || q.correct_answer || 'N/A'}
                             </p>
                           </div>
+                        </div>
+                      )}
+
+                      {/* Fallback for any unrecognized question types */}
+                      {q.type !== 'mcq' && q.type !== 'single_choice' &&
+                        q.type !== 'multiple-answer' &&
+                        q.type !== 'true_false' && q.type !== 'true-false' &&
+                        q.type !== 'short_answer' && q.type !== 'short-answer' &&
+                        q.type !== 'essay' && q.type !== 'code' && q.type !== 'descriptive' && (
+                        <div className="space-y-4">
+                          {q.options && q.options.length > 0 ? (
+                            <div className="space-y-2">
+                              {q.options.map((opt: string, oi: number) => {
+                                const isUserAns = userAns === opt
+                                const isCorrectAns = (q.correctAnswer === opt)
+                                return (
+                                  <div key={oi} className={`flex items-center gap-3 p-3 rounded-lg border-2 text-sm ${isCorrectAns ? 'border-green-300 bg-green-50' : isUserAns ? 'border-red-400 bg-red-100' : 'border-gray-200 bg-gray-50'}`}>
+                                    <span className={`flex-1 ${isCorrectAns ? 'font-semibold text-green-800' : isUserAns ? 'font-semibold text-red-800' : 'text-gray-700'}`}>{opt}</span>
+                                    {isCorrectAns && <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />}
+                                    {isUserAns && !isCorrectAns && <XCircle className="w-4 h-4 text-red-600 shrink-0" />}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          ) : (
+                            <>
+                              <div className="bg-white border-2 border-red-200 rounded-lg p-4">
+                                <p className="text-xs font-bold text-red-600 uppercase mb-1">Your Answer</p>
+                                <p className="text-sm text-gray-800 whitespace-pre-wrap">{userAns || <span className="italic text-gray-400">No answer provided</span>}</p>
+                              </div>
+                              <div className="bg-white border-2 border-green-200 rounded-lg p-4">
+                                <p className="text-xs font-bold text-green-600 uppercase mb-1">Correct Answer</p>
+                                <p className="text-sm text-gray-800 whitespace-pre-wrap">{q.correctAnswer || q.correct_answer || 'N/A'}</p>
+                              </div>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>

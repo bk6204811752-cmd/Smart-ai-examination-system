@@ -8,7 +8,6 @@ GET  /api/analytics/system/health
 POST /api/analytics/report
 """
 
-import random
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional, List, Any
 from pydantic import BaseModel
@@ -161,10 +160,10 @@ async def get_system_health(
     current_user: dict = Depends(require_teacher_or_admin)
 ):
     return {
-        "cpu": random.randint(30, 60),
-        "memory": random.randint(50, 75),
-        "storage": random.randint(30, 50),
-        "network": random.randint(90, 99),
+        "cpu": 0,
+        "memory": 0,
+        "storage": 0,
+        "network": 0,
         "database": "healthy",
         "uptime": "99.7%",
         "status": "operational"
@@ -224,7 +223,7 @@ async def generate_report(
             subjects[subj]["question_count"] += 1
 
     subject_breakdown = [
-        {"subject": s, "avgScore": round(random.randint(65, 90), 1), "questions": d["question_count"]}
+        {"subject": s, "avgScore": round(avg_score, 1), "questions": d["question_count"]}
         for s, d in subjects.items()
     ]
 
@@ -252,7 +251,7 @@ async def generate_report(
         "charts": {
             "scoreDistribution": score_distribution,
             "trendData": [
-                {"week": f"Week {w}", "avgScore": random.randint(65, 85)}
+                {"week": f"Week {w}", "avgScore": round(avg_score, 1)}
                 for w in range(1, 5)
             ],
         },
@@ -531,10 +530,10 @@ async def get_advanced_analytics(
         "proctoring": {
             "sessions_monitored": sessions_monitored,
             "violations_detected": total_violations,
-            "false_positive_rate": round(random.uniform(2, 8), 1),
-            "auto_interventions": sum(1 for _ in range(high_risk_count)),
-            "manual_interventions": sum(1 for _ in range(high_risk_count // 2)),
-            "avg_risk_score": round(random.uniform(10, 30), 1),
+            "false_positive_rate": 0.0,
+            "auto_interventions": high_risk_count,
+            "manual_interventions": high_risk_count // 2,
+            "avg_risk_score": 0.0,
         },
         "trends": {
             "daily_exams": [
@@ -546,7 +545,7 @@ async def get_advanced_analytics(
                     }) if i < 6 else await db.submissions.count_documents({
                         "date": {"$gte": (datetime.utcnow() - timedelta(days=1)).isoformat()}
                     }),
-                    "violations": random.randint(1, 10),
+                    "violations": 0,
                 }
                 for i in range(7)
             ],
@@ -568,7 +567,7 @@ async def get_advanced_analytics(
                 {"emotion": "Suspicious", "percentage": 5},
             ],
             "attention_trends": [
-                {"hour": h, "avg_attention": round(random.uniform(60, 95), 1)}
+                {"hour": h, "avg_attention": 0.0}
                 for h in range(24)
             ],
         },
@@ -659,9 +658,9 @@ async def get_calibration_data(
             action = "keep"
 
         expected_difficulty = round(1 - (correct_rate if correct_rate > 0 else 0.5), 2)
-        actual_difficulty = round(max(0, min(1, expected_difficulty + random.uniform(-0.1, 0.1))), 2)
+        actual_difficulty = expected_difficulty
 
-        student_feedback = round(random.uniform(1.5, 5.0), 1)
+        student_feedback = round(correct_rate * 5, 1) if response_count > 0 else 0.0
 
         question_stats.append({
             "question_id": q_id,

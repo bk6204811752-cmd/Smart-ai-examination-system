@@ -153,7 +153,7 @@ export default function StudentDashboard() {
         examAPI.getExams(user?.program),
         resultsAPI.getResults(),
       ])
-      setExams(examsData)
+      setExams(examsData?.data ?? examsData ?? [])
       setResults(resultsData)
     } catch (error) {
       console.error('Error loading data:', error)

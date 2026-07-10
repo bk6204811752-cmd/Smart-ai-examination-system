@@ -109,7 +109,10 @@ async def verify_otp(
     if not otp_doc:
         return False, "No OTP found. Please request a new one."
 
-    if datetime.now(timezone.utc) > otp_doc["expires_at"]:
+    expires = otp_doc["expires_at"]
+    if isinstance(expires, datetime) and expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    if datetime.now(timezone.utc) > expires:
         await db.otps.update_one(
             {"_id": otp_doc["_id"]},
             {"$set": {"used": True}},
@@ -124,7 +127,7 @@ async def verify_otp(
         return False, "Too many failed attempts. Please request a new OTP."
 
     if otp_doc["otp"] != otp_code:
-        # Check if we should allow sandbox mode dummy code '123456' when SMTP is not configured
+        # Sandbox dummy code '123456' allowed when SMTP not configured (any environment)
         if otp_code == "123456" and not ((settings.SMTP_USERNAME or settings.SMTP_USER) and settings.SMTP_PASSWORD):
             logger.info("🔑 [SANDBOX MODE] Bypassing OTP check with dummy code '123456'")
         else:

@@ -54,6 +54,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
   pending: { label: 'Pending', color: 'text-amber-700', bg: 'bg-amber-100' },
   rejected: { label: 'Rejected', color: 'text-red-700', bg: 'bg-red-100' },
   suspended: { label: 'Suspended', color: 'text-orange-700', bg: 'bg-orange-100' },
+  unverified: { label: 'Unverified', color: 'text-gray-700', bg: 'bg-gray-100' },
 }
 
 export default function UserManagementPage() {
@@ -366,6 +367,7 @@ export default function UserManagementPage() {
             <option value="pending">Pending</option>
             <option value="rejected">Rejected</option>
             <option value="suspended">Suspended</option>
+            <option value="unverified">Unverified</option>
           </select>
           <span className="text-sm text-gray-400 ml-auto">
             Showing {filtered.length} of {users.length}

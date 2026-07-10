@@ -54,7 +54,13 @@ class InMemoryCursor:
     def _get_docs(self):
         docs = list(self._docs)
         if self._sort_key:
-            docs = sorted(docs, key=lambda d: str(d.get(self._sort_key, "")), reverse=self._sort_rev)
+            def _sort_key(d):
+                val = d.get(self._sort_key, "")
+                try:
+                    return (0, float(val))
+                except (ValueError, TypeError):
+                    return (1, str(val))
+            docs = sorted(docs, key=_sort_key, reverse=self._sort_rev)
         if self._skip_n:
             docs = docs[self._skip_n:]
         if self._limit_n:
@@ -296,6 +302,7 @@ async def disconnect_db():
     global client
     if client:
         client.close()
+        client = None
     print("[*] Database disconnected")
 
 

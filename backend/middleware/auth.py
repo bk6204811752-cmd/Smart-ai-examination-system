@@ -11,6 +11,7 @@ from bson import ObjectId
 import time
 import httpx
 import logging
+import threading
 from config import settings
 from database import get_db
 
@@ -28,23 +29,43 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 
 _jwks_cache = None
 _jwks_last_fetched = 0
+_jwks_last_error_at = 0  # timestamp of last failed fetch (used for cooldown)
+_JWKS_ERROR_COOLDOWN = 3600  # seconds to wait before retrying a failed JWKS fetch
+_jwks_lock = threading.Lock()  # prevent cache stampede under concurrent requests
 
 def get_supabase_jwks(supabase_url: str) -> dict:
-    global _jwks_cache, _jwks_last_fetched
+    global _jwks_cache, _jwks_last_fetched, _jwks_last_error_at
     now = time.time()
-    # Cache for 1 hour to prevent constant network requests
-    if _jwks_cache is None or (now - _jwks_last_fetched > 3600):
+
+    # Fast path: cache hit and still fresh (no lock needed)
+    if _jwks_cache is not None and (now - _jwks_last_fetched <= 3600):
+        return _jwks_cache
+
+    with _jwks_lock:
+        # Double-check after acquiring lock
+        if _jwks_cache is not None and (now - _jwks_last_fetched <= 3600):
+            return _jwks_cache
+
+        # If a previous fetch already failed recently and we have no cached keys,
+        # do NOT hammer the (possibly dead) endpoint on every request.
+        if _jwks_cache is None and (now - _jwks_last_error_at) < _JWKS_ERROR_COOLDOWN:
+            raise RuntimeError("Could not fetch Supabase JWKS and no cache is available")
+
         try:
             jwks_url = f"{supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
             response = httpx.get(jwks_url, timeout=5.0)
             response.raise_for_status()
             _jwks_cache = response.json()
             _jwks_last_fetched = now
+            _jwks_last_error_at = 0
             logger.info("Successfully fetched and cached Supabase JWKS public keys")
         except Exception as e:
-            logger.error(f"Failed to fetch Supabase JWKS from {supabase_url}: {e}")
+            if (now - _jwks_last_error_at) >= _JWKS_ERROR_COOLDOWN:
+                logger.error(f"Failed to fetch Supabase JWKS from {supabase_url}: {e}")
+            _jwks_last_error_at = now
             if _jwks_cache is None:
                 raise RuntimeError("Could not fetch Supabase JWKS and no cache is available") from e
+
     return _jwks_cache
 
 
@@ -160,6 +181,10 @@ async def get_current_user(
         raise HTTPException(status_code=401, detail="User profile not found in system database")
     if user.get("status") == "suspended":
         raise HTTPException(status_code=403, detail="Account suspended")
+
+    # Merge JWT role into user dict if DB doc doesn't have one
+    if not user.get("role") and payload.get("role"):
+        user["role"] = payload["role"]
 
     return user
 

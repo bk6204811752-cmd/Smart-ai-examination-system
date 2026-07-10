@@ -153,7 +153,7 @@ interface AuthActions {
 export const useAuthStore = create<AuthState & AuthActions>()(
   devtools(
     persist(
-      subscribeWithSelector((set, get) => ({
+      subscribeWithSelector((set) => ({
         // State
         user: null,
         token: null,

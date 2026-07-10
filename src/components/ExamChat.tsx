@@ -88,7 +88,7 @@ export default function ExamChat({
       ws.off('message_history', handleMessageHistory)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wsClientRef.current, isOpen])
+  }, [isOpen])
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -134,6 +134,9 @@ export default function ExamChat({
         msg.student_id === forStudentId ||
         (msg.type === 'teacher_reply' && msg.student_id === forStudentId)
       )
+    }
+    if (!isTeacher) {
+      return msg.student_id === userId
     }
     return true
   }

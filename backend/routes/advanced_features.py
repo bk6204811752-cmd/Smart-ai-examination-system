@@ -92,7 +92,7 @@ async def generate_ai_exam(config: AIExamConfig, current_user: dict = Depends(re
             "explanation": "Server-side AI generation coming soon.",
             "marks": 1,
             "difficulty": config.difficulty_level,
-            "topic": config.topics[i % len(config.topics)] if config.topics else "general",
+            "topic": config.topics[i % max(len(config.topics), 1)] if config.topics else "general",
         }
         for i in range(min(config.num_questions, 25))
     ]
@@ -112,7 +112,7 @@ async def generate_ai_exam(config: AIExamConfig, current_user: dict = Depends(re
             "total_points": len(questions),
             "estimated_duration": config.duration,
             "difficulty_distribution": {"easy": 33, "medium": 34, "hard": 33},
-            "topic_distribution": {t: round(100 / len(config.topics), 1) for t in config.topics} if config.topics else {"general": 100},
+            "topic_distribution": {t: round(100 / max(len(config.topics), 1), 1) for t in config.topics} if config.topics else {"general": 100},
             "bloom_distribution": {l: round(100 / max(len(config.bloom_focus), 1), 1) for l in (config.bloom_focus or ["knowledge"])} if config.bloom_focus else {"knowledge": 100},
             "estimated_pass_rate": config.target_pass_rate or 0.7,
             "quality_score": 85.0,

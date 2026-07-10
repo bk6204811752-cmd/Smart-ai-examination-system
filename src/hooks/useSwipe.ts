@@ -1,4 +1,4 @@
-import { useState, TouchEvent } from 'react'
+import { useRef, TouchEvent } from 'react'
 
 interface SwipeInput {
   onSwipeLeft?: () => void
@@ -15,37 +15,38 @@ interface SwipeOutput {
 }
 
 export const useSwipe = (input: SwipeInput): SwipeOutput => {
-  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null)
-  const [touchEnd, setTouchEnd] = useState<{ x: number; y: number } | null>(null)
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null)
+  const touchEndRef = useRef<{ x: number; y: number } | null>(null)
 
   const minSwipeDistance = input.minSwipeDistance || 50
 
   const onTouchStart = (e: TouchEvent) => {
-    setTouchEnd(null)
-    setTouchStart({
+    touchEndRef.current = null
+    touchStartRef.current = {
       x: e.targetTouches[0].clientX,
       y: e.targetTouches[0].clientY,
-    })
+    }
   }
 
   const onTouchMove = (e: TouchEvent) => {
-    setTouchEnd({
+    touchEndRef.current = {
       x: e.targetTouches[0].clientX,
       y: e.targetTouches[0].clientY,
-    })
+    }
   }
 
   const onTouchEnd = () => {
-    if (!touchStart || !touchEnd) return
+    const start = touchStartRef.current
+    const end = touchEndRef.current
+    if (!start || !end) return
 
-    const distanceX = touchStart.x - touchEnd.x
-    const distanceY = touchStart.y - touchEnd.y
+    const distanceX = start.x - end.x
+    const distanceY = start.y - end.y
     const isLeftSwipe = distanceX > minSwipeDistance
     const isRightSwipe = distanceX < -minSwipeDistance
     const isUpSwipe = distanceY > minSwipeDistance
     const isDownSwipe = distanceY < -minSwipeDistance
 
-    // Only trigger swipe if horizontal distance is greater than vertical
     if (Math.abs(distanceX) > Math.abs(distanceY)) {
       if (isLeftSwipe && input.onSwipeLeft) {
         input.onSwipeLeft()

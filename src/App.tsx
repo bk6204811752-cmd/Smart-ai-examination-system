@@ -400,6 +400,14 @@ function App() {
                   </TRoute>
                 }
               />
+              <Route
+                path="/teacher/edit-exam/:examId"
+                element={
+                  <TRoute title="Edit Exam">
+                    <CreateExamPage />
+                  </TRoute>
+                }
+              />
               {/* FIX: /teacher/live-monitoring (no examId required) */}
               <Route
                 path="/teacher/live-monitoring"

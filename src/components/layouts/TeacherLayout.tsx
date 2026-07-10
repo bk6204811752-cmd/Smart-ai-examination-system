@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/globalStore'
 import { motion, AnimatePresence } from 'framer-motion'
+import NotificationBell from '../NotificationBell'
 import {
   Home,
-  BookOpen,
   Monitor,
   BarChart3,
   Brain,
@@ -12,7 +12,7 @@ import {
   Shield,
   Award,
   Sparkles,
-  Bell,
+  Bell as BellIcon,
   Settings,
   LogOut,
   GraduationCap,
@@ -26,7 +26,6 @@ import {
 
 const navItems = [
   { icon: Home, label: 'Dashboard', to: '/teacher/dashboard' },
-  { icon: BookOpen, label: 'My Exams', to: '/teacher/dashboard' },
   { icon: PlusCircle, label: 'Create Exam', to: '/teacher/create-exam' },
   { icon: Monitor, label: 'Live Monitor', to: '/teacher/live-monitoring' },
   { icon: BarChart3, label: 'Analytics', to: '/teacher/analytics' },
@@ -35,7 +34,7 @@ const navItems = [
   { icon: Shield, label: 'Plagiarism', to: '/teacher/plagiarism' },
   { icon: Award, label: 'Reports', to: '/teacher/reports' },
   { icon: Sparkles, label: 'Templates', to: '/teacher/templates' },
-  { icon: Bell, label: 'Notifications', to: '/notifications' },
+  { icon: BellIcon, label: 'Notifications', to: '/notifications' },
   { icon: Settings, label: 'Settings', to: '/settings' },
 ]
 
@@ -244,12 +243,7 @@ export default function TeacherLayout({
                   {liveCount} Live
                 </Link>
               )}
-              <Link
-                to="/notifications"
-                className="relative p-2 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition-all"
-              >
-                <Bell className="w-5 h-5" />
-              </Link>
+              <NotificationBell />
               <Link
                 to="/teacher/create-exam"
                 className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 text-white text-xs font-semibold rounded-xl hover:bg-purple-700 transition-all"

@@ -11,6 +11,7 @@ import {
   CheckCircle,
   XCircle,
   Pause,
+  Play,
   MessageSquare,
   BarChart3,
   Activity,
@@ -116,9 +117,14 @@ export default function StudentDetailModal({
     setIntervening(true)
     const message =
       action === 'resume'
-        ? 'Your exam has been resumed by the proctor.'
-        : interventionMessage || `Exam ${action}d by proctor`
+        ? 'Your exam has been resumed. All monitoring is now active again.'
+        : action === 'pause'
+          ? interventionMessage || 'Your exam has been paused by the proctor. Object detection and monitoring have been stopped.'
+          : interventionMessage || `Exam ${action}d by proctor`
     onIntervene(student.student_id, action, message)
+    if (action === 'pause' || action === 'resume') {
+      setInterventionMessage('')
+    }
     setTimeout(() => setIntervening(false), 1000)
   }
 
@@ -151,14 +157,16 @@ export default function StudentDetailModal({
               </div>
               <div
                 className={`px-3 py-1 rounded-full text-xs font-bold border ${
-                  student.status === 'active'
-                    ? 'bg-green-600/20 text-green-400 border-green-500/50'
-                    : student.status === 'flagged'
-                      ? 'bg-red-600/20 text-red-400 border-red-500/50'
-                      : 'bg-blue-600/20 text-blue-400 border-blue-500/50'
+                  student.is_paused
+                    ? 'bg-red-600/30 text-red-400 border-red-500/50 animate-pulse'
+                    : student.status === 'active'
+                      ? 'bg-green-600/20 text-green-400 border-green-500/50'
+                      : student.status === 'flagged'
+                        ? 'bg-red-600/20 text-red-400 border-red-500/50'
+                        : 'bg-blue-600/20 text-blue-400 border-blue-500/50'
                 }`}
               >
-                {student.status.toUpperCase()}
+                {student.is_paused ? 'PAUSED' : student.status.toUpperCase()}
               </div>
             </div>
             <button
@@ -480,19 +488,19 @@ export default function StudentDetailModal({
                       disabled={intervening}
                       className="flex flex-col items-center gap-2 p-4 bg-green-950/30 border border-green-600/50 rounded-xl text-green-400 hover:bg-green-900/30 transition disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <Pause className="w-6 h-6" />
+                      <Play className="w-6 h-6" />
                       <span className="text-sm font-semibold">Resume Exam</span>
-                      <span className="text-xs text-green-600">Let student continue</span>
+                      <span className="text-xs text-green-600">Restarts monitoring & detection</span>
                     </button>
                   ) : (
                     <button
                       onClick={() => handleIntervene('pause')}
-                      disabled={!interventionMessage.trim() || intervening}
+                      disabled={intervening}
                       className="flex flex-col items-center gap-2 p-4 bg-orange-950/30 border border-orange-600/50 rounded-xl text-orange-400 hover:bg-orange-900/30 transition disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Pause className="w-6 h-6" />
                       <span className="text-sm font-semibold">Pause Exam</span>
-                      <span className="text-xs text-orange-600">Stops student temporarily</span>
+                      <span className="text-xs text-orange-600">Stops object detection & monitoring</span>
                     </button>
                   )}
 

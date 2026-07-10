@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
-import { Bell, X, Check, Trash2, ExternalLink } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Bell, X, Check, Trash2, ExternalLink, AlertTriangle, Calendar, Trophy, Info } from 'lucide-react'
 import { notificationsAPI } from '../lib/api'
-import { useAuthStore } from '../store/globalStore'
+import { useAuthStore, useNotificationStore } from '../store/globalStore'
 import { toast } from 'sonner'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -10,28 +10,117 @@ interface Notification {
   _id: string
   title: string
   message: string
-  type: 'info' | 'success' | 'warning' | 'error'
+  type: 'info' | 'success' | 'warning' | 'error' | 'exam' | 'grade' | 'security' | 'announcement' | 'achievement'
   action_url?: string
   priority: 'low' | 'normal' | 'high' | 'urgent'
   read: boolean
   created_at: string
 }
 
+const NOTIFICATION_SOUNDS: Record<string, string> = {
+  urgent: 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZTR',
+  high: 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZTR',
+}
+
+function playNotificationSound(priority: string) {
+  try {
+    const src = NOTIFICATION_SOUNDS[priority]
+    if (src) {
+      const audio = new Audio(src)
+      audio.volume = 0.2
+      audio.play().catch(() => {})
+    }
+  } catch { /* noop */ }
+}
+
 export default function NotificationBell() {
   const { user } = useAuthStore()
   const navigate = useNavigate()
+  const localStore = useNotificationStore()
   const [isOpen, setIsOpen] = useState(false)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [loading, setLoading] = useState(false)
+  const prevCountRef = useRef(unreadCount)
 
   useEffect(() => {
     if (user) {
       loadNotifications()
-      // Poll for new notifications every 30 seconds
       const interval = setInterval(loadNotifications, 30000)
       return () => clearInterval(interval)
     }
+  }, [user])
+
+  useEffect(() => {
+    if (unreadCount > prevCountRef.current) {
+      playNotificationSound('high')
+    }
+    prevCountRef.current = unreadCount
+  }, [unreadCount])
+
+  useEffect(() => {
+    if (!user) return
+    const baseUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000'
+    const token = localStorage.getItem('token')
+    const wsUrl = `${baseUrl}/ws/notifications?token=${token}`
+    let ws: WebSocket | null = null
+    let reconnectTimer: number | null = null
+
+    function connect() {
+      try {
+        ws = new WebSocket(wsUrl)
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data)
+            if (data.type === 'notification' && data.notification) {
+              const n = data.notification
+              const newNotif: Notification = {
+                _id: n._id || `ws-${Date.now()}`,
+                title: n.title,
+                message: n.message,
+                type: n.type || 'info',
+                action_url: n.action_url,
+                priority: n.priority || 'normal',
+                read: false,
+                created_at: n.created_at || new Date().toISOString(),
+              }
+              setNotifications(prev => [newNotif, ...prev].slice(0, 50))
+              setUnreadCount(prev => prev + 1)
+              localStore.addNotification({
+                title: n.title,
+                message: n.message,
+                type: n.type || 'info',
+                actionUrl: n.action_url,
+              })
+
+              const priority = n.priority || 'normal'
+              playNotificationSound(priority)
+
+              if (priority === 'urgent') {
+                toast.error(n.title, { description: n.message, duration: 6000 })
+              } else if (priority === 'high') {
+                toast.warning(n.title, { description: n.message, duration: 4000 })
+              } else {
+                toast.info(n.title, { description: n.message, duration: 3000 })
+              }
+            }
+          } catch { /* noop */ }
+        }
+        ws.onclose = () => {
+          reconnectTimer = window.setTimeout(connect, 5000)
+        }
+        ws.onerror = () => {
+          ws?.close()
+        }
+      } catch { /* noop */ }
+    }
+
+    connect()
+    return () => {
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+      ws?.close()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
   const loadNotifications = async () => {
@@ -51,7 +140,8 @@ export default function NotificationBell() {
         prev.map(n => n._id === notificationId ? { ...n, read: true } : n)
       )
       setUnreadCount(prev => Math.max(0, prev - 1))
-    } catch (error) {
+      localStore.markAsRead(notificationId)
+    } catch {
       toast.error('Failed to mark as read')
     }
   }
@@ -62,8 +152,9 @@ export default function NotificationBell() {
       await notificationsAPI.markAllAsRead()
       setNotifications(prev => prev.map(n => ({ ...n, read: true })))
       setUnreadCount(0)
+      localStore.markAllAsRead()
       toast.success('All notifications marked as read')
-    } catch (error) {
+    } catch {
       toast.error('Failed to mark all as read')
     } finally {
       setLoading(false)
@@ -75,19 +166,15 @@ export default function NotificationBell() {
       await notificationsAPI.deleteNotification(notificationId)
       setNotifications(prev => prev.filter(n => n._id !== notificationId))
       const wasUnread = notifications.find(n => n._id === notificationId)?.read === false
-      if (wasUnread) {
-        setUnreadCount(prev => Math.max(0, prev - 1))
-      }
-      toast.success('Notification deleted')
-    } catch (error) {
+      if (wasUnread) setUnreadCount(prev => Math.max(0, prev - 1))
+      localStore.removeNotification(notificationId)
+    } catch {
       toast.error('Failed to delete notification')
     }
   }
 
   const handleNotificationClick = (notification: Notification) => {
-    if (!notification.read) {
-      markAsRead(notification._id)
-    }
+    if (!notification.read) markAsRead(notification._id)
     if (notification.action_url) {
       navigate(notification.action_url)
       setIsOpen(false)
@@ -96,27 +183,27 @@ export default function NotificationBell() {
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'success':
-        return <Check className="w-4 h-4 text-green-600" />
-      case 'warning':
-        return <Bell className="w-4 h-4 text-yellow-600" />
-      case 'error':
-        return <X className="w-4 h-4 text-red-600" />
-      default:
-        return <Bell className="w-4 h-4 text-blue-600" />
+      case 'success': return <Check className="w-4 h-4 text-green-600" />
+      case 'warning': return <AlertTriangle className="w-4 h-4 text-yellow-600" />
+      case 'error': return <X className="w-4 h-4 text-red-600" />
+      case 'exam': return <Calendar className="w-4 h-4 text-blue-600" />
+      case 'grade': return <Trophy className="w-4 h-4 text-yellow-600" />
+      case 'security': return <AlertTriangle className="w-4 h-4 text-orange-600" />
+      case 'announcement': return <Info className="w-4 h-4 text-purple-600" />
+      default: return <Bell className="w-4 h-4 text-blue-600" />
     }
   }
 
   const getTypeColor = (type: string) => {
     switch (type) {
-      case 'success':
-        return 'bg-green-100 border-green-200'
-      case 'warning':
-        return 'bg-yellow-100 border-yellow-200'
-      case 'error':
-        return 'bg-red-100 border-red-200'
-      default:
-        return 'bg-blue-100 border-blue-200'
+      case 'success': return 'bg-green-100 border-green-200'
+      case 'warning': return 'bg-yellow-100 border-yellow-200'
+      case 'error': return 'bg-red-100 border-red-200'
+      case 'exam': return 'bg-blue-100 border-blue-200'
+      case 'grade': return 'bg-yellow-100 border-yellow-200'
+      case 'security': return 'bg-orange-100 border-orange-200'
+      case 'announcement': return 'bg-purple-100 border-purple-200'
+      default: return 'bg-blue-100 border-blue-200'
     }
   }
 
@@ -124,7 +211,6 @@ export default function NotificationBell() {
     const date = new Date(dateString)
     const now = new Date()
     const seconds = Math.floor((now.getTime() - date.getTime()) / 1000)
-
     if (seconds < 60) return 'Just now'
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
     if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
@@ -133,7 +219,6 @@ export default function NotificationBell() {
 
   return (
     <div className="relative">
-      {/* Bell Icon */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="relative p-2 rounded-lg hover:bg-gray-100 transition"
@@ -150,17 +235,10 @@ export default function NotificationBell() {
         )}
       </button>
 
-      {/* Dropdown Panel */}
       <AnimatePresence>
         {isOpen && (
           <>
-            {/* Backdrop */}
-            <div
-              className="fixed inset-0 z-40"
-              onClick={() => setIsOpen(false)}
-            />
-
-            {/* Notification Panel */}
+            <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -168,7 +246,6 @@ export default function NotificationBell() {
               transition={{ duration: 0.2 }}
               className="absolute right-0 mt-2 w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 max-h-[600px] flex flex-col"
             >
-              {/* Header */}
               <div className="p-4 border-b border-gray-200">
                 <div className="flex items-center justify-between">
                   <div>
@@ -187,17 +264,13 @@ export default function NotificationBell() {
                         Mark all read
                       </button>
                     )}
-                    <button
-                      onClick={() => setIsOpen(false)}
-                      className="p-1 hover:bg-gray-100 rounded-lg transition"
-                    >
+                    <button onClick={() => setIsOpen(false)} className="p-1 hover:bg-gray-100 rounded-lg transition">
                       <X className="w-5 h-5 text-gray-500" />
                     </button>
                   </div>
                 </div>
               </div>
 
-              {/* Notifications List */}
               <div className="flex-1 overflow-y-auto">
                 {notifications.length === 0 ? (
                   <div className="p-8 text-center text-gray-500">
@@ -260,7 +333,6 @@ export default function NotificationBell() {
                 )}
               </div>
 
-              {/* Footer */}
               {notifications.length > 0 && (
                 <div className="p-3 border-t border-gray-200">
                   <button

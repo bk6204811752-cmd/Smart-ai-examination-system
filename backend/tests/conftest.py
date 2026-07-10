@@ -14,12 +14,11 @@ from config import settings
 TEST_DB_NAME = "pcmt_exam_test"
 
 
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create event loop for async tests"""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
+# NOTE:
+# Do not override pytest-asyncio's event loop at session scope.
+# Overriding can cause 'RuntimeError: Event loop is closed' with Motor.
+# If a custom loop is required, keep it function-scoped.
+
 
 
 @pytest.fixture(scope="session")
@@ -29,8 +28,14 @@ async def test_db():
     db = client[TEST_DB_NAME]
     yield db
     # Cleanup: Drop test database after all tests
-    await client.drop_database(TEST_DB_NAME)
+    # Atlas test users may not have dropDatabase permission. In tests we only need isolation,
+    # so ignore dropDatabase permission errors.
+    try:
+        await client.drop_database(TEST_DB_NAME)
+    except Exception:
+        pass
     client.close()
+
 
 
 @pytest.fixture

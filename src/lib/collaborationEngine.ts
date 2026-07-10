@@ -518,7 +518,6 @@ class RealtimeCollaborationEngine {
    */
   async startScreenShare(roomId: string): Promise<MediaStream> {
     try {
-      // @ts-expect-error - getDisplayMedia vendor prefix
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
         audio: false,

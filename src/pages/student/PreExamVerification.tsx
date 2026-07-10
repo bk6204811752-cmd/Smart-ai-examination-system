@@ -1,7 +1,9 @@
 ﻿import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { FaceLandmarker, ObjectDetector, FilesetResolver } from '@mediapipe/tasks-vision'
+import { sessionAPI } from '../../lib/api'
+import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision'
+import { detectSuspiciousObjects } from '../../utils/objectDetection'
 import {
   Camera,
   Mic,
@@ -40,8 +42,7 @@ interface VerificationCheck {
 const MEDIAPIPE_WASM_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm'
 const FACE_LANDMARKER_MODEL =
   'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task'
-const OBJECT_DETECTOR_MODEL =
-  'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/latest/efficientdet_lite0.task'
+// Object detection now uses @tensorflow-models/coco-ssd via objectDetection.ts
 
 export default function PreExamVerification() {
   const params = useParams<{ examId?: string; testId?: string }>()
@@ -64,6 +65,12 @@ export default function PreExamVerification() {
   const [faceDetected, setFaceDetected] = useState<boolean | null>(null)
   const [audioWaveData, setAudioWaveData] = useState<number[]>(Array(32).fill(0))
   const [allDone, setAllDone] = useState(false)
+  const [, setChecksRunning] = useState(false)
+  const audioLevelRef = useRef(0)
+  const brightnessLevelRef = useRef(0)
+  const visionResolverRef = useRef<any>(null)
+  const cachedDevicesRef = useRef<MediaDeviceInfo[] | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
 
   const [checks, setChecks] = useState<VerificationCheck[]>([
     {
@@ -90,7 +97,7 @@ export default function PreExamVerification() {
       status: 'pending',
       message: 'Analyzing room brightness...',
       icon: Sun,
-      required: true, // FIX: lighting is required â€” exam must not start in dark room
+      required: true, // FIX: lighting is required  -  exam must not start in dark room
       category: 'environment',
     },
     {
@@ -162,7 +169,7 @@ export default function PreExamVerification() {
       status: 'pending',
       message: 'Testing for headphones/earbuds...',
       icon: Headphones,
-      required: true,
+      required: false,
       category: 'hardware',
     },
     {
@@ -198,7 +205,10 @@ export default function PreExamVerification() {
     startVerification()
     return () => {
       cleanup()
-      delete (window as any).__preExamStream
+      // Don't delete __preExamStream/__verificationResults here —
+      // ExamPage/PracticeMockExam read them on mount and delete them after consuming.
+      // Deleting here would cause a race condition where the cleanup runs before the
+      // next page's useEffect, causing the exam page to miss the pre-verified data.
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -227,7 +237,9 @@ export default function PreExamVerification() {
         sum += (data[i] * 299 + data[i + 1] * 587 + data[i + 2] * 114) / 1000
       }
       const avg = sum / (data.length / 4)
-      setBrightnessLevel(Math.round(avg))
+      const rounded = Math.round(avg)
+      setBrightnessLevel(rounded)
+      brightnessLevelRef.current = rounded
     }
 
     const interval = setInterval(checkBrightness, 500)
@@ -235,10 +247,11 @@ export default function PreExamVerification() {
   }, [stream])
 
   const cleanup = () => {
-    if (stream) {
+    const s = streamRef.current
+    if (s) {
       const preExamStream = (window as any).__preExamStream
-      if (preExamStream !== stream) {
-        stream.getTracks().forEach(track => track.stop())
+      if (preExamStream !== s) {
+        s.getTracks().forEach(track => track.stop())
       }
     }
     if (audioCtxRef.current) {
@@ -331,6 +344,7 @@ export default function PreExamVerification() {
         await videoRef.current.play().catch(() => {})
       }
       setStream(mediaStream)
+      streamRef.current = mediaStream
 
       // Start audio monitoring
       startAudioMonitoring(mediaStream)
@@ -340,15 +354,15 @@ export default function PreExamVerification() {
       updateCheck(
         'webcam',
         'passed',
-        'Camera connected âœ“',
-        `${settings.width}Ã—${settings.height} @ ${settings.frameRate?.toFixed(0) || '?'}fps Â· ${videoTrack.label}`
+        'Camera connected [OK]',
+        `${settings.width}x${settings.height} @ ${settings.frameRate?.toFixed(0) || '?'}fps  -  ${videoTrack.label}`
       )
     } catch (error: any) {
       const msg =
         error?.name === 'NotAllowedError'
-          ? 'Camera permission denied â€” please click Allow'
+          ? 'Camera permission denied  -  please click Allow'
           : error?.name === 'NotFoundError'
-            ? 'No camera found â€” please connect a camera'
+            ? 'No camera found  -  please connect a camera'
             : 'Camera initialization failed'
       updateCheck('webcam', 'failed', msg)
     }
@@ -367,7 +381,9 @@ export default function PreExamVerification() {
       const draw = () => {
         analyser.getByteFrequencyData(dataArray)
         const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length
-        setAudioLevel(Math.round(avg))
+        const rounded = Math.round(avg)
+        setAudioLevel(rounded)
+        audioLevelRef.current = rounded
         setAudioWaveData(Array.from(dataArray).slice(0, 32))
         animFrameRef.current = requestAnimationFrame(draw)
       }
@@ -379,13 +395,17 @@ export default function PreExamVerification() {
 
   const checkMicrophone = async () => {
     updateCheck('microphone', 'checking', 'Testing microphone sensitivity...')
-    await delay(1200)
-    if (audioLevel > 0) {
+    // Wait longer for audio monitoring to stabilize (state is async, but ref updates in rAF)
+    for (let i = 0; i < 15; i++) {
+      await delay(200)
+      if (audioLevelRef.current > 0) break
+    }
+    if (audioLevelRef.current > 0) {
       updateCheck(
         'microphone',
         'passed',
-        'Microphone working âœ“',
-        `Audio monitoring active (level: ${audioLevel})`
+        'Microphone working [OK]',
+        `Audio monitoring active (level: ${audioLevelRef.current})`
       )
     } else {
       updateCheck('microphone', 'warning', 'Microphone detected but silent', 'Try speaking to test')
@@ -424,11 +444,18 @@ export default function PreExamVerification() {
     }
     if (!stabilized) await delay(600) // Extra wait if still not ready
 
-    // FIX: Do NOT use || 80 fallback. If brightness is 0, the camera hasn't loaded yet.
-    // Wait for a real reading from the canvas.
-    let brightness = brightnessLevel
+    // Use the ref to avoid stale closures (state updates are async)
+    let brightness = brightnessLevelRef.current
+    if (brightness === 0) {
+      // Poll for a real reading from the canvas (camera auto-exposure needs time)
+      for (let i = 0; i < 10; i++) {
+        await delay(300)
+        brightness = brightnessLevelRef.current
+        if (brightness > 5) break
+      }
+    }
+    // Final fallback: force a fresh canvas measurement
     if (brightness === 0 && videoRef.current && canvasRef.current) {
-      // Force a fresh measurement
       const canvas = canvasRef.current
       const ctx = canvas.getContext('2d')
       const video = videoRef.current
@@ -443,6 +470,7 @@ export default function PreExamVerification() {
           sum += (data[i] * 299 + data[i + 1] * 587 + data[i + 2] * 114) / 1000
         }
         brightness = Math.round(sum / (data.length / 4))
+        brightnessLevelRef.current = brightness
       }
     }
 
@@ -450,45 +478,61 @@ export default function PreExamVerification() {
       updateCheck(
         'lighting',
         'failed',
-        'No video signal â€” camera may be blocked or not working',
+        'No video signal  -  camera may be blocked or not working',
         'Ensure camera is uncovered and active'
       )
     } else if (brightness < 35) {
-      // HARD FAIL: Room too dark for face detection â€” exam must not start
+      // HARD FAIL: Room too dark for face detection  -  exam must not start
       updateCheck(
         'lighting',
         'failed',
-        `Room too dark (${brightness}/255) â€” turn on lights before exam`,
-        `Minimum required: 35/255 Â· Face detection requires adequate lighting`
+        `Room too dark (${brightness}/255)  -  turn on lights before exam`,
+        `Minimum required: 35/255  -  Face detection requires adequate lighting`
       )
     } else if (brightness < 60) {
       updateCheck(
         'lighting',
         'warning',
-        `Low lighting (${brightness}/255) â€” improve for best accuracy`,
+        `Low lighting (${brightness}/255)  -  improve for best accuracy`,
         'Recommended: 60+ for optimal face detection'
       )
     } else {
       updateCheck(
         'lighting',
         'passed',
-        `Room lighting is good (${brightness}/255) âœ“`,
+        `Room lighting is good (${brightness}/255) [OK]`,
         'Face detection will work optimally'
       )
     }
+  }
+
+  let visionResolverPromise: Promise<any> | null = null
+  const getVisionResolver = async () => {
+    if (visionResolverRef.current) return visionResolverRef.current
+    if (!visionResolverPromise) {
+      visionResolverPromise = Promise.race([
+        FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_CDN),
+        new Promise<any>((_, reject) =>
+          setTimeout(() => reject(new Error('MediaPipe WASM load timeout')), 20000)
+        ),
+      ])
+    }
+    const vision = await visionResolverPromise
+    visionResolverRef.current = vision
+    return vision
   }
 
   const checkFaceDetection = async () => {
     updateCheck('face', 'checking', 'Running AI face detection...')
     await delay(800)
 
-    const brightness = brightnessLevel
+    const brightness = brightnessLevelRef.current
     if (brightness < 35) {
       setFaceDetected(false)
       updateCheck(
         'face',
         'failed',
-        'Cannot detect face â€” room too dark',
+        'Cannot detect face  -  room too dark',
         'Fix lighting first, then re-run checks'
       )
       return
@@ -520,12 +564,7 @@ export default function PreExamVerification() {
     let faceLandmarker: FaceLandmarker | null = null
     try {
       updateCheck('face', 'checking', 'Loading face detection AI model...')
-      const vision = await Promise.race([
-        FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_CDN),
-        new Promise<any>((_, reject) =>
-          setTimeout(() => reject(new Error('MediaPipe WASM load timeout')), 20000)
-        ),
-      ])
+      const vision = await getVisionResolver()
 
       faceLandmarker = await Promise.race([
         FaceLandmarker.createFromOptions(vision, {
@@ -554,7 +593,7 @@ export default function PreExamVerification() {
           updateCheck(
             'face',
             'passed',
-            `Face detected âœ“ (${faceCount} face${faceCount > 1 ? 's' : ''})`,
+            `Face detected [OK] (${faceCount} face${faceCount > 1 ? 's' : ''})`,
             'Keep face centered and well-lit during exam'
           )
           return
@@ -565,8 +604,8 @@ export default function PreExamVerification() {
       updateCheck(
         'face',
         'failed',
-        'No face detected â€” position yourself in front of the camera',
-        'Face the camera directly Â· Ensure your face is visible and well-lit'
+        'No face detected  -  position yourself in front of the camera',
+        'Face the camera directly  -  Ensure your face is visible and well-lit'
       )
     } catch (err) {
       console.warn('Face detection error:', err)
@@ -574,7 +613,7 @@ export default function PreExamVerification() {
       updateCheck(
         'face',
         'failed',
-        'Face detection failed â€” try again after the camera loads',
+        'Face detection failed  -  try again after the camera loads',
         'Turn on lights, face the camera, and rerun verification'
       )
     } finally {
@@ -589,7 +628,7 @@ export default function PreExamVerification() {
       updateCheck(
         'screen',
         'passed',
-        'Screen sharing detection active âœ“',
+        'Screen sharing detection active [OK]',
         'Any screen sharing will be flagged'
       )
     } else {
@@ -631,14 +670,14 @@ export default function PreExamVerification() {
       updateCheck(
         'browser',
         'passed',
-        `${browser} â€” fully supported âœ“`,
-        `WebRTC: active Â· UserAgent verified`
+        `${browser}  -  fully supported [OK]`,
+        `WebRTC: active  -  UserAgent verified`
       )
     } else {
       updateCheck(
         'browser',
         'failed',
-        `${browser} â€” not recommended`,
+        `${browser}  -  not recommended`,
         'Please use Chrome or Edge for best experience'
       )
     }
@@ -655,7 +694,7 @@ export default function PreExamVerification() {
         updateCheck(
           'internet',
           'passed',
-          `Excellent connection (${latency}ms) âœ“`,
+          `Excellent connection (${latency}ms) [OK]`,
           'Stable connection for video monitoring'
         )
       } else if (latency < 1500) {
@@ -679,7 +718,7 @@ export default function PreExamVerification() {
         updateCheck(
           'internet',
           'passed',
-          'Connected to internet âœ“',
+          'Connected to internet [OK]',
           'Connection verified via browser'
         )
       } else {
@@ -704,8 +743,8 @@ export default function PreExamVerification() {
     updateCheck(
       'system',
       'passed',
-      `System meets requirements âœ“`,
-      `${cores} CPU cores Â· ${memory ? memory + 'GB RAM' : 'RAM: OK'} Â· WebGL: ${hasWebGL ? 'Yes' : 'No'}`
+      `System meets requirements [OK]`,
+      `${cores} CPU cores  -  ${memory ? memory + 'GB RAM' : 'RAM: OK'}  -  WebGL: ${hasWebGL ? 'Yes' : 'No'}`
     )
   }
 
@@ -715,18 +754,26 @@ export default function PreExamVerification() {
     updateCheck(
       'devtools',
       'passed',
-      'DevTools will be blocked during exam âœ“',
+      'DevTools will be blocked during exam [OK]',
       'F12, Ctrl+Shift+I are disabled'
     )
+  }
+
+  const getCachedDevices = async () => {
+    if (cachedDevicesRef.current && cachedDevicesRef.current.length > 0) {
+      return cachedDevicesRef.current
+    }
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    cachedDevicesRef.current = devices
+    return devices
   }
 
   const checkExternalDevices = async () => {
     updateCheck('phone', 'checking', 'Scanning for external devices...')
     await delay(800)
 
-    // Check media devices for suspicious patterns
     try {
-      const devices = await navigator.mediaDevices.enumerateDevices()
+      const devices = await getCachedDevices()
       const videoDevices = devices.filter(d => d.kind === 'videoinput')
       const audioDevices = devices.filter(d => d.kind === 'audioinput')
 
@@ -741,19 +788,20 @@ export default function PreExamVerification() {
         updateCheck(
           'phone',
           'passed',
-          'No unauthorized devices detected âœ“',
-          `1 camera Â· ${audioDevices.length} microphone(s)`
+          'No unauthorized devices detected [OK]',
+          `1 camera  -  ${audioDevices.length} microphone(s)`
         )
       }
     } catch {
-      updateCheck('phone', 'passed', 'Device scan complete âœ“')
+      updateCheck('phone', 'passed', 'Device scan complete [OK]')
     }
   }
 
   const checkHeadphones = async () => {
     updateCheck('headphone_test', 'checking', 'Testing for headphones/earbuds...')
     try {
-      if (!stream) {
+      const activeStream = streamRef.current
+      if (!activeStream || !activeStream.active) {
         updateCheck(
           'headphone_test',
           'failed',
@@ -763,15 +811,20 @@ export default function PreExamVerification() {
         return
       }
 
-      const testCtx = new AudioContext()
-      const testSource = testCtx.createMediaStreamSource(stream)
-      const testAnalyser = testCtx.createAnalyser()
-      testAnalyser.fftSize = 128
-      testSource.connect(testAnalyser)
-      const dataArray = new Uint8Array(testAnalyser.frequencyBinCount)
+      // Use a single AudioContext for both mic analysis and tone playback
+      const audioCtx = new AudioContext()
+      if (audioCtx.state === 'suspended') {
+        await audioCtx.resume()
+      }
+
+      const micSource = audioCtx.createMediaStreamSource(activeStream)
+      const analyser = audioCtx.createAnalyser()
+      analyser.fftSize = 128
+      micSource.connect(analyser)
+      const dataArray = new Uint8Array(analyser.frequencyBinCount)
 
       const readLevel = () => {
-        testAnalyser.getByteFrequencyData(dataArray)
+        analyser.getByteFrequencyData(dataArray)
         return dataArray.reduce((a, b) => a + b, 0) / dataArray.length
       }
 
@@ -783,52 +836,53 @@ export default function PreExamVerification() {
       }
       const baseline = baselineSum / 5
 
-      // Play 800Hz test tone through speakers
-      const toneCtx = new AudioContext()
-      const osc = toneCtx.createOscillator()
-      const gain = toneCtx.createGain()
-      osc.connect(gain)
-      gain.connect(toneCtx.destination)
+      // Play test tone through speakers using the same AudioContext
+      const osc = audioCtx.createOscillator()
+      const gainNode = audioCtx.createGain()
+      osc.connect(gainNode)
+      gainNode.connect(audioCtx.destination)
       osc.type = 'sine'
-      osc.frequency.setValueAtTime(800, toneCtx.currentTime)
-      gain.gain.setValueAtTime(0.5, toneCtx.currentTime)
-      gain.gain.exponentialRampToValueAtTime(0.001, toneCtx.currentTime + 1.5)
+      osc.frequency.setValueAtTime(600, audioCtx.currentTime)
+      gainNode.gain.setValueAtTime(1.0, audioCtx.currentTime)
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 2.0)
       osc.start()
 
-      // Read 10 samples during tone playback
+      // Wait for tone to reach speakers before sampling
+      await delay(300)
+
+      // Read 15 samples during tone playback (1.5s)
       let toneSum = 0
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < 15; i++) {
         await delay(100)
         toneSum += readLevel()
       }
-      const avgTone = toneSum / 10
+      const avgTone = toneSum / 15
 
-      osc.stop(toneCtx.currentTime + 0.1)
-      toneCtx.close()
-      testSource.disconnect()
-      testCtx.close()
+      osc.stop(audioCtx.currentTime + 0.1)
+      micSource.disconnect()
+      await audioCtx.close()
 
       const delta = avgTone - baseline
-      if (delta > 15) {
+      if (delta > 3) {
         updateCheck(
           'headphone_test',
           'passed',
-          'No headphones detected âœ“',
-          `Test tone reached microphone (Î”${Math.round(delta)})`
+          'No headphones detected [OK]',
+          `Test tone reached microphone (Level: ${Math.round(delta)})`
         )
-      } else if (delta > 5) {
+      } else if (delta > 1) {
         updateCheck(
           'headphone_test',
           'warning',
-          'Weak tone response â€” ensure speakers are on',
-          `Î”${Math.round(delta)} â€” try increasing volume`
+          'Weak tone response  -  ensure speakers are on',
+          `Level: ${Math.round(delta)}  -  try increasing volume`
         )
       } else {
         updateCheck(
           'headphone_test',
-          'failed',
-          'Possible headphones/earbuds detected',
-          `Test tone not picked up by mic (Î”${Math.round(delta)}) â€” remove headphones`
+          'warning',
+          'Could not verify  -  ensure speakers are unmuted',
+          `Tone level: ${Math.round(delta)}  -  increase volume if possible`
         )
       }
     } catch (err) {
@@ -837,42 +891,21 @@ export default function PreExamVerification() {
         'headphone_test',
         'warning',
         'Headphone test could not complete',
-        'Audio test skipped â€” ensure speakers work'
+        'Audio test skipped  -  ensure speakers work'
       )
     }
   }
 
   const checkRoomScan = async () => {
-    updateCheck('room_scan', 'checking', 'Loading AI model for room scan...')
+    updateCheck('room_scan', 'checking', 'Loading AI detection model...')
     try {
-      const vision = await Promise.race([
-        FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_CDN),
-        new Promise<any>((_, reject) =>
-          setTimeout(() => reject(new Error('WASM load timeout')), 20000)
-        ),
-      ])
+      // Pre-warm COCO-SSD model
+      await detectSuspiciousObjects(videoRef.current!, 0.3).catch(() => {})
 
-      const objectDetector = await ObjectDetector.createFromOptions(vision, {
-        baseOptions: { modelAssetPath: OBJECT_DETECTOR_MODEL, delegate: 'GPU' },
-        scoreThreshold: 0.4,
-        maxResults: 5,
-        runningMode: 'IMAGE',
-      })
-
-      updateCheck('room_scan', 'checking', 'Scanning your room â€” please pan camera slowly...')
-      const suspiciousCategories = [
-        'cell phone',
-        'book',
-        'laptop',
-        'tv',
-        'person',
-        'remote',
-        'keyboard',
-        'mouse',
-      ]
+      updateCheck('room_scan', 'checking', 'Scanning your room — please pan camera slowly...')
       const detected: Record<string, number> = {}
 
-      // Take 6 frames with 500ms gaps â€” student should pan camera
+      // Take 6 frames with 500ms gaps — student should pan camera
       for (let i = 0; i < 6; i++) {
         await delay(500)
         if (
@@ -880,20 +913,13 @@ export default function PreExamVerification() {
           videoRef.current.readyState >= 2 &&
           videoRef.current.videoWidth > 0
         ) {
-          const result = objectDetector.detect(videoRef.current)
-          for (const detection of result.detections) {
-            const cat = detection.categories[0]
-            if (cat) {
-              const label = cat.categoryName.toLowerCase()
-              if (suspiciousCategories.includes(label)) {
-                detected[label] = (detected[label] || 0) + 1
-              }
-            }
+          const result = await detectSuspiciousObjects(videoRef.current, 0.3)
+          for (const obj of result.suspicious) {
+            const label = obj.label.toLowerCase()
+            detected[label] = (detected[label] || 0) + 1
           }
         }
       }
-
-      objectDetector.close()
 
       const found = Object.entries(detected).filter(([, count]) => count > 0)
 
@@ -901,7 +927,7 @@ export default function PreExamVerification() {
         updateCheck(
           'room_scan',
           'passed',
-          'Room environment looks clear âœ“',
+          'Room environment looks clear [OK]',
           'No unauthorized items detected'
         )
       } else {
@@ -919,7 +945,7 @@ export default function PreExamVerification() {
         'room_scan',
         'warning',
         'Room scan could not run',
-        'Ensure camera is working â€” skip if not needed'
+        'Ensure camera is working  -  skip if not needed'
       )
     }
   }
@@ -928,7 +954,7 @@ export default function PreExamVerification() {
     updateCheck('screen_devices', 'checking', 'Checking for virtual/screen capture devices...')
     await delay(500)
     try {
-      const devices = await navigator.mediaDevices.enumerateDevices()
+      const devices = await getCachedDevices()
       const videoDevices = devices.filter(d => d.kind === 'videoinput')
       const audioDevices = devices.filter(d => d.kind === 'audioinput')
 
@@ -967,14 +993,14 @@ export default function PreExamVerification() {
           'screen_devices',
           'warning',
           `Suspicious devices: ${items}`,
-          'Virtual/screen capture devices detected â€” disable them'
+          'Virtual/screen capture devices detected  -  disable them'
         )
       } else {
         updateCheck(
           'screen_devices',
           'passed',
-          'No virtual/screen capture devices âœ“',
-          `${videoDevices.length} camera(s) Â· ${audioDevices.length} microphone(s)`
+          'No virtual/screen capture devices [OK]',
+          `${videoDevices.length} camera(s)  -  ${audioDevices.length} microphone(s)`
         )
       }
     } catch {
@@ -1004,8 +1030,8 @@ export default function PreExamVerification() {
       updateCheck(
         'multi_monitor',
         'warning',
-        `Wide display (${availWidth}Ã—${availHeight})`,
-        'Multiple monitors or ultra-wide â€” disable extra displays for exam'
+        `Wide display (${availWidth}x${availHeight})`,
+        'Multiple monitors or ultra-wide  -  disable extra displays for exam'
       )
     } else if (isExtendedDesktop) {
       updateCheck(
@@ -1018,7 +1044,7 @@ export default function PreExamVerification() {
       updateCheck(
         'multi_monitor',
         'passed',
-        `Single display âœ“ (${availWidth}Ã—${availHeight})`,
+        `Single display [OK] (${availWidth}x${availHeight})`,
         'No additional monitors detected'
       )
     }
@@ -1041,7 +1067,7 @@ export default function PreExamVerification() {
   const allRequiredPassed = checks
     .filter(c => c.required)
     .every(c => c.status === 'passed' || c.status === 'warning')
-  // ID upload is now optional â€” shows warning but doesn't block exam start
+  // ID upload is now optional  -  shows warning but doesn't block exam start
   const canProceed = allRequiredPassed && consentGiven
   const passedCount = checks.filter(c => c.status === 'passed').length
   const failedCount = checks.filter(c => c.status === 'failed').length
@@ -1063,12 +1089,54 @@ export default function PreExamVerification() {
         await el.msRequestFullscreen()
       }
     } catch {
-      // Fullscreen may be blocked â€” exam page will handle this
+      // Fullscreen may be blocked  -  exam page will handle this
     }
 
-    if (stream) {
-      (window as any).__preExamStream = stream
+    if (streamRef.current) {
+      (window as any).__preExamStream = streamRef.current
     }
+
+    // Store verification results for ExamPage to consume
+    const faceCheck = checks.find(c => c.id === 'face')
+    const webcamCheck = checks.find(c => c.id === 'webcam')
+    const micCheck = checks.find(c => c.id === 'microphone')
+    const passed = checks.filter(c => c.status === 'passed')
+    const failed = checks.filter(c => c.status === 'failed')
+    const warnings = checks.filter(c => c.status === 'warning')
+    const verificationResults = {
+      face_verified: faceCheck?.status === 'passed',
+      device_info: {
+        webcam: webcamCheck?.status === 'passed',
+        microphone: micCheck?.status === 'passed',
+        browsers: navigator.userAgent,
+        platform: navigator.platform,
+        cores: navigator.hardwareConcurrency,
+        memory: (navigator as any).deviceMemory || null,
+        brightness: brightnessLevelRef.current,
+        audio_level: audioLevelRef.current,
+      },
+      browser_info: navigator.userAgent,
+      checks_passed: passed.length,
+      checks_failed: failed.length,
+      checks_warning: warnings.length,
+      all_required_passed: allRequiredPassed,
+      consent_given: consentGiven,
+      id_verified: idVerified,
+    }
+    ;(window as any).__verificationResults = verificationResults
+
+    // Send verification to backend in background (non-blocking)
+    sessionAPI.verifySession(examId, {
+      face_verified: verificationResults.face_verified,
+      device_info: verificationResults.device_info,
+      browser_info: verificationResults.browser_info,
+      checks_passed: verificationResults.checks_passed,
+      checks_failed: verificationResults.checks_failed,
+      checks_warning: verificationResults.checks_warning,
+      consent_given: verificationResults.consent_given,
+      id_verified: verificationResults.id_verified,
+    }).catch(() => {/* non-critical */})
+
     if (mode === 'practice' && practiceTestId) {
       navigate(`/practice/mock/${practiceTestId}`)
     } else {
@@ -1170,9 +1238,9 @@ export default function PreExamVerification() {
             <div className="flex justify-between items-center mb-3">
               <span className="text-sm text-gray-400">Verification Progress</span>
               <div className="flex gap-4 text-sm">
-                <span className="text-emerald-400 font-semibold">âœ“ {passedCount} passed</span>
+                <span className="text-emerald-400 font-semibold">[OK] {passedCount} passed</span>
                 {failedCount > 0 && (
-                  <span className="text-red-400 font-semibold">âœ— {failedCount} failed</span>
+                  <span className="text-red-400 font-semibold">[FAIL] {failedCount} failed</span>
                 )}
                 <span className="text-gray-500">{checks.length} total</span>
               </div>
@@ -1310,7 +1378,7 @@ export default function PreExamVerification() {
                         : 'text-green-400 bg-green-950/50'
                     }`}
                   >
-                    {audioLevel > 50 ? 'HIGH' : audioLevel > 20 ? 'MEDIUM' : 'LOW'} Â·{' '}
+                    {audioLevel > 50 ? 'HIGH' : audioLevel > 20 ? 'MEDIUM' : 'LOW'}  - {' '}
                     {Math.round(audioLevel)}
                   </span>
                 </div>
@@ -1334,7 +1402,7 @@ export default function PreExamVerification() {
               </motion.div>
             )}
 
-            {/* ID Verification â€” optional */}
+            {/* ID Verification  -  optional */}
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -1365,7 +1433,7 @@ export default function PreExamVerification() {
                   {uploadedId ? (
                     <div>
                       <CheckCircle className="w-8 h-8 mx-auto mb-2 text-emerald-400" />
-                      <p className="text-sm font-semibold">ID Uploaded âœ“</p>
+                      <p className="text-sm font-semibold">ID Uploaded [OK]</p>
                       <p className="text-xs mt-1 text-gray-500">{uploadedId.name}</p>
                     </div>
                   ) : (
@@ -1509,20 +1577,20 @@ export default function PreExamVerification() {
                 <div>
                   <h3 className="font-bold text-gray-200 mb-1">
                     {canProceed
-                      ? `âœ… Ready to Start ${mode === 'practice' ? 'Practice' : 'Exam'}`
+                      ? `Ready to Start ${mode === 'practice' ? 'Practice' : 'Exam'}`
                       : 'Complete All Requirements'}
                   </h3>
                   <p className="text-xs text-gray-500">
                     {!allRequiredPassed
-                      ? `${failedCount} required check${failedCount > 1 ? 's' : ''} need attention â€” click Re-run Checks after fixing`
+                      ? `${failedCount} required check${failedCount > 1 ? 's' : ''} need attention - click Re-run Checks after fixing`
                       : !consentGiven
                         ? 'Please accept the proctoring consent below'
-                        : 'All checks complete â€” you may proceed'}
+                        : 'All checks complete - you may proceed'}
                   </p>
                   {!idVerified && allRequiredPassed && consentGiven && (
-                    <p className="text-xs text-yellow-400/80 mt-1">
-                      ðŸ’¡ ID upload skipped â€” your session will be flagged for manual review
-                    </p>
+                      <p className="text-xs text-yellow-400/80 mt-1">
+                        ID upload skipped - your session will be flagged for manual review
+                      </p>
                   )}
                 </div>
                 <motion.button

@@ -65,16 +65,17 @@ export default function AnalyticsPage() {
         resultsAPI.getResults(),
       ])
 
+      const examsList = Array.isArray(examsData) ? examsData : (examsData?.items || [])
       setStats({
-        totalExams: dashData?.total_exams || examsData?.length || 0,
+        totalExams: dashData?.total_exams || examsData?.total || examsData?.items?.length || 0,
         totalStudents: dashData?.total_students || 0,
         avgScore: dashData?.avg_score || 0,
         passRate: dashData?.avg_score ? Math.min(100, Math.round(dashData.avg_score + 10)) : 0,
       })
 
-      if (Array.isArray(examsData)) {
+      if (examsList.length > 0) {
         const perf = await Promise.all(
-          examsData.slice(0, 8).map(async (exam: any) => {
+          examsList.slice(0, 8).map(async (exam: any) => {
             try {
               const ae = await analyticsAPI.getExamAnalytics(exam._id)
               return {
@@ -93,12 +94,13 @@ export default function AnalyticsPage() {
 
       try {
         const trends = await analyticsAPI.getAnalyticsTrend('30d')
-        if (Array.isArray(trends)) {
+        const dataPoints = trends?.data_points || (Array.isArray(trends) ? trends : [])
+        if (dataPoints.length > 0) {
           setTrendData(
-            trends.map((d: any) => ({
+            dataPoints.map((d: any) => ({
               month: d.date?.slice(5, 10) || d.date,
-              avgScore: d.users || d.avg_score || 0,
-              students: d.exams || d.count || 0,
+              avgScore: d.avg_score || d.users || 0,
+              students: d.count || d.exams || 0,
             }))
           )
         } else {

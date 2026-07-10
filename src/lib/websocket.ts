@@ -30,7 +30,10 @@ export class WebSocketClient {
   private userInfo: { userId: string; role: string; examId?: string } | null = null
 
   constructor(options: WebSocketOptions = {}) {
-    const WS_URL = (import.meta as any).env?.VITE_WS_URL || (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + (window.location.host || 'localhost:8000')
+    const env: any = (import.meta as any).env
+    const apiBaseUrl: string = env?.VITE_API_BASE_URL || ''
+    const wsFromApi = apiBaseUrl ? apiBaseUrl.replace(/^http/, 'ws') : ''
+    const WS_URL = env?.VITE_WS_URL || wsFromApi || (env?.DEV ? 'ws://localhost:8000' : (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host)
     this.url = options.url || WS_URL
     this.reconnectInterval = options.reconnectInterval || 3000
     this.maxReconnectAttempts = options.maxReconnectAttempts || 10
@@ -219,7 +222,7 @@ export class WebSocketClient {
   private startHeartbeat() {
     this.stopHeartbeat()
     this.heartbeatTimer = window.setInterval(() => {
-      this.send('ping')
+      this.send({ type: 'ping' })
     }, this.heartbeatInterval)
   }
 
@@ -277,7 +280,15 @@ export class WebSocketClient {
     }
 
     if (this.ws) {
-      this.ws.close(1000, 'Client disconnecting')
+      // Avoid calling close() on CONNECTING WebSocket (causes 'WebSocket is closed before the connection is established')
+      if (this.ws.readyState === WebSocket.CONNECTING) {
+        this.ws.onopen = null
+        this.ws.onclose = null
+        this.ws.onerror = null
+        this.ws.onmessage = null
+      } else if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CLOSING) {
+        this.ws.close(1000, 'Client disconnecting')
+      }
       this.ws = null
     }
 

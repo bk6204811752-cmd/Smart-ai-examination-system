@@ -308,7 +308,7 @@ export default function CollaborativeExamPage() {
   }
 
   const inviteTeamMember = () => {
-    setShowInviteModal(true)
+    // Modal removed — invite via other channels
   }
 
   const currentQ = questions[currentQuestion - 1]

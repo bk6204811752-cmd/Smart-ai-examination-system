@@ -48,12 +48,11 @@ def send_email(
     from_email    = settings.SMTP_FROM_EMAIL or smtp_user
     from_name     = settings.SMTP_FROM_NAME or "Smart Examination System"
 
-    if not smtp_user or not smtp_password or smtp_password == "your-brevo-smtp-key" or smtp_password.startswith("your-"):
+    if not smtp_user or not smtp_password:
         logger.warning(
           f"SMTP not configured — SMTP_USERNAME/SMTP_USER={repr(smtp_user)}, "
-          f"SMTP_PASSWORD={'placeholder/empty' if not smtp_password or smtp_password == 'your-brevo-smtp-key' or smtp_password.startswith('your-') else 'set'}"
+          f"SMTP_PASSWORD={'set' if smtp_password else 'empty'}"
         )
-        # Return False instead of raising exception when email not configured
         return False
 
     # Build the message
@@ -69,11 +68,16 @@ def send_email(
         msg.attach(MIMEText(body_html, "html"))
 
     recipients = [to_email] + (cc or [])
-    context = ssl.create_default_context()
+    # For Brevo (smtp-relay.brevo.com), use default SSL context but be less strict about hostname
+    try:
+        context = ssl.create_default_context()
+    except Exception:
+        context = ssl._create_unverified_context()
     last_error: Optional[Exception] = None
+    timeout_sec = 30
 
     def _send_with_starttls(port: int) -> None:
-      with smtplib.SMTP(smtp_host, port, timeout=10) as server:
+      with smtplib.SMTP(smtp_host, port, timeout=timeout_sec) as server:
         server.ehlo()
         server.starttls(context=context)
         server.ehlo()
@@ -81,7 +85,7 @@ def send_email(
         server.sendmail(from_email, recipients, msg.as_string())
 
     def _send_with_ssl(port: int) -> None:
-      with smtplib.SMTP_SSL(smtp_host, port, context=context, timeout=10) as server:
+      with smtplib.SMTP_SSL(smtp_host, port, context=context, timeout=timeout_sec) as server:
         server.login(smtp_user, smtp_password)
         server.sendmail(from_email, recipients, msg.as_string())
 
@@ -95,12 +99,25 @@ def send_email(
         _send_with_starttls(smtp_port)
         logger.info(f"Email sent (STARTTLS:{smtp_port}) to {to_email}: {subject}")
       else:
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=timeout_sec) as server:
           server.ehlo()
           server.login(smtp_user, smtp_password)
           server.sendmail(from_email, recipients, msg.as_string())
         logger.info(f"Email sent (PLAIN:{smtp_port}) to {to_email}: {subject}")
       return True
+    except smtplib.SMTPAuthenticationError:
+      logger.error(
+        f"SMTP Authentication failed for {to_email} on {primary_label}. "
+        f"Check SMTP_USERNAME/SMTP_USER and SMTP_PASSWORD. "
+        f"For Brevo: use your SMTP login email as username and SMTP key (xsmtp...) as password."
+      )
+      raise
+    except smtplib.SMTPSenderRefused:
+      logger.error(
+        f"SMTP sender '{from_email}' refused by {primary_label}. "
+        f"For Brevo: verify the sender email in Brevo dashboard → Senders."
+      )
+      raise
     except Exception as e:
       last_error = e
       logger.warning(
@@ -124,12 +141,12 @@ def send_email(
         f"{type(e).__name__}: {e}"
       )
 
-    # Both methods failed
     logger.error(
         f"All SMTP methods failed for {to_email}. "
+        f"Host: {smtp_host}, User: {smtp_user}, From: {from_email}. "
         f"Last error: {type(last_error).__name__}: {last_error}"
     )
-    raise last_error  # Re-raise so callers can catch and react
+    raise last_error
 
 
 async def send_email_async(

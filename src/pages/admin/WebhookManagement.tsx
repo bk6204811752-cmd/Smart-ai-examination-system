@@ -80,7 +80,6 @@ export default function WebhookManagement() {
       return
     }
     loadWebhooks()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, navigate])
 
   const loadWebhooks = async () => {

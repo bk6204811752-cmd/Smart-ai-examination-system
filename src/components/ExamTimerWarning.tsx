@@ -11,15 +11,16 @@ interface ExamTimerWarningProps {
 export default function ExamTimerWarning({ isOpen, minutesLeft, onDismiss }: ExamTimerWarningProps) {
   const isCritical = minutesLeft <= 1
   const dismissBtnRef = useRef<HTMLButtonElement>(null)
+  const onDismissRef = useRef(onDismiss)
+  onDismissRef.current = onDismiss
 
   useEffect(() => {
     if (isOpen) {
       setTimeout(() => dismissBtnRef.current?.focus(), 100)
-      // Auto-dismiss after 8 seconds
-      const t = setTimeout(onDismiss, 8000)
+      const t = setTimeout(() => onDismissRef.current(), 8000)
       return () => clearTimeout(t)
     }
-  }, [isOpen, onDismiss])
+  }, [isOpen])
 
   return (
     <AnimatePresence>

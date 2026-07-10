@@ -10,7 +10,9 @@ export const config = {
   
   // API Configuration
   api: {
-    baseURL: import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8000' : ''),
+    // '' = relative path → Vite proxy forwards /api → localhost:8000
+    // Works for local access AND Cloudflare tunnel from other devices!
+    baseURL: import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '' : ''),
     timeout: 30000,
     retryAttempts: 3,
     retryDelay: 1000

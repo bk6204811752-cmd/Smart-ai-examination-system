@@ -26,6 +26,7 @@ interface SubmissionResult {
   date: string
   passed: boolean
   proctoring_violations?: number
+  answers?: Record<string, any>
   detailed_results?: Array<{
     question: string
     student_answer: any
@@ -376,8 +377,8 @@ export default function ExamResultPage() {
           </motion.div>
         )}
 
-        {/* Question Review - Always Visible */}
-        {result.detailed_results && result.detailed_results.length > 0 && (
+        {/* Question Review - Shows student's selected option for each question */}
+        {result.detailed_results && result.detailed_results.length > 0 ? (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -387,7 +388,7 @@ export default function ExamResultPage() {
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
               <div>
-                <h3 className="text-xl font-bold text-gray-900">📋 Question Review</h3>
+                <h3 className="text-xl font-bold text-gray-900">Question Review</h3>
                 <p className="text-sm text-gray-500 mt-0.5">
                   {result.detailed_results.filter(q => q.is_correct).length} correct out of{' '}
                   {result.detailed_results.length} questions
@@ -412,10 +413,17 @@ export default function ExamResultPage() {
             {/* Questions List */}
             <div className="divide-y divide-gray-50">
               {result.detailed_results.map((q, index) => {
+                // Fallback: if student_answer is null but raw answers have a value, use that
+                const rawFallback = result.answers
+                  ? (result.answers[index.toString()] ??
+                     result.answers[String(index)] ??
+                     Object.values(result.answers)[index])
+                  : null
+                const studentAnswer = q.student_answer ?? rawFallback ?? null
                 const isSkipped =
-                  q.student_answer === null ||
-                  q.student_answer === undefined ||
-                  q.student_answer === ''
+                  studentAnswer === null ||
+                  studentAnswer === undefined ||
+                  String(studentAnswer).trim() === ''
                 return (
                   <div
                     key={index}
@@ -490,9 +498,9 @@ export default function ExamResultPage() {
                         >
                           {isSkipped
                             ? 'Not answered'
-                            : Array.isArray(q.student_answer)
-                              ? q.student_answer.join(', ')
-                              : String(q.student_answer)}
+                            : Array.isArray(studentAnswer)
+                              ? studentAnswer.join(', ')
+                              : String(studentAnswer)}
                         </p>
                       </div>
 
@@ -518,7 +526,7 @@ export default function ExamResultPage() {
                     {/* Explanation */}
                     {q.explanation && (
                       <div className="ml-11 mt-3 bg-blue-50 border-l-4 border-blue-400 rounded-r-xl p-3">
-                        <p className="text-xs font-bold text-blue-700 mb-1">💡 Explanation</p>
+                        <p className="text-xs font-bold text-blue-700 mb-1">Explanation</p>
                         <p className="text-sm text-gray-700 leading-relaxed">{q.explanation}</p>
                       </div>
                     )}
@@ -527,7 +535,51 @@ export default function ExamResultPage() {
               })}
             </div>
           </motion.div>
+        ) : (
+          /* Fallback when detailed_results is not available - show raw answers */
+          result.answers && Object.keys(result.answers).length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="bg-white rounded-2xl shadow-sm mb-8 overflow-hidden border border-gray-100"
+            >
+              <div className="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+                <h3 className="text-xl font-bold text-gray-900">Your Answers</h3>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  {Object.keys(result.answers).length} question(s) answered
+                </p>
+              </div>
+              <div className="divide-y divide-gray-50 p-4">
+                {Object.entries(result.answers).map(([qId, answer], idx) => (
+                  <div key={qId} className="py-3 flex items-start gap-3">
+                    <span className="text-xs font-bold text-gray-500 bg-gray-100 w-6 h-6 rounded-full flex items-center justify-center shrink-0">
+                      {idx + 1}
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">
+                        {Array.isArray(answer) ? answer.join(', ') : String(answer)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )
         )}
+
+        {/* Message if no answer data available at all */}
+        {(!result.detailed_results || result.detailed_results.length === 0) &&
+          (!result.answers || Object.keys(result.answers).length === 0) && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="bg-white rounded-2xl shadow-sm p-8 mb-8 text-center border border-gray-100"
+            >
+              <p className="text-gray-400">No answer details available for this submission.</p>
+            </motion.div>
+          )}
 
         {/* Action Buttons */}
         <motion.div

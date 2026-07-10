@@ -21,6 +21,7 @@ from database import get_db
 from middleware.auth import get_current_user, require_admin
 from utils.password import hash_password
 from utils.email_service import send_approval_email_async, send_rejection_email_async
+from utils.notifications_helper import create_notification
 from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -76,14 +77,9 @@ async def get_users(
     if current_user["role"] not in ["admin", "teacher"]:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    # IMPORTANT: Never show fully unverified users in user management
-    # Unverified = registered but haven't verified email yet
-    query: dict = {
-        "$or": [
-            {"email_verified": True},        # Verified email users (pending/approved/suspended/rejected)
-            {"role": "admin"}                 # Admins are always visible (no OTP required)
-        ]
-    }
+    # Show all users including unverified (ghost registrations)
+    # so admins can manage/clean them up
+    query: dict = {}
 
     if role and role != "all":
         query["role"] = role
@@ -101,11 +97,10 @@ async def get_pending_users(
     db=Depends(get_db),
     current_user: dict = Depends(require_admin)
 ):
-    # CRITICAL FIX: Only show users who have verified their email (email_verified=True)
-    # This prevents unverified users from appearing in admin approval list
+    # Show both pending (verified OTP, awaiting admin) and unverified (stuck in OTP)
+    # so admins can see and manage ghost registrations
     cursor = db.users.find({
-        "status": "pending",
-        "email_verified": True
+        "status": {"$in": ["pending", "unverified"]}
     }).sort("_id", -1)
     users = [serialize(u) async for u in cursor]
     return users
@@ -182,6 +177,17 @@ async def approve_user(
             await send_approval_email_async(user["email"], user.get("full_name", "User"))
         except Exception as e:
             logger.error(f"Failed to send approval email to {user.get('email')}: {e}")
+
+    # Send in-app notification
+    if user:
+        await create_notification(
+            user_id=str(user["_id"]),
+            title="Account Approved",
+            message=f"Your {user.get('role', 'user')} account has been approved. You can now log in.",
+            type="success",
+            action_url="/login",
+            priority="high",
+        )
 
     return {"message": "User approved successfully"}
 
@@ -275,6 +281,10 @@ async def update_user(
     updates = {k: v for k, v in data.dict().items() if v is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="No updates provided")
+
+    # Prevent non-admin users from escalating their own role
+    if current_user["role"] != "admin":
+        updates.pop("role", None)
 
     await db.users.update_one({"_id": oid}, {"$set": updates})
     user = await db.users.find_one({"_id": oid})

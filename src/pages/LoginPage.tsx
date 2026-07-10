@@ -61,21 +61,17 @@ export default function LoginPage() {
       }
     } catch (err: any) {
       const status = err?.response?.status
-      const detail = err?.response?.data?.detail || err?.message
+      const raw = err?.response?.data?.detail || err?.message
+      const detail = Array.isArray(raw) ? raw.map((x: any) => x.msg).join(', ') : (raw || '')
 
       if (!err.response && !err.status) {
-        // Network error — backend not reachable
         const isDev = import.meta.env.DEV
-        if (isDev) {
-          toast.error('Cannot connect to server. Please ensure the backend is running on port 8000.')
-        } else {
-          toast.error('Server is starting up — please wait 30 seconds and try again. (Backend cold start)', { duration: 8000 })
-        }
-      } else if (status === 403 && detail?.toLowerCase().includes('pending')) {
+        toast.error(isDev ? 'Cannot connect to server. Please ensure the backend is running on port 8000.' : 'Server is starting up — please wait 30 seconds and try again. (Backend cold start)', { duration: 8000 })
+      } else if (status === 403 && detail.toLowerCase().includes('pending')) {
         toast.error('Your account is pending admin approval. You will be notified once approved.', { duration: 6000 })
-      } else if (status === 403 && detail?.toLowerCase().includes('unverified')) {
+      } else if (status === 403 && detail.toLowerCase().includes('unverified')) {
         toast.error('Please verify your email first. Check your inbox for the confirmation link.', { duration: 6000 })
-      } else if (status === 403 && detail?.toLowerCase().includes('suspended')) {
+      } else if (status === 403 && detail.toLowerCase().includes('suspended')) {
         toast.error('Your account has been suspended. Please contact admin.', { duration: 6000 })
       } else if (status === 401) {
         toast.error('Invalid email or password. Please check your credentials.')

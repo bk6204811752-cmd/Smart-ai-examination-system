@@ -10,6 +10,7 @@ Security: All WebSocket connections require valid JWT token
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, WebSocketException, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
+from bson import ObjectId
 import json
 from datetime import datetime
 from jose import JWTError, jwt
@@ -18,6 +19,7 @@ from config import settings
 from database import get_db
 from utils.websocket_manager import manager
 from utils.logging_config import get_logger
+from utils.notifications_helper import create_notification
 from middleware.auth import get_current_user
 
 logger = get_logger(__name__)
@@ -31,28 +33,85 @@ async def verify_ws_token(token: str) -> dict:
         if not token:
             raise ValueError("No token provided")
         
-        # verify_aud=False is required since Supabase aud claim defaults to "authenticated"
+        # Try Supabase JWKS first if SUPABASE_URL is configured
+        supa = settings.SUPABASE_URL or settings.VITE_SUPABASE_URL
+        if supa:
+            try:
+                import httpx
+                jwks_url = f"{supa.rstrip('/')}/auth/v1/.well-known/jwks.json"
+                resp = httpx.get(jwks_url, timeout=5.0)
+                if resp.status_code == 200:
+                    jwks = resp.json()
+                    header = jwt.get_unverified_header(token)
+                    kid = header.get("kid")
+                    if kid:
+                        from jose import jwk
+                        key_data = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
+                        if key_data:
+                            public_key = jwk.construct(key_data)
+                            payload = jwt.decode(
+                                token,
+                                public_key.to_pem(),
+                                algorithms=["ES256", "HS256"],
+                                options={"verify_aud": False}
+                            )
+                            email = payload.get("email")
+                            if not email:
+                                raise ValueError("No email in token")
+                            db = get_db()
+                            user = await db.users.find_one({"email": email.lower()})
+                            if not user:
+                                raise ValueError("User profile not found in system database")
+                            user_id = str(user["_id"])
+                            role = user.get("role", "student")
+                            return {"user_id": user_id, "role": role}
+            except Exception as e:
+                logger.warning(f"Supabase JWKS verification failed, trying fallback: {e}")
+
+        # Fallback to local symmetric verification (same logic as middleware/auth.py)
+        key = settings.SUPABASE_JWT_SECRET or settings.SECRET_KEY
         payload = jwt.decode(
             token,
-            settings.SECRET_KEY,
+            key,
             algorithms=[settings.ALGORITHM],
             options={"verify_aud": False}
         )
-        email = payload.get("email")
-        if not email:
-            raise ValueError("No email in token")
         
+        # Backend-generated tokens use sub=str(user["_id"]) (MongoDB ObjectId)
+        # Supabase tokens use sub=supabase_user_uuid AND may include email
+        user_sub = payload.get("sub")
+        email = payload.get("email")
+
+        user = None
         db = get_db()
-        user = await db.users.find_one({"email": email.lower()})
+
+        # Try lookup by sub (MongoDB ObjectId first)
+        if user_sub:
+            try:
+                from bson import ObjectId
+                user = await db.users.find_one({"_id": ObjectId(user_sub)})
+            except Exception:
+                pass
+
+        # Fallback: lookup by email
+        if not user and email:
+            user = await db.users.find_one({"email": email.lower()})
+
+        # Final fallback: treat sub as email
+        if not user and user_sub and "@" in user_sub:
+            user = await db.users.find_one({"email": user_sub.lower()})
+
         if not user:
             raise ValueError("User profile not found in system database")
-        
+
         user_id = str(user["_id"])
         role = user.get("role", "student")
         return {"user_id": user_id, "role": role}
     except JWTError as e:
         logger.warning(f"WebSocket JWT verification failed: {e}")
         raise WebSocketException(code=1008, reason="Invalid or expired token")
+    except WebSocketException:
+        raise
     except Exception as e:
         logger.warning(f"WebSocket token error: {e}")
         raise WebSocketException(code=1008, reason="Authentication failed")
@@ -82,8 +141,10 @@ async def _run_session(websocket: WebSocket, exam_id: str, user_id: str, role: s
         })
 
     # If teacher joins, send snapshot of all live streams + message history
+    # Note: frame data is excluded from the initial snapshot to avoid OOM;
+    # teachers receive individual frames via the video_frame message type in real-time.
     if role in ("teacher", "admin"):
-        streams = getattr(manager, 'get_active_streams', lambda x: {})(exam_id)
+        streams = getattr(manager, 'get_active_streams', lambda x: {})(exam_id, include_frames=False)
         if streams:
             await websocket.send_json({
                 "type": "active_streams",
@@ -157,6 +218,22 @@ async def _run_session(websocket: WebSocket, exam_id: str, user_id: str, role: s
                     "timestamp": datetime.utcnow().isoformat(),
                 })
 
+            elif msg_type == "exam_submitted":
+                # Student submitted their exam → broadcast to teachers and clean up
+                await manager.broadcast_to_teachers(exam_id, {
+                    "type": "student_submitted",
+                    "student_id": user_id,
+                    "exam_id": exam_id,
+                    "timestamp": datetime.utcnow().isoformat(),
+                })
+                # Clean up cached frames and status for this student
+                if exam_id in manager._frame_cache:
+                    manager._frame_cache[exam_id].pop(user_id, None)
+                if exam_id in manager._status_cache:
+                    manager._status_cache[exam_id].pop(user_id, None)
+                if exam_id in manager._heartbeats:
+                    manager._heartbeats[exam_id].pop(user_id, None)
+
             elif msg_type == "heartbeat":
                 # Student alive ping → forward to teachers
                 if hasattr(manager, 'update_student_heartbeat'):
@@ -178,6 +255,53 @@ async def _run_session(websocket: WebSocket, exam_id: str, user_id: str, role: s
                     "student_id": user_id,
                     "exam_id": exam_id,
                     "brightness": data.get("brightness", 0),
+                    "timestamp": datetime.utcnow().isoformat(),
+                })
+
+            # ── Audio Streaming ────────────────────────────────────────────────
+
+            elif msg_type == "audio_stream_request" and role in ("teacher", "admin"):
+                target_student = data.get("student_id")
+                if target_student:
+                    await manager.send_to_student(exam_id, target_student, {
+                        "type": "audio_stream_request",
+                        "from": user_id,
+                        "exam_id": exam_id,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    })
+                    await manager.broadcast_to_teachers(exam_id, {
+                        "type": "audio_stream_status",
+                        "student_id": target_student,
+                        "status": "starting",
+                        "by": user_id,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    })
+
+            elif msg_type == "audio_stream_stop" and role in ("teacher", "admin"):
+                target_student = data.get("student_id")
+                if target_student:
+                    await manager.send_to_student(exam_id, target_student, {
+                        "type": "audio_stream_stop",
+                        "from": user_id,
+                        "exam_id": exam_id,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    })
+                    await manager.broadcast_to_teachers(exam_id, {
+                        "type": "audio_stream_status",
+                        "student_id": target_student,
+                        "status": "stopped",
+                        "by": user_id,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    })
+
+            elif msg_type == "audio_chunk" and role == "student":
+                await manager.broadcast_to_teachers(exam_id, {
+                    "type": "audio_chunk",
+                    "student_id": user_id,
+                    "exam_id": exam_id,
+                    "data": data.get("data"),
+                    "sequence": data.get("sequence"),
+                    "mimeType": data.get("mimeType", "audio/webm"),
                     "timestamp": datetime.utcnow().isoformat(),
                 })
 
@@ -203,6 +327,21 @@ async def _run_session(websocket: WebSocket, exam_id: str, user_id: str, role: s
                         "by": user_id,
                         "timestamp": datetime.utcnow().isoformat(),
                     })
+                    # Create notification for student about intervention
+                    try:
+                        db = get_db()
+                        exam = await db.exams.find_one({"_id": ObjectId(exam_id)})
+                        exam_title = exam.get("title", "Exam") if exam else "Exam"
+                        await create_notification(
+                            user_id=target_student,
+                            title="Teacher Intervention",
+                            message=f"Your exam \"{exam_title}\" was {action}d: {data.get('message', '')}",
+                            type="warning",
+                            action_url="/student/exam",
+                            priority="high",
+                        )
+                    except Exception:
+                        pass
                 else:
                     await manager.broadcast_to_exam(exam_id, intervention_data, exclude_ws=websocket)
 
@@ -276,7 +415,8 @@ async def _run_session(websocket: WebSocket, exam_id: str, user_id: str, role: s
                 })
 
             elif msg_type == "request_streams" and role in ("teacher", "admin"):
-                streams = getattr(manager, 'get_active_streams', lambda x: {})(exam_id)
+                include_frames = data.get("include_frames", False)
+                streams = getattr(manager, 'get_active_streams', lambda x: {})(exam_id, include_frames=include_frames)
                 await websocket.send_json({
                     "type": "active_streams",
                     "exam_id": exam_id,
@@ -301,6 +441,34 @@ async def _run_session(websocket: WebSocket, exam_id: str, user_id: str, role: s
                 "exam_id": exam_id,
                 "timestamp": datetime.utcnow().isoformat(),
             })
+
+
+@router.websocket("/ws/notifications")
+async def notifications_websocket(websocket: WebSocket, token: str = Query(...)):
+    """Global notification WebSocket - receives notifications without being in an exam"""
+    try:
+        auth_data = await verify_ws_token(token)
+        user_id = auth_data["user_id"]
+        role = auth_data["role"]
+    except WebSocketException as e:
+        await websocket.close(code=1008, reason=str(e.reason))
+        return
+
+    await manager.connect(websocket, "__global__", user_id, role)
+    await websocket.send_json({
+        "type": "connection_established",
+        "channel": "notifications",
+        "user_id": user_id,
+        "timestamp": datetime.utcnow().isoformat(),
+    })
+    logger.info(f"Notification WS connected for {user_id} ({role})")
+
+    try:
+        while True:
+            raw = await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, "__global__")
+        logger.info(f"Notification WS disconnected for {user_id}")
 
 
 @router.websocket("/ws/{exam_id}")
@@ -396,13 +564,17 @@ async def get_ws_stats(current_user: dict = Depends(get_current_user)):
 
 
 @router.get("/api/ws/exam/{exam_id}/status")
-async def get_exam_room_status(exam_id: str, current_user: dict = Depends(get_current_user)):
+async def get_exam_room_status(
+    exam_id: str,
+    include_frames: bool = Query(False),
+    current_user: dict = Depends(get_current_user)
+):
     """Get full status snapshot for an exam room"""
     if current_user["role"] not in ("teacher", "admin"):
         raise HTTPException(status_code=403, detail="Access denied")
     return {
         "exam_id": exam_id,
         "stats": manager.get_exam_stats(exam_id),
-        "streams": getattr(manager, 'get_active_streams', lambda x: {})(exam_id),
+        "streams": getattr(manager, 'get_active_streams', lambda x: {})(exam_id, include_frames=include_frames),
         "timestamp": datetime.utcnow().isoformat(),
     }

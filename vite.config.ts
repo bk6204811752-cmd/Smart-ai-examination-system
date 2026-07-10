@@ -10,13 +10,17 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    host: true,           // Bahar ke devices se access allow karo
+    allowedHosts: ['.trycloudflare.com'],  // Cloudflare tunnel (*.trycloudflare.com) allow
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
+        secure: false,
       },
     },
   },
+
   build: {
     // Optimize bundle size
     target: 'esnext',

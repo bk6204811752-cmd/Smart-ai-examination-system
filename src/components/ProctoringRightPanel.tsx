@@ -1,4 +1,4 @@
-import { RefObject } from 'react'
+import { RefObject, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Camera, Shield, AlertTriangle, Mic } from 'lucide-react'
 
@@ -23,11 +23,18 @@ interface ProctoringRightPanelProps {
     audioLevel?: number
     isActive?: boolean
     integrityScore?: number
+    phoneDetected?: boolean
+    bookDetected?: boolean
+    deviceDetected?: boolean
+    objectDetectionActive?: boolean
+    objectDetectionError?: string | null
+    lastDetectedDevices?: string[]
   } | null
   tabSwitches: number
   flags: ViolationEntry[]
-  mode?: 'live' | 'practice'  // 'live' = red LIVE badge, 'practice' = green PRACTICE badge
-  audioWaveData?: number[]  // real frequency data for live waveform
+  mode?: 'live' | 'practice'
+  audioWaveData?: number[]
+  onOverlayCanvas?: (canvas: HTMLCanvasElement | null) => void
 }
 
 export default function ProctoringRightPanel({
@@ -40,9 +47,16 @@ export default function ProctoringRightPanel({
   flags,
   mode = 'live',
   audioWaveData,
+  onOverlayCanvas,
 }: ProctoringRightPanelProps) {
   const audioLevel = proctoringStatus?.audioLevel ?? 0
   const isLoud = audioLevel > 30
+  const overlayRef = useRef<HTMLCanvasElement>(null)
+
+  useEffect(() => {
+    onOverlayCanvas?.(overlayRef.current)
+    return () => onOverlayCanvas?.(null)
+  }, [onOverlayCanvas])
 
   return (
     <div className="space-y-3 h-full">
@@ -75,6 +89,11 @@ export default function ProctoringRightPanel({
             muted
             playsInline
             className="w-full h-full object-cover"
+          />
+          <canvas
+            ref={overlayRef}
+            className="absolute inset-0 w-full h-full pointer-events-none"
+            style={{ imageRendering: 'pixelated' }}
           />
           {!cameraReady && (
             <div className="absolute inset-0 flex items-center justify-center">
@@ -151,7 +170,7 @@ export default function ProctoringRightPanel({
         </div>
         {/* Live waveform bars driven by real frequency data */}
         <div className="flex items-end gap-1 h-10 justify-center">
-          {(audioWaveData || Array.from({ length: 12 })).map((val, i) => {
+          {(audioWaveData || Array.from({ length: 12 }).fill(0) as number[]).map((val, i) => {
             const barHeight = proctoringActive && audioWaveData
               ? Math.max(4, (val / 255) * 100)
               : proctoringActive
@@ -197,6 +216,25 @@ export default function ProctoringRightPanel({
               ok: (proctoringStatus.faceCount ?? 1) === 1,
             },
             {
+              label: 'Phone Detected',
+              value: proctoringStatus.phoneDetected ? '⚠️ Yes' : 'No ✓',
+              ok: !proctoringStatus.phoneDetected,
+            },
+            {
+              label: 'Device Detected',
+              value: proctoringStatus.deviceDetected ? '⚠️ Yes' : 'No ✓',
+              ok: !proctoringStatus.deviceDetected,
+            },
+            {
+              label: 'Object Detection',
+              value: proctoringStatus.objectDetectionActive
+                ? 'Active ✓'
+                : proctoringStatus.objectDetectionError
+                  ? 'Retrying...'
+                  : 'Starting...',
+              ok: proctoringStatus.objectDetectionActive || !proctoringStatus.objectDetectionError,
+            },
+            {
               label: 'Tab Switches',
               value: String(tabSwitches),
               ok: tabSwitches === 0,
@@ -205,6 +243,11 @@ export default function ProctoringRightPanel({
               label: 'Integrity',
               value: `${Math.round(proctoringStatus.integrityScore)}%`,
               ok: proctoringStatus.integrityScore >= 70,
+            }] : []),
+            ...(proctoringStatus.lastDetectedDevices && proctoringStatus.lastDetectedDevices.length > 0 ? [{
+              label: 'Detected Items',
+              value: proctoringStatus.lastDetectedDevices.slice(0, 3).join(', '),
+              ok: false,
             }] : []),
           ].map(({ label, value, ok }) => (
             <div key={label} className="flex items-center justify-between text-xs">
@@ -216,7 +259,7 @@ export default function ProctoringRightPanel({
       )}
 
       {/* ── Violations Log ── */}
-      {flags.length > 0 && (
+      {flags?.length > 0 && (
         <div className="bg-red-50 border border-red-100 rounded-2xl p-4">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-xs font-bold text-red-700 flex items-center gap-1.5">

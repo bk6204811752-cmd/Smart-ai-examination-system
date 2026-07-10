@@ -4,13 +4,16 @@ import { logger } from './logger'
 import { toast } from 'sonner'
 
 // Backend URL resolution:
-//   1. VITE_API_URL env var (set in Vercel Dashboard → points to Render)
-//   2. Development → http://localhost:8000 (local FastAPI server)
-//   3. Production fallback → hardcoded Render URL (never empty string!)
+//   1. VITE_API_URL env var (Vercel/production - points to Render)
+//   2. Development (local + Cloudflare tunnel) → relative '/api' path
+//      Vite proxy forwards /api → http://localhost:8000 (works for all devices!)
+//   3. Production fallback → hardcoded Render URL
 const RENDER_BACKEND = 'https://pcmt-ai-exam-backend.onrender.com'
 const API_URL =
   (import.meta as any).env?.VITE_API_URL ||
-  ((import.meta as any).env?.DEV ? 'http://localhost:8000' : RENDER_BACKEND)
+  ((import.meta as any).env?.DEV ? '' : RENDER_BACKEND)
+// Empty string '' = relative URLs like /api/health → Vite proxy handles it
+// This works both locally AND via Cloudflare tunnel on other devices!
 
 // Offline request queue
 interface QueuedRequest {
@@ -87,6 +90,8 @@ api.interceptors.response.use(
       return new Promise((resolve, reject) => {
         if (originalRequest) {
           requestQueue.push({ config: originalRequest, resolve, reject })
+        } else {
+          reject(error)
         }
       })
     }
@@ -99,7 +104,14 @@ api.interceptors.response.use(
       if (status === 401) {
         // Only skip logout for public auth endpoints (login, register, forgot-password etc)
         const publicAuthEndpoints = ['/api/auth/login', '/api/auth/register', '/api/auth/send-otp', '/api/auth/verify-otp', '/api/auth/forgot-password', '/api/auth/reset-password']
-        const isPublicAuthEndpoint = publicAuthEndpoints.some(ep => originalRequest?.url?.includes(ep))
+        const isPublicAuthEndpoint = publicAuthEndpoints.some(ep => {
+          try {
+            const url = new URL(originalRequest?.url || '', 'http://localhost')
+            return url.pathname === ep
+          } catch {
+            return false
+          }
+        })
 
         if (isPublicAuthEndpoint) {
           return Promise.reject(error)
@@ -342,7 +354,7 @@ export const userAPI = {
     const users = await api.get('/api/users')
     return users.data.map((user: any) => ({
       ...user,
-      status: user.is_active ? 'active' : 'inactive',
+      status: user.status || 'unknown',
       lastActive: user.last_login || 'Never',
     }))
   },
@@ -374,12 +386,32 @@ export const proctoringAPI = {
     const response = await api.get(`/api/proctoring/flags/${examId}`)
     return response.data
   },
+  intervene: async (data: { exam_id: string; student_id: string; action: string; message: string }) => {
+    const response = await api.post('/api/ws/intervene', data)
+    return response.data
+  },
 }
 
 // Session API
 export const sessionAPI = {
   startSession: async (examId: string, data: any) => {
     const response = await api.post('/api/sessions/start', {
+      exam_id: examId,
+      ...data,
+    })
+    return response.data
+  },
+  verifySession: async (examId: string, data: {
+    face_verified: boolean
+    device_info: any
+    browser_info: string
+    checks_passed: number
+    checks_failed: number
+    checks_warning: number
+    consent_given: boolean
+    id_verified: boolean
+  }) => {
+    const response = await api.post('/api/sessions/verify', {
       exam_id: examId,
       ...data,
     })

@@ -7,9 +7,9 @@ import { logger } from './logger'
 
 interface ExamProgress {
   examId: string
-  answers: { [key: number]: any }
+  answers: { [key: string]: any }
   currentQuestion: number
-  flaggedQuestions: number[]
+  flaggedQuestions: string[]
   timeRemaining: number
   timestamp: number
   violations: string[]
@@ -148,6 +148,16 @@ class ExamRecoveryService {
   }
 
   /**
+   * Wrap an IDBRequest in a proper Promise
+   */
+  private idbRequest<T>(request: IDBRequest<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  /**
    * Save to IndexedDB for larger storage and offline support
    */
   private async saveToIndexedDB(examId: string, data: ExamProgress) {
@@ -156,7 +166,7 @@ class ExamRecoveryService {
       const transaction = db.transaction(['exams'], 'readwrite')
       const store = transaction.objectStore('exams')
       
-      await store.put(data, examId)
+      await this.idbRequest(store.put(data, examId))
       
       logger.debug('Saved to IndexedDB', { examId })
     } catch (error) {
@@ -173,7 +183,7 @@ class ExamRecoveryService {
       const transaction = db.transaction(['exams'], 'readwrite')
       const store = transaction.objectStore('exams')
       
-      await store.delete(examId)
+      await this.idbRequest(store.delete(examId))
     } catch (error) {
       logger.warn('IndexedDB delete failed', error)
     }

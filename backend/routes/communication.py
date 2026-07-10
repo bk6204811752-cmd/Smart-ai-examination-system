@@ -12,6 +12,7 @@ from datetime import datetime
 
 from database import get_db
 from middleware.auth import require_teacher_or_admin
+from utils.email_service import send_email_async
 
 router = APIRouter(prefix="/api/communication", tags=["communication"])
 
@@ -40,7 +41,18 @@ async def send_email_broadcast(
     db=Depends(get_db),
     current_user: dict = Depends(require_teacher_or_admin)
 ):
-    # Log the communication
+    sent_count = 0
+    for recipient in data.recipients:
+        try:
+            await send_email_async(
+                to_email=recipient,
+                subject=data.subject,
+                body_text=data.message,
+            )
+            sent_count += 1
+        except Exception:
+            continue
+
     await db.communications.insert_one({
         "type": "email",
         "subject": data.subject,
@@ -48,11 +60,11 @@ async def send_email_broadcast(
         "recipients": data.recipients,
         "sent_by": str(current_user["_id"]),
         "sent_at": datetime.utcnow().isoformat(),
-        "status": "sent"
+        "status": "sent" if sent_count == len(data.recipients) else "partial",
     })
     return {
-        "message": f"Email broadcast sent to {len(data.recipients)} recipients",
-        "sent_count": len(data.recipients)
+        "message": f"Email broadcast sent to {sent_count}/{len(data.recipients)} recipients",
+        "sent_count": sent_count,
     }
 
 

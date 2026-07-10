@@ -12,6 +12,12 @@ from typing import Dict, List, Set, Optional
 import json
 import asyncio
 from datetime import datetime, timedelta
+from asyncio import Lock
+
+# Max frame data size per student (200 KB)
+MAX_FRAME_SIZE = 200 * 1024
+# Max students with frames per exam
+MAX_FRAMES_PER_EXAM = 100
 
 
 class ExamConnectionManager:
@@ -22,6 +28,8 @@ class ExamConnectionManager:
         self.connections: Dict[str, List[dict]] = {}
         # All active connections for global broadcasts
         self.all_connections: Set[WebSocket] = set()
+        # User ID -> list of WebSocket connections (for notification delivery)
+        self._user_connections: Dict[str, List[WebSocket]] = {}
         # Cache latest video frame per student: exam_id -> student_id -> frame_data
         self._frame_cache: Dict[str, Dict[str, str]] = {}
         # Cache latest proctoring status per student: exam_id -> student_id -> status_dict
@@ -32,10 +40,15 @@ class ExamConnectionManager:
         self._messages: Dict[str, list] = {}
         # Student name cache: student_id -> name
         self._student_names: Dict[str, str] = {}
+        # Lock for thread-safe shared dict access
+        self._lock = Lock()
 
     async def connect(self, websocket: WebSocket, exam_id: str, user_id: str, role: str):
         await websocket.accept()
         self.all_connections.add(websocket)
+        if user_id not in self._user_connections:
+            self._user_connections[user_id] = []
+        self._user_connections[user_id].append(websocket)
 
         if exam_id not in self.connections:
             self.connections[exam_id] = []
@@ -50,14 +63,32 @@ class ExamConnectionManager:
 
     def disconnect(self, websocket: WebSocket, exam_id: str):
         self.all_connections.discard(websocket)
+        remove_from_user = None
+        for uid, conns in list(self._user_connections.items()):
+            if websocket in conns:
+                conns.remove(websocket)
+                if not conns:
+                    remove_from_user = uid
+                break
+        if remove_from_user:
+            self._user_connections.pop(remove_from_user, None)
+
         if exam_id in self.connections:
             # Find the disconnecting user
-            for conn in self.connections[exam_id]:
+            user_id = None
+            role = None
+            for conn in list(self.connections[exam_id]):
                 if conn["ws"] == websocket:
                     user_id = conn["user_id"]
                     role = conn["role"]
                     print(f"[WS] {role} {user_id} disconnected from exam {exam_id}")
                     break
+
+            # Clean up cached frames/status for disconnecting students
+            if role == "student" and user_id and exam_id in self._frame_cache:
+                self._frame_cache[exam_id].pop(user_id, None)
+                self._status_cache.get(exam_id, {}).pop(user_id, None)
+                self._heartbeats.get(exam_id, {}).pop(user_id, None)
 
             self.connections[exam_id] = [
                 c for c in self.connections[exam_id] if c["ws"] != websocket
@@ -109,8 +140,9 @@ class ExamConnectionManager:
         if exam_id not in self.connections:
             return
 
+        # Iterate a copy to avoid race with disconnect() modifying the list
         dead = []
-        for conn in self.connections[exam_id]:
+        for conn in list(self.connections[exam_id]):
             if exclude_ws and conn["ws"] == exclude_ws:
                 continue
             try:
@@ -132,6 +164,12 @@ class ExamConnectionManager:
         """Cache the latest video frame for a student (for new teacher connections)"""
         if exam_id not in self._frame_cache:
             self._frame_cache[exam_id] = {}
+        # Skip oversized frames
+        if len(frame_data) > MAX_FRAME_SIZE:
+            return
+        # Enforce max students per exam
+        if len(self._frame_cache[exam_id]) >= MAX_FRAMES_PER_EXAM and student_id not in self._frame_cache[exam_id]:
+            return
         self._frame_cache[exam_id][student_id] = frame_data
 
     def get_student_frame(self, exam_id: str, student_id: str) -> Optional[str]:
@@ -178,10 +216,11 @@ class ExamConnectionManager:
 
     # ── Active Streams ───────────────────────────────────────────────────────
 
-    def get_active_streams(self, exam_id: str) -> dict:
+    def get_active_streams(self, exam_id: str, include_frames: bool = False) -> dict:
         """
         Get all active video streams for an exam.
         Returns: { student_id: { video: frame_data, status: {...} } }
+        include_frames: If True, includes base64 frame data (expensive for large classes).
         """
         result = {}
 
@@ -207,7 +246,8 @@ class ExamConnectionManager:
             is_online = student_id in connected_students or self.is_student_online(exam_id, student_id)
 
             result[student_id] = {
-                "video": frame,
+                "video": frame if include_frames else None,
+                "has_frame": frame is not None,
                 "status": status,
                 "last_seen": last_hb or status.get("last_seen"),
                 "is_online": is_online,
@@ -230,6 +270,33 @@ class ExamConnectionManager:
         """Get recent messages for an exam"""
         msgs = self._messages.get(exam_id, [])
         return msgs[-limit:]
+
+    # ── Notification Delivery ────────────────────────────────────────────────
+
+    async def send_notification_to_user(self, user_id: str, notification: dict):
+        """Send a notification to a specific user via their WS connections"""
+        sockets = self._user_connections.get(user_id, [])
+        for sock in sockets:
+            try:
+                await sock.send_json({
+                    "type": "notification",
+                    "notification": notification,
+                })
+            except Exception:
+                pass
+
+    async def broadcast_notification_to_role(self, role: str, notification: dict):
+        """Send a notification to all connected users with a specific role"""
+        for exam_id, conns in self.connections.items():
+            for conn in conns:
+                if conn["role"] == role:
+                    try:
+                        await conn["ws"].send_json({
+                            "type": "notification",
+                            "notification": notification,
+                        })
+                    except Exception:
+                        pass
 
     def cache_student_name(self, student_id: str, name: str):
         """Cache a student's display name"""

@@ -1,8 +1,9 @@
 """
 Exam Session Routes
-POST  /api/sessions/start
-GET   /api/sessions/{examId}
-PATCH /api/sessions/{examId}/update
+POST  /api/sessions/start       — Start or resume an exam session
+POST  /api/sessions/verify      — Store pre-exam verification results
+GET   /api/sessions/{examId}    — List sessions for an exam
+PATCH /api/sessions/{examId}/update  — Update session state
 """
 
 import random
@@ -28,6 +29,7 @@ class StartSessionRequest(BaseModel):
     face_verified: Optional[bool] = False
     device_info: Optional[dict] = None
     browser_info: Optional[str] = None
+    verification_results: Optional[dict] = None
 
 
 class UpdateSessionRequest(BaseModel):
@@ -55,6 +57,7 @@ async def start_session(
         "status": "active"
     })
     if existing:
+        # Return existing session — frontend handles answer restoration
         return serialize(existing)
 
     session_doc = {
@@ -64,6 +67,7 @@ async def start_session(
         "face_verified": data.face_verified,
         "device_info": data.device_info,
         "browser_info": data.browser_info,
+        "verification_results": data.verification_results,
         "status": "active",
         "started_at": datetime.utcnow().isoformat(),
         "last_updated": datetime.utcnow().isoformat(),
@@ -75,6 +79,57 @@ async def start_session(
     result = await db.exam_sessions.insert_one(session_doc)
     session_doc["_id"] = result.inserted_id
     return serialize(session_doc)
+
+
+class VerifySessionRequest(BaseModel):
+    exam_id: str
+    face_verified: bool = False
+    device_info: Optional[dict] = None
+    browser_info: Optional[str] = None
+    checks_passed: Optional[int] = 0
+    checks_failed: Optional[int] = 0
+    checks_warning: Optional[int] = 0
+    consent_given: Optional[bool] = False
+    id_verified: Optional[bool] = False
+
+
+@router.post("/verify")
+async def verify_session(
+    data: VerifySessionRequest,
+    db=Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Store pre-exam verification results for auditing/review."""
+    verify_doc = {
+        "exam_id": data.exam_id,
+        "student_id": str(current_user["_id"]),
+        "student_name": current_user.get("full_name"),
+        "face_verified": data.face_verified,
+        "device_info": data.device_info,
+        "browser_info": data.browser_info,
+        "checks_passed": data.checks_passed,
+        "checks_failed": data.checks_failed,
+        "checks_warning": data.checks_warning,
+        "consent_given": data.consent_given,
+        "id_verified": data.id_verified,
+        "verified_at": datetime.utcnow().isoformat(),
+    }
+    # Upsert: one verification per student per exam
+    existing = await db.exam_sessions.find_one({
+        "exam_id": data.exam_id,
+        "student_id": str(current_user["_id"]),
+    })
+    if existing:
+        await db.exam_sessions.update_one(
+            {"_id": existing["_id"]},
+            {"$set": {"verification": verify_doc}}
+        )
+    else:
+        await db.exam_sessions.insert_one({
+            **verify_doc,
+            "status": "verified_only",
+        })
+    return {"message": "Verification stored", "verified": data.face_verified}
 
 
 @router.get("/{exam_id}")
@@ -214,8 +269,8 @@ async def get_session_replay(
         if matching_events:
             risk = sum(ev.get("risk_score", 0) for ev in matching_events) / len(matching_events)
             attention = 100 - risk
-        risk = max(0, min(100, risk + random.uniform(-10, 10)))
-        attention = max(0, min(100, attention + random.uniform(-10, 10)))
+        risk = max(0, min(100, risk))
+        attention = max(0, min(100, attention))
 
         event_list = []
         for ev in matching_events:
@@ -238,9 +293,9 @@ async def get_session_replay(
             "metrics": {
                 "risk_score": round(risk, 1),
                 "attention_score": round(attention, 1),
-                "emotion": random.choice(["focused", "neutral", "confused"]),
-                "gaze_horizontal": round(random.uniform(-15, 15), 1),
-                "gaze_vertical": round(random.uniform(-10, 10), 1),
+                "emotion": matching_events[0].get("emotion", "focused") if matching_events else "focused",
+                "gaze_horizontal": matching_events[0].get("gaze_horizontal", 0) if matching_events else 0,
+                "gaze_vertical": matching_events[0].get("gaze_vertical", 0) if matching_events else 0,
                 "violations": violations,
             },
             "events": event_list,

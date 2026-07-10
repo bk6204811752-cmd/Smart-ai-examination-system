@@ -1,4 +1,12 @@
-﻿import { FaceLandmarker, ObjectDetector, FilesetResolver } from '@mediapipe/tasks-vision'
+import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision'
+import {
+  detectSuspiciousObjects,
+  isObjectDetectionAvailable,
+  hasObjectDetectionFailed,
+  getLastModelLoadError,
+  resetObjectDetector,
+  checkObjectDetectionHealth,
+} from './objectDetection'
 import { soundAlerts } from './soundAlerts'
 
 export interface ProctoringViolation {
@@ -58,13 +66,35 @@ export interface ProctoringStatus {
   environmentScore: number
   integrityScore: number
   brightness: number
+  // Device detection status
+  phoneDetected: boolean
+  bookDetected: boolean
+  deviceDetected: boolean
+  objectDetectionActive: boolean
+  objectDetectionError: string | null
+  lastDetectedDevices: string[]
+}
+
+export interface FaceBox {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface ObjectBox {
+  label: string
+  score: number
+  x: number
+  y: number
+  width: number
+  height: number
 }
 
 const MEDIAPIPE_WASM_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm'
 const FACE_LANDMARKER_MODEL =
   'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task'
-const OBJECT_DETECTOR_MODEL =
-  'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/latest/efficientdet_lite0.task'
+// Object detection now uses @tensorflow-models/coco-ssd via objectDetection.ts
 
 class ProctoringEngine {
   private videoElement: HTMLVideoElement | null = null
@@ -74,7 +104,6 @@ class ProctoringEngine {
   private stream: MediaStream | null = null
 
   private faceLandmarker: FaceLandmarker | null = null
-  private objectDetector: ObjectDetector | null = null
   private visionResolver: any = null
   private modelsLoaded = false
   private isMonitoring = false
@@ -82,12 +111,29 @@ class ProctoringEngine {
   private frameCount = 0
   private previousLandmarks: any[] | null = null
   private lastObjectDetectTime = 0
-  private readonly OBJECT_DETECT_INTERVAL = 3000
+  private readonly OBJECT_DETECT_INTERVAL = 1500
+  private objectDetectScheduled = false
   private phoneDetected = false
   private bookDetected = false
+  private consecutivePhoneDetected = 0
+  private consecutiveBookDetected = 0
   private consecutiveHeadphone = 0
   private lastPhoneWarning = 0
   private lastBookWarning = 0
+  private isDetectionPaused = false
+
+  // Overlay rendering
+  private overlayCanvas: HTMLCanvasElement | null = null
+  private faceBoxes: FaceBox[] = []
+  private objectBoxes: ObjectBox[] = []
+  private faceLandmarkPoints: Array<{
+    nose: Array<{x: number, y: number}>,
+    mouth: Array<{x: number, y: number}>,
+    leftEye: Array<{x: number, y: number}>,
+    rightEye: Array<{x: number, y: number}>,
+    leftIris: {x: number, y: number} | null,
+    rightIris: {x: number, y: number} | null,
+  }> = []
   private lastDevToolsWarning = 0
   private lastScreenshotWarning = 0
   private devToolsOpen = false
@@ -110,9 +156,28 @@ class ProctoringEngine {
   private readonly STATUS_UPDATE_INTERVAL = 1000
   private lastBrightnessUpdate = 0
   private readonly BRIGHTNESS_UPDATE_INTERVAL = 2000
-  private readonly LOOKING_AWAY_GAZE_THRESHOLD = 0.42
-  private readonly LOOKING_AWAY_HEAD_THRESHOLD = 0.55
+  private readonly LOOKING_AWAY_GAZE_THRESHOLD = 0.65
+  private readonly LOOKING_AWAY_HEAD_THRESHOLD = 0.8
   private readonly LOOKING_AWAY_GRACE_FRAMES = 5
+  private lastBrightnessWarning = 0
+  private lastViolationTime = 0
+  private readonly SCORE_DECAY_INTERVAL = 3000
+  private readonly SCORE_DECAY_AMOUNT = 2
+  private violationCount = 0
+  private readonly PAUSE_VIOLATION_THRESHOLD = 100
+  private readonly CRITICAL_PAUSE_TYPES = new Set<ProctoringViolation['type']>(['TAB_SWITCH', 'FULLSCREEN_EXIT', 'PHONE_DETECTED', 'UNAUTHORIZED_DEVICE', 'WINDOW_BLUR'])
+
+  // Adaptive ambient noise tracking
+  private ambientNoiseLevel = 0
+  private ambientSamplesCollected = 0
+  private readonly AMBIENT_CALIBRATION_SAMPLES = 20
+  private ambientCalibrated = false
+  private readonly AMBIENT_ADAPT_RATE = 0.99
+  private readonly AMBIENT_MARGIN = 6
+  private readonly MIN_AUDIO_THRESHOLD = 5
+  private readonly AMBIENT_UPDATE_INTERVAL = 500
+  private readonly SPEECH_FREQ_BINS = 32
+  private lastAmbientUpdate = 0
 
   private status: ProctoringStatus = {
     isActive: false,
@@ -132,6 +197,12 @@ class ProctoringEngine {
     environmentScore: 100,
     integrityScore: 100,
     brightness: 100,
+    phoneDetected: false,
+    bookDetected: false,
+    deviceDetected: false,
+    objectDetectionActive: false,
+    objectDetectionError: null,
+    lastDetectedDevices: [],
   }
 
   private onViolation: ((violation: ProctoringViolation) => void) | null = null
@@ -198,20 +269,6 @@ class ProctoringEngine {
         ),
       ])
 
-      try {
-        this.objectDetector = await ObjectDetector.createFromOptions(this.visionResolver, {
-          baseOptions: {
-            modelAssetPath: OBJECT_DETECTOR_MODEL,
-            delegate: 'GPU',
-          },
-          scoreThreshold: 0.4,
-          maxResults: 5,
-          runningMode: 'IMAGE',
-        })
-      } catch (objErr) {
-        console.warn('[Proctoring] Object detector init failed (non-fatal):', objErr)
-      }
-
       this.modelsLoaded = true
     } catch (err) {
       console.warn('[Proctoring] MediaPipe init failed:', err)
@@ -223,23 +280,35 @@ class ProctoringEngine {
   async initialize(video: HTMLVideoElement, stream: MediaStream): Promise<void> {
     this.videoElement = video
     this.stream = stream
-    this.setupAudioMonitoring(stream)
+    await this.setupAudioMonitoring(stream)
   }
 
-  private setupAudioMonitoring(stream: MediaStream): void {
+  private async setupAudioMonitoring(stream: MediaStream): Promise<void> {
     try {
       const audioTrack = stream.getAudioTracks()[0]
-      if (!audioTrack) return
+      if (!audioTrack) {
+        console.warn('[Proctoring] No audio track in stream')
+        return
+      }
       this.audioContext = new AudioContext()
+      if (this.audioContext.state === 'suspended') {
+        await this.audioContext.resume()
+      }
       const source = this.audioContext.createMediaStreamSource(stream)
       const analyser = this.audioContext.createAnalyser()
       analyser.fftSize = 256
+      analyser.minDecibels = -80
+      analyser.maxDecibels = -10
       source.connect(analyser)
       this.audioAnalyser = analyser
       this.audioDataArray = new Uint8Array(analyser.frequencyBinCount)
-    } catch {
-      /* noop */
+    } catch (err) {
+      console.warn('[Proctoring] Audio monitoring setup failed:', err)
     }
+  }
+
+  setOverlayCanvas(canvas: HTMLCanvasElement | null): void {
+    this.overlayCanvas = canvas
   }
 
   private setupBlockingHandlers(): void {
@@ -249,7 +318,7 @@ class ProctoringEngine {
       this.addViolation({
         type: 'COPY_PASTE',
         severity: 'MEDIUM',
-        message: 'Copy operation blocked â€” cheating attempt detected',
+        message: 'Copy operation blocked — cheating attempt detected',
       })
     }
     this.boundPasteHandler = (e: ClipboardEvent) => {
@@ -258,7 +327,7 @@ class ProctoringEngine {
       this.addViolation({
         type: 'COPY_PASTE',
         severity: 'MEDIUM',
-        message: 'Paste operation blocked â€” cheating attempt detected',
+        message: 'Paste operation blocked — cheating attempt detected',
       })
     }
     this.boundCutHandler = (e: ClipboardEvent) => {
@@ -275,7 +344,7 @@ class ProctoringEngine {
           this.addViolation({
             type: 'COPY_PASTE',
             severity: 'MEDIUM',
-            message: 'Paste blocked â€” cheating attempt detected',
+            message: 'Paste blocked — cheating attempt detected',
           })
         }
       }
@@ -358,7 +427,7 @@ class ProctoringEngine {
             this.addViolation({
               type: 'SUSPICIOUS_BEHAVIOR',
               severity: 'CRITICAL',
-              message: 'Remote desktop protocol (RDP) detected â€” exam terminated',
+              message: 'Remote desktop protocol (RDP) detected — exam terminated',
             })
             this.pauseExam('Remote desktop access detected. Please contact your proctor.')
           }
@@ -391,7 +460,7 @@ class ProctoringEngine {
         this.addViolation({
           type: 'SUSPICIOUS_BEHAVIOR',
           severity: 'HIGH',
-          message: `Screen color depth changed from ${oldDepth}-bit to ${screen.colorDepth}-bit â€” possible remote desktop connection`,
+          message: `Screen color depth changed from ${oldDepth}-bit to ${screen.colorDepth}-bit — possible remote desktop connection`,
         })
       }
 
@@ -401,7 +470,7 @@ class ProctoringEngine {
           this.addViolation({
             type: 'SUSPICIOUS_BEHAVIOR',
             severity: 'HIGH',
-            message: 'Low screen resolution detected â€” possible remote desktop connection',
+            message: 'Low screen resolution detected — possible remote desktop connection',
           })
         }
       }
@@ -429,6 +498,10 @@ class ProctoringEngine {
     this.isMonitoring = true
     this.status.isActive = true
     this.frameCount = 0
+    this.ambientNoiseLevel = 0
+    this.ambientSamplesCollected = 0
+    this.ambientCalibrated = false
+    this.lastAmbientUpdate = 0
     this.setupBlockingHandlers()
     this.setupScreenSecurity()
     this.processFrame()
@@ -458,15 +531,18 @@ class ProctoringEngine {
     }
     this.faceLandmarker?.close()
     this.faceLandmarker = null
-    this.objectDetector?.close()
-    this.objectDetector = null
     this.modelsLoaded = false
     this.videoElement = null
     this.stream = null
     this.previousLandmarks = null
+    if (this.objectDetectionRetryTimer !== null) {
+      clearTimeout(this.objectDetectionRetryTimer)
+      this.objectDetectionRetryTimer = null
+    }
+    this.objectDetectionConsecutiveFailures = 0
   }
 
-  private processFrame = (): void => {
+  private processFrame = async (): Promise<void> => {
     if (!this.isMonitoring) return
     this.animFrameId = requestAnimationFrame(this.processFrame)
     this.frameCount++
@@ -477,13 +553,8 @@ class ProctoringEngine {
         const now = Date.now()
         if (now - this.lastFocusWarning > 1000) {
           this.lastFocusWarning = now
-          this.addViolation({
-            type: 'TAB_SWITCH',
-            severity: 'HIGH',
-            message: 'Tab or window focus lost',
-          })
+          this.recordTabSwitch()
         }
-        this.pauseExam('Tab/window focus lost. Return to the exam to resume.')
         return
       }
     }
@@ -491,9 +562,25 @@ class ProctoringEngine {
     if (!this.videoElement || this.videoElement.readyState < 2) return
     if (this.videoElement.videoWidth === 0) return
 
+    // When detection is paused (exam paused by teacher/engine), skip all AI detection
+    // but keep the frame loop alive for quick resume
+    if (this.isDetectionPaused) {
+      // Only update status periodically when paused - no detection work
+      const now = Date.now()
+      if (now - this.lastStatusUpdate > this.STATUS_UPDATE_INTERVAL) {
+        this.lastStatusUpdate = now
+        this.onStatusChange?.(this.status)
+      }
+      return
+    }
+
     if (this.audioDataArray && this.audioAnalyser) {
+      if (this.audioContext?.state === 'suspended') {
+        try { await this.audioContext.resume() } catch {/* ignore */}
+      }
       this.audioAnalyser.getByteFrequencyData(this.audioDataArray)
-      const avg = this.audioDataArray.reduce((a, b) => a + b, 0) / this.audioDataArray.length
+      const speechBins = this.audioDataArray.slice(0, this.SPEECH_FREQ_BINS)
+      const avg = speechBins.reduce((a, b) => a + b, 0) / speechBins.length
       this.status.audioLevel = Math.round(avg)
     }
 
@@ -505,21 +592,36 @@ class ProctoringEngine {
     if (now - this.lastBrightnessUpdate > this.BRIGHTNESS_UPDATE_INTERVAL) {
       this.lastBrightnessUpdate = now
       this.status.brightness = this.getBrightness()
+      this.status.environmentScore = Math.max(0, Math.min(100, Math.round((this.status.brightness / 255) * 100)))
     }
 
-    if (this.objectDetector && this.frameCount % 60 === 0) {
-      this.detectObjects()
+    const objNow = Date.now()
+    if (objNow - this.lastObjectDetectTime >= this.OBJECT_DETECT_INTERVAL && !this.objectDetectScheduled) {
+      this.lastObjectDetectTime = objNow
+      this.objectDetectScheduled = true
+      this.detectObjects().finally(() => {
+        this.objectDetectScheduled = false
+      })
     }
 
     this.checkHeadphoneDetection()
     this.checkDevTools()
     this.evaluateViolations()
+
+    // Decay suspicious activity score when no violations occur
+    if (this.status.suspiciousActivityScore > 0 && now - this.lastViolationTime > this.SCORE_DECAY_INTERVAL) {
+      this.status.suspiciousActivityScore = Math.max(0, this.status.suspiciousActivityScore - this.SCORE_DECAY_AMOUNT)
+      this.lastViolationTime = now
+    }
+
     this.updateIntegrityScore()
 
     if (now - this.lastStatusUpdate > this.STATUS_UPDATE_INTERVAL) {
       this.lastStatusUpdate = now
       this.onStatusChange?.(this.status)
     }
+
+    this.drawOverlay()
   }
 
   private detectFace(): void {
@@ -531,6 +633,39 @@ class ProctoringEngine {
       const faceCount = result.faceLandmarks?.length || 0
       this.status.faceCount = faceCount
       this.status.faceDetected = faceCount > 0
+
+      // Compute face bounding boxes from normalized landmarks
+      this.faceBoxes = []
+      this.faceLandmarkPoints = []
+      if (result.faceLandmarks) {
+        for (const landmarks of result.faceLandmarks) {
+          let minX = 1, minY = 1, maxX = 0, maxY = 0
+          for (const lm of landmarks) {
+            if (lm.x < minX) minX = lm.x
+            if (lm.y < minY) minY = lm.y
+            if (lm.x > maxX) maxX = lm.x
+            if (lm.y > maxY) maxY = lm.y
+          }
+          const padX = (maxX - minX) * 0.15
+          const padY = (maxY - minY) * 0.15
+          this.faceBoxes.push({
+            x: Math.max(0, minX - padX),
+            y: Math.max(0, minY - padY),
+            width: Math.min(1, maxX - minX + 2 * padX),
+            height: Math.min(1, maxY - minY + 2 * padY),
+          })
+
+          const getPoint = (idx: number) => ({ x: landmarks[idx].x, y: landmarks[idx].y })
+          this.faceLandmarkPoints.push({
+            nose: [4, 6, 94].map(i => getPoint(i)),
+            mouth: [0, 17, 61, 291].map(i => getPoint(i)),
+            leftEye: [33, 133, 159, 145].map(i => getPoint(i)),
+            rightEye: [263, 362, 386, 374].map(i => getPoint(i)),
+            leftIris: landmarks[468] ? getPoint(468) : null,
+            rightIris: landmarks[473] ? getPoint(473) : null,
+          })
+        }
+      }
 
       if (faceCount > 0 && result.faceLandmarks) {
         this.consecutiveNoFace = 0
@@ -547,6 +682,10 @@ class ProctoringEngine {
         if (this.consecutiveNoFace > 10) {
           this.status.faceDetected = false
         }
+        this.status.faceCount = 0
+        this.status.lookingAtScreen = false
+        this.faceBoxes = []
+        this.faceLandmarkPoints = []
       }
 
       if (faceCount > 1) {
@@ -559,21 +698,212 @@ class ProctoringEngine {
     }
   }
 
-  private detectObjects(): void {
-    if (!this.videoElement || !this.objectDetector) return
+  private objectDetectionInProgress = false
+
+  private objectDetectionRetryTimer: number | null = null
+  private readonly OBJECT_DETECTION_RETRY_INTERVAL = 10000
+  private objectDetectionConsecutiveFailures = 0
+
+  private async detectObjects(): Promise<void> {
+    if (!this.videoElement || this.objectDetectionInProgress) return
+    if (this.videoElement.readyState < 2 || this.videoElement.videoWidth === 0) return
+    this.objectDetectionInProgress = true
     try {
-      const result = this.objectDetector.detect(this.videoElement)
-      this.phoneDetected = false
-      this.bookDetected = false
-      for (const detection of result.detections) {
-        const cat = detection.categories[0]
-        if (!cat) continue
-        const label = cat.categoryName.toLowerCase()
-        if (label === 'cell phone') this.phoneDetected = true
-        if (label === 'book' || label === 'laptop') this.bookDetected = true
+      this.status.objectDetectionActive = true
+      this.status.objectDetectionError = null
+      const result = await detectSuspiciousObjects(this.videoElement, 0.3)
+      this.phoneDetected = result.phone
+      this.bookDetected = result.book
+      this.objectDetectionConsecutiveFailures = 0
+
+      // Update device detection status
+      const detectedDevices: string[] = []
+      if (result.phone) detectedDevices.push('Phone')
+      if (result.book) detectedDevices.push('Book/Laptop/Tablet')
+      for (const obj of result.suspicious) {
+        const label = obj.label.toLowerCase()
+        if (label !== 'cell phone' && label !== 'book' && label !== 'laptop' && label !== 'tablet') {
+          if (!detectedDevices.includes(label)) detectedDevices.push(label)
+        }
+      }
+
+      this.status.phoneDetected = result.phone
+      this.status.bookDetected = result.book
+      this.status.deviceDetected = result.phone || result.book || result.suspicious.length > 0
+      this.status.lastDetectedDevices = detectedDevices
+
+      // Temporal filtering: require multiple consecutive detections
+      if (result.phone) {
+        this.consecutivePhoneDetected++
+      } else {
+        this.consecutivePhoneDetected = Math.max(0, this.consecutivePhoneDetected - 1)
+      }
+      if (result.book) {
+        this.consecutiveBookDetected++
+      } else {
+        this.consecutiveBookDetected = Math.max(0, this.consecutiveBookDetected - 1)
+      }
+
+      const vw = this.videoElement.videoWidth || 1
+      const vh = this.videoElement.videoHeight || 1
+      this.objectBoxes = result.suspicious.map(obj => ({
+        label: obj.label,
+        score: obj.score,
+        x: obj.bbox[0] / vw,
+        y: obj.bbox[1] / vh,
+        width: obj.bbox[2] / vw,
+        height: obj.bbox[3] / vh,
+      }))
+
+      if (this.objectDetectionRetryTimer !== null) {
+        clearTimeout(this.objectDetectionRetryTimer)
+        this.objectDetectionRetryTimer = null
       }
     } catch (err) {
-      console.warn('[Proctoring] Object detection error:', err)
+      const msg = err instanceof Error ? err.message : String(err)
+      this.status.objectDetectionActive = false
+      this.status.objectDetectionError = msg
+      this.objectDetectionConsecutiveFailures++
+      console.warn(`[Proctoring] Object detection failed (${this.objectDetectionConsecutiveFailures}x):`, msg)
+
+      if (this.objectDetectionRetryTimer !== null) {
+        clearTimeout(this.objectDetectionRetryTimer)
+        this.objectDetectionRetryTimer = null
+      }
+
+      if (msg.includes('previously failed') || msg.includes('backend not available') || msg.includes('Failed to load')) {
+        const retryDelay = Math.min(
+          this.OBJECT_DETECTION_RETRY_INTERVAL * this.objectDetectionConsecutiveFailures,
+          60000
+        )
+        console.warn(`[ObjectDetection] Will retry in ${retryDelay / 1000}s`)
+        this.objectDetectionRetryTimer = window.setTimeout(() => {
+          this.objectDetectionRetryTimer = null
+          resetObjectDetector()
+          this.lastObjectDetectTime = 0
+          this.objectDetectScheduled = false
+          this.objectDetectionConsecutiveFailures = 0
+        }, retryDelay)
+      } else {
+        this.objectDetectScheduled = false
+      }
+    } finally {
+      this.objectDetectionInProgress = false
+    }
+  }
+
+  private drawOverlay(): void {
+    if (!this.overlayCanvas || !this.videoElement) return
+    const canvas = this.overlayCanvas
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const dpr = window.devicePixelRatio || 1
+    const rect = canvas.getBoundingClientRect()
+
+    if (canvas.width !== Math.round(rect.width * dpr) || canvas.height !== Math.round(rect.height * dpr)) {
+      canvas.width = Math.round(rect.width * dpr)
+      canvas.height = Math.round(rect.height * dpr)
+    }
+
+    ctx.clearRect(0, 0, rect.width, rect.height)
+
+    const vw = rect.width
+    const vh = rect.height
+
+    // Draw face boxes
+    if (this.faceBoxes.length > 0) {
+      const isMulti = this.faceBoxes.length > 1
+      for (const box of this.faceBoxes) {
+        ctx.strokeStyle = isMulti ? '#ef4444' : '#22c55e'
+        ctx.lineWidth = isMulti ? 3 : 2.5
+        ctx.strokeRect(box.x * vw, box.y * vh, box.width * vw, box.height * vh)
+
+        // Face count label
+        ctx.fillStyle = isMulti ? '#ef4444' : '#22c55e'
+        ctx.font = 'bold 13px monospace'
+        ctx.fillText(
+          isMulti ? `Face ${this.faceBoxes.indexOf(box) + 1}` : 'Face',
+          box.x * vw + 4,
+          box.y * vh - 6
+        )
+      }
+    } else {
+      // No face � red dashed border around full frame
+      ctx.strokeStyle = '#ef4444'
+      ctx.lineWidth = 3
+      ctx.setLineDash([10, 6])
+      ctx.strokeRect(8, 8, vw - 16, vh - 16)
+      ctx.setLineDash([])
+
+      ctx.fillStyle = '#ef4444'
+      ctx.font = 'bold 13px monospace'
+      ctx.fillText('NO FACE DETECTED', 14, 28)
+    }
+
+    // ── Draw face landmarks (gaze / nose / mouth) ──
+    if (this.faceLandmarkPoints.length > 0) {
+      const fp = this.faceLandmarkPoints[0]
+
+      // Nose points (blue)
+      ctx.fillStyle = '#3b82f6'
+      for (const p of fp.nose) {
+        ctx.beginPath()
+        ctx.arc(p.x * vw, p.y * vh, 4, 0, Math.PI * 2)
+        ctx.fill()
+      }
+
+      // Mouth points (blue)
+      ctx.fillStyle = '#3b82f6'
+      for (const p of fp.mouth) {
+        ctx.beginPath()
+        ctx.arc(p.x * vw, p.y * vh, 3, 0, Math.PI * 2)
+        ctx.fill()
+      }
+
+      // Eye corners (lighter blue)
+      ctx.fillStyle = '#60a5fa'
+      for (const p of [...fp.leftEye, ...fp.rightEye]) {
+        ctx.beginPath()
+        ctx.arc(p.x * vw, p.y * vh, 2.5, 0, Math.PI * 2)
+        ctx.fill()
+      }
+
+      // Iris centers (pink) — shows gaze direction
+      if (fp.leftIris) {
+        ctx.fillStyle = '#ec4899'
+        ctx.beginPath()
+        ctx.arc(fp.leftIris.x * vw, fp.leftIris.y * vh, 5, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.strokeStyle = '#be185d'
+        ctx.lineWidth = 1.5
+        ctx.stroke()
+      }
+      if (fp.rightIris) {
+        ctx.fillStyle = '#ec4899'
+        ctx.beginPath()
+        ctx.arc(fp.rightIris.x * vw, fp.rightIris.y * vh, 5, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.strokeStyle = '#be185d'
+        ctx.lineWidth = 1.5
+        ctx.stroke()
+      }
+    }
+
+    // Draw object boxes in red
+    for (const obj of this.objectBoxes) {
+      ctx.strokeStyle = '#ef4444'
+      ctx.lineWidth = 2.5
+      ctx.strokeRect(obj.x * vw, obj.y * vh, obj.width * vw, obj.height * vh)
+
+      ctx.fillStyle = '#ef4444'
+      ctx.font = 'bold 12px monospace'
+      const label = `${obj.label} ${Math.round(obj.score * 100)}%`
+      const tw = ctx.measureText(label).width
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.85)'
+      ctx.fillRect(obj.x * vw, obj.y * vh - 18, tw + 8, 18)
+      ctx.fillStyle = '#ffffff'
+      ctx.fillText(label, obj.x * vw + 4, obj.y * vh - 4)
     }
   }
 
@@ -582,12 +912,18 @@ class ProctoringEngine {
       this.consecutiveHeadphone = Math.max(0, this.consecutiveHeadphone - 1)
       return
     }
-    if (this.status.audioLevel < 5 && this.status.faceDetected) {
-      this.consecutiveHeadphone++
+    const quietThreshold = Math.max(this.ambientNoiseLevel + 2, 3)
+    const audioPresentThreshold = Math.max(this.ambientNoiseLevel + 10, 15)
+    if (this.status.audioLevel < quietThreshold) {
+      if (!this.status.lookingAtScreen) {
+        this.consecutiveHeadphone++
+      } else {
+        this.consecutiveHeadphone = Math.max(0, this.consecutiveHeadphone - 1)
+      }
     } else {
-      this.consecutiveHeadphone = Math.max(0, this.consecutiveHeadphone - 1)
+      this.consecutiveHeadphone = Math.max(0, this.consecutiveHeadphone - 3)
     }
-    if (this.consecutiveHeadphone > 0 && this.status.audioLevel >= 10) {
+    if (this.consecutiveHeadphone > 0 && this.status.audioLevel >= audioPresentThreshold) {
       this.consecutiveHeadphone = Math.max(0, this.consecutiveHeadphone - 10)
     }
   }
@@ -663,9 +999,38 @@ class ProctoringEngine {
     this.status.attentionLevel = Math.max(0, Math.min(100, 100 - attentionPenalty))
   }
 
+  private getAudioThreshold(): number {
+    return Math.max(this.ambientNoiseLevel + this.AMBIENT_MARGIN, this.MIN_AUDIO_THRESHOLD)
+  }
+
+  private updateAmbientNoise(now: number): void {
+    if (now - this.lastAmbientUpdate < this.AMBIENT_UPDATE_INTERVAL) return
+    this.lastAmbientUpdate = now
+
+    if (!this.ambientCalibrated) {
+      this.ambientNoiseLevel =
+        (this.ambientNoiseLevel * this.ambientSamplesCollected + this.status.audioLevel) /
+        (this.ambientSamplesCollected + 1)
+      this.ambientSamplesCollected++
+      if (this.ambientSamplesCollected >= this.AMBIENT_CALIBRATION_SAMPLES) {
+        this.ambientCalibrated = true
+      }
+      return
+    }
+
+    // Slow adaptation: only update when audio is near ambient (no active vocal/sound event)
+    if (this.status.audioLevel < this.ambientNoiseLevel + 3) {
+      this.ambientNoiseLevel =
+        this.ambientNoiseLevel * this.AMBIENT_ADAPT_RATE +
+        this.status.audioLevel * (1 - this.AMBIENT_ADAPT_RATE)
+    }
+  }
+
   private evaluateViolations(): void {
     const now = Date.now()
     const SAME_VIOLATION_COOLDOWN = 3000
+
+    this.updateAmbientNoise(now)
 
     if (!this.status.faceDetected && this.consecutiveNoFace > 15) {
       if (now - this.lastNoFaceWarning > SAME_VIOLATION_COOLDOWN) {
@@ -673,7 +1038,7 @@ class ProctoringEngine {
         this.addViolation({
           type: 'NO_FACE',
           severity: this.consecutiveNoFace > 60 ? 'HIGH' : 'MEDIUM',
-          message: 'Face not detected â€” please ensure you are visible to the camera',
+          message: 'Face not detected — please ensure you are visible to the camera',
           metadata: { attentionScore: this.status.attentionLevel },
         })
       }
@@ -685,7 +1050,7 @@ class ProctoringEngine {
         this.addViolation({
           type: 'MULTIPLE_FACES',
           severity: 'HIGH',
-          message: `${this.status.faceCount} faces detected â€” only one person should be visible`,
+          message: `${this.status.faceCount} faces detected — only one person should be visible`,
           metadata: { faceCount: this.status.faceCount },
         })
       }
@@ -703,13 +1068,14 @@ class ProctoringEngine {
       }
     }
 
-    if (this.status.audioLevel > 80) {
+    const audioThreshold = this.getAudioThreshold()
+    if (this.status.audioLevel > audioThreshold) {
       this.consecutiveAudio++
-      if (this.consecutiveAudio > 30 && now - this.lastAudioWarning > SAME_VIOLATION_COOLDOWN) {
+      if (this.consecutiveAudio > 5 && now - this.lastAudioWarning > SAME_VIOLATION_COOLDOWN) {
         this.lastAudioWarning = now
         this.addViolation({
           type: 'AUDIO_DETECTED',
-          severity: this.status.audioLevel > 150 ? 'HIGH' : 'LOW',
+          severity: this.status.audioLevel > audioThreshold + 40 ? 'HIGH' : 'LOW',
           message: `Sustained audio detected (level: ${this.status.audioLevel})`,
           metadata: { audioLevel: this.status.audioLevel },
         })
@@ -718,21 +1084,23 @@ class ProctoringEngine {
       this.consecutiveAudio = Math.max(0, this.consecutiveAudio - 1)
     }
 
-    if (this.phoneDetected && now - this.lastPhoneWarning > SAME_VIOLATION_COOLDOWN) {
+    if (this.consecutivePhoneDetected >= 2 && now - this.lastPhoneWarning > SAME_VIOLATION_COOLDOWN) {
       this.lastPhoneWarning = now
       this.addViolation({
         type: 'PHONE_DETECTED',
-        severity: 'HIGH',
-        message: 'Cell phone detected in camera view â€” please remove all electronic devices',
+        severity: 'CRITICAL',
+        message: 'Cell phone detected in camera view — please remove all electronic devices immediately',
       })
     }
 
-    if (this.bookDetected && now - this.lastBookWarning > SAME_VIOLATION_COOLDOWN) {
+    if (this.consecutiveBookDetected >= 2 && now - this.lastBookWarning > SAME_VIOLATION_COOLDOWN) {
       this.lastBookWarning = now
       this.addViolation({
         type: 'UNAUTHORIZED_DEVICE',
-        severity: 'MEDIUM',
-        message: 'Book or laptop detected near exam area â€” please clear your desk',
+        severity: 'HIGH',
+        message: this.consecutiveBookDetected > 5
+          ? 'Electronic device or book detected on desk — exam may be terminated if not removed'
+          : 'Book or laptop detected near exam area — please clear your desk',
       })
     }
 
@@ -743,28 +1111,29 @@ class ProctoringEngine {
       this.lastHeadphoneWarning = now
       this.addViolation({
         type: 'HEADPHONE_DETECTED',
-        severity: 'MEDIUM',
-        message:
-          'Possible headphones detected â€” consistently low ambient audio while face is visible',
+        severity: 'LOW',
+        message: 'Possible headphones/earbuds detected',
         metadata: { audioLevel: this.status.audioLevel },
       })
-      this.consecutiveHeadphone = 0
+      this.consecutiveHeadphone = Math.max(0, this.consecutiveHeadphone - 30)
     }
 
-    if (this.status.audioLevel >= 20 && this.status.audioLevel <= 70 && this.status.faceDetected) {
+    const musicLow = Math.max(this.ambientNoiseLevel + 8, 10)
+    const musicHigh = Math.max(this.ambientNoiseLevel + 40, 50)
+    if (this.status.audioLevel >= musicLow && this.status.audioLevel <= musicHigh) {
       this.consecutiveMusic++
-      if (this.consecutiveMusic > 300 && now - this.lastMusicWarning > SAME_VIOLATION_COOLDOWN) {
+      if (this.consecutiveMusic > 15 && now - this.lastMusicWarning > SAME_VIOLATION_COOLDOWN) {
         this.lastMusicWarning = now
         this.addViolation({
           type: 'AUDIO_DETECTED',
-          severity: 'MEDIUM',
-          message: `Sustained moderate audio â€” possible background music/playback (level: ${this.status.audioLevel})`,
+          severity: 'LOW',
+          message: `Sustained moderate audio — possible background music/playback (level: ${this.status.audioLevel})`,
           metadata: { audioLevel: this.status.audioLevel },
         })
-        this.consecutiveMusic = Math.max(0, this.consecutiveMusic - 50)
+        this.consecutiveMusic = Math.max(0, this.consecutiveMusic - 8)
       }
     } else {
-      this.consecutiveMusic = Math.max(0, this.consecutiveMusic - 5)
+      this.consecutiveMusic = Math.max(0, this.consecutiveMusic - 2)
     }
 
     if (this.devToolsOpen && now - this.lastDevToolsWarning > SAME_VIOLATION_COOLDOWN) {
@@ -772,8 +1141,32 @@ class ProctoringEngine {
       this.addViolation({
         type: 'SUSPICIOUS_BEHAVIOR',
         severity: 'HIGH',
-        message: 'Developer tools window detected â€” close all developer tools immediately',
+        message: 'Developer tools window detected — close all developer tools immediately',
       })
+    }
+
+    if (
+      this.status.brightness > 0 &&
+      this.status.brightness < 45 &&
+      now - this.lastBrightnessWarning > 10000
+    ) {
+      this.lastBrightnessWarning = now
+      this.addViolation({
+        type: 'SUSPICIOUS_BEHAVIOR',
+        severity: 'LOW',
+        message: 'Low lighting detected — improve room lighting for accurate proctoring',
+        metadata: { brightnessLevel: this.status.brightness },
+      })
+    }
+
+    if (
+      !this.status.objectDetectionActive &&
+      this.status.objectDetectionError &&
+      now - this.lastObjectDetectTime > 15000
+    ) {
+      if (this.objectDetectionConsecutiveFailures > 3) {
+        console.warn(`[Proctoring] Object detection unavailable for ${Math.round((now - this.lastObjectDetectTime) / 1000)}s. Face + audio monitoring still active.`)
+      }
     }
   }
 
@@ -789,6 +1182,8 @@ class ProctoringEngine {
     }
 
     this.status.violations = [...this.status.violations, violation].slice(-50)
+    this.lastViolationTime = Date.now()
+    this.violationCount++
 
     const severityWeight =
       base.severity === 'CRITICAL'
@@ -805,8 +1200,16 @@ class ProctoringEngine {
 
     this.onViolation?.(violation)
 
-    if (this.status.suspiciousActivityScore > 80) {
-      this.pauseExam('Excessive suspicious activity detected. Contact your proctor.')
+    // Pause only for specific critical violations or when total violations reach threshold.
+    const isCriticalPauseType = this.CRITICAL_PAUSE_TYPES.has(base.type)
+    if (
+      !this.status.isPaused &&
+      (isCriticalPauseType || this.violationCount >= this.PAUSE_VIOLATION_THRESHOLD)
+    ) {
+      const pauseReason = isCriticalPauseType
+        ? base.message
+        : `Excessive violations (${this.violationCount}) detected. Contact your proctor.`
+      this.pauseExam(pauseReason)
     }
 
     soundAlerts.playLowAlert()
@@ -828,19 +1231,44 @@ class ProctoringEngine {
     if (this.status.isPaused && this.status.pauseReason === reason) return
     this.status.isPaused = true
     this.status.pauseReason = reason
+    this.isDetectionPaused = true
     this.onPause?.(reason)
   }
 
   resumeExam(): void {
     this.status.isPaused = false
     this.status.pauseReason = undefined
+    this.isDetectionPaused = false
+    this.ambientNoiseLevel = 0
+    this.ambientSamplesCollected = 0
+    this.ambientCalibrated = false
+    this.lastAmbientUpdate = 0
+  }
+
+  pauseMonitoring(): void {
+    this.isDetectionPaused = true
+    this.status.isPaused = true
+  }
+
+  resumeMonitoring(): void {
+    this.isDetectionPaused = false
+    this.status.isPaused = false
+    this.status.pauseReason = undefined
+    this.ambientNoiseLevel = 0
+    this.ambientSamplesCollected = 0
+    this.ambientCalibrated = false
+    this.lastAmbientUpdate = 0
+  }
+
+  isMonitoringPaused(): boolean {
+    return this.isDetectionPaused
   }
 
   recordTabSwitch(): void {
     this.status.tabSwitchCount++
     this.addViolation({
       type: 'TAB_SWITCH',
-      severity: 'HIGH',
+      severity: 'CRITICAL',
       message: 'Tab switch detected',
     })
   }
@@ -849,7 +1277,7 @@ class ProctoringEngine {
     this.status.windowBlurCount++
     this.addViolation({
       type: 'WINDOW_BLUR',
-      severity: 'MEDIUM',
+      severity: 'CRITICAL',
       message: 'Window focus lost',
     })
   }
@@ -858,8 +1286,16 @@ class ProctoringEngine {
     this.status.fullscreenExitCount++
     this.addViolation({
       type: 'FULLSCREEN_EXIT',
-      severity: 'HIGH',
+      severity: 'CRITICAL',
       message: 'Fullscreen mode exited',
+    })
+  }
+
+  recordWindowMinimize(): void {
+    this.addViolation({
+      type: 'WINDOW_MINIMIZED',
+      severity: 'MEDIUM',
+      message: 'Window minimized or resized',
     })
   }
 
@@ -947,6 +1383,10 @@ class ProctoringEngine {
 
   getAudioLevel(): number {
     return this.status.audioLevel
+  }
+
+  getStatus(): ProctoringStatus {
+    return { ...this.status }
   }
 
   setOnViolation(cb: (v: ProctoringViolation) => void): void {

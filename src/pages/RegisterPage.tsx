@@ -1,10 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useAuthStore } from '../store/globalStore'
 import { authAPI } from '../lib/api'
 import { toast } from 'sonner'
-import { supabase } from '../lib/supabase'
 import {
   GraduationCap,
   Mail,
@@ -47,7 +45,6 @@ const OTP_COUNTDOWN = 30
 
 export default function RegisterPage() {
   const navigate = useNavigate()
-  const { login } = useAuthStore()
   const [step, setStep] = useState(0)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -59,8 +56,7 @@ export default function RegisterPage() {
   const [otpResendTimer, setOtpResendTimer] = useState(0)
   const [otpVerifying, setOtpVerifying] = useState(false)
   const [isSandbox, setIsSandbox] = useState(false)
-  const [, setNeedsOTP] = useState(false)
-  const [, setOtpSent] = useState(false)
+  const [sandboxOtp, setSandboxOtp] = useState('123456')
   const otpRefs = useRef<(HTMLInputElement | null)[]>([])
 
   const [formData, setFormData] = useState({
@@ -86,6 +82,13 @@ export default function RegisterPage() {
       e.email = 'Enter a valid email address'
     if (!formData.password) e.password = 'Password is required'
     else if (formData.password.length < 8) e.password = 'Password must be at least 8 characters'
+    else if (!/[A-Z]/.test(formData.password)) e.password = 'Must contain an uppercase letter'
+    else if (!/[a-z]/.test(formData.password)) e.password = 'Must contain a lowercase letter'
+    else if (!/[0-9]/.test(formData.password)) e.password = 'Must contain a digit'
+    else if (!/[!@#$%^&*()_+\-=[\]{};:,.<>?]/.test(formData.password)) e.password = 'Must contain a special character (!@#$%^&*...)'
+    else if (/012|123|234|345|456|567|678|789|890|qwerty|asdf|zxcv/i.test(formData.password)) e.password = 'Avoid sequential patterns like 1234 or qwerty'
+    else if (/(.)\1{3,}/.test(formData.password)) e.password = 'Avoid repeated characters (e.g. aaaa)'
+    else if (['password','123456','password123','admin123','student123','teacher123','admin@123','password@123','12345678','qwerty','abc123','root','admin','123456789','000000','111111','letmein','welcome','monkey','dragon'].includes(formData.password.toLowerCase())) e.password = 'That password is too common. Choose a stronger one.'
     if (!confirmPassword) e.confirmPassword = 'Please confirm your password'
     else if (confirmPassword !== formData.password) e.confirmPassword = 'Passwords do not match'
     setErrors(e)
@@ -135,13 +138,15 @@ export default function RegisterPage() {
   const handleResendOTP = async () => {
     if (otpResendTimer > 0) return
     try {
-      await authAPI.sendOTP(registrationEmail)
+      const result = await authAPI.sendOTP(registrationEmail)
+      setIsSandbox(result.is_sandbox || false)
+      if (result.is_sandbox) setSandboxOtp(result.sandbox_otp || '123456')
       toast.success('OTP resent to your email')
       setOtpResendTimer(OTP_COUNTDOWN)
       setOtp(['', '', '', '', '', ''])
       otpRefs.current[0]?.focus()
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to resend OTP')
+      const d = err.response?.data?.detail; toast.error(Array.isArray(d) ? d.map((x: any) => x.msg).join(', ') : (d || 'Failed to resend OTP'))
     }
   }
 
@@ -153,23 +158,15 @@ export default function RegisterPage() {
     }
     setOtpVerifying(true)
     try {
-      const result = await authAPI.verifyOTP(registrationEmail, otpCode)
-      if (result.auto_approved) {
-        // Sandbox mode: account is immediately approved, redirect to login
-        toast.success('✅ Email verified & account approved!', {
-          duration: 6000,
-          description: '[Sandbox Mode] Your account is ready. You can now log in.',
-        })
-      } else {
-        toast.success('✅ Email verified successfully!', {
-          duration: 6000,
-          description:
-            'Your account is pending admin approval. You will receive an email once approved.',
-        })
-      }
-      setTimeout(() => navigate('/login'), 3000)
+      await authAPI.verifyOTP(registrationEmail, otpCode)
+      toast.success('Email verified successfully!', {
+        duration: 8000,
+        description:
+          'Your account is now pending admin approval. You will be able to log in once an admin approves your account.',
+      })
+      setTimeout(() => navigate('/login'), 4000)
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'OTP verification failed')
+      const d = err.response?.data?.detail; toast.error(Array.isArray(d) ? d.map((x: any) => x.msg).join(', ') : (d || 'OTP verification failed'))
       setOtp(['', '', '', '', '', ''])
       otpRefs.current[0]?.focus()
     } finally {
@@ -180,51 +177,44 @@ export default function RegisterPage() {
   const handleSubmit = async () => {
     setIsLoading(true)
     try {
-      // 1. Register with Supabase
-      const { data, error } = await supabase.auth.signUp({
+      // Create profile in MongoDB (always required)
+      await authAPI.register({
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
-        options: {
-          data: {
-            full_name: formData.full_name,
-            role: formData.role,
-          }
-        }
+        full_name: formData.full_name,
+        role: formData.role,
+        program: formData.program,
+        semester: formData.semester,
+        department: formData.department
       })
 
-      if (error) throw error
+      // 3. Set registration email and auto-send OTP
+      const email = formData.email.trim().toLowerCase()
+      setRegistrationEmail(email)
+      setIsSandbox(false)
 
-      if (data.user) {
-        // 2. Create profile in MongoDB
-        const response = await authAPI.register({
-          email: formData.email.trim().toLowerCase(),
-          full_name: formData.full_name,
-          role: formData.role,
-          program: formData.program,
-          semester: formData.semester,
-          department: formData.department
-        })
-
-        // If email confirmation is enabled on Supabase, the session will be null
-        if (!data.session) {
-          toast.success('🎉 Registration successful!', {
-            duration: 10000,
-            description: 'Please check your inbox for the Supabase confirmation link to verify your email.',
-          })
-          setTimeout(() => navigate('/login'), 4000)
-        } else {
-          // Instantly logged in (if email confirmation is disabled)
-          const token = data.session.access_token
-          login(response.user, token)
-          toast.success('✅ Welcome to PCMT! Your account is ready.')
-          const role = response.user?.role
-          if (role === 'admin') navigate('/admin/dashboard')
-          else if (role === 'teacher') navigate('/teacher/dashboard')
-          else navigate('/student/dashboard')
+      try {
+        const otpResult = await authAPI.sendOTP(email)
+        if (otpResult.is_sandbox) {
+          setIsSandbox(true)
+          setSandboxOtp(otpResult.sandbox_otp || '123456')
         }
+        toast.success('Verification code sent!', {
+          description: `OTP sent to ${email}${otpResult.is_sandbox ? ' [Sandbox Mode]' : ''}`,
+          duration: 6000,
+        })
+        setOtpResendTimer(OTP_COUNTDOWN)
+      } catch (err: any) {
+        const d = err.response?.data?.detail
+        toast.warning(Array.isArray(d) ? d.map((x: any) => x.msg).join(', ') : (d || 'Could not send OTP. Click "Resend OTP" to try again.'))
       }
+
+      // 4. Transition to OTP verification step
+      setStep(3)
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || err.message || 'Registration failed. Please try again.')
+      const detail = err.response?.data?.detail
+      const msg = Array.isArray(detail) ? detail.map((d: any) => d.msg || d.message).join(', ') : (detail || err.message || 'Registration failed. Please try again.')
+      toast.error(msg)
       setStep(0)
     } finally {
       setIsLoading(false)
@@ -235,6 +225,7 @@ export default function RegisterPage() {
   const passwordStrength = (pwd: string) => {
     let score = 0
     if (pwd.length >= 8) score++
+    if (/[a-z]/.test(pwd)) score++
     if (/[A-Z]/.test(pwd)) score++
     if (/[0-9]/.test(pwd)) score++
     if (/[^A-Za-z0-9]/.test(pwd)) score++
@@ -242,8 +233,8 @@ export default function RegisterPage() {
   }
 
   const strength = passwordStrength(formData.password)
-  const strengthLabel = ['', 'Weak', 'Fair', 'Good', 'Strong'][strength]
-  const strengthColor = ['', 'bg-red-500', 'bg-amber-500', 'bg-blue-500', 'bg-green-500'][strength]
+  const strengthLabel = ['', 'Weak', 'Fair', 'Good', 'Strong', 'Very Strong'][strength]
+  const strengthColor = ['', 'bg-red-500', 'bg-amber-500', 'bg-blue-500', 'bg-green-500', 'bg-green-600'][strength]
 
   return (
     <div className="min-h-screen flex" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
@@ -721,10 +712,10 @@ export default function RegisterPage() {
                     <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-left mb-4 mt-2">
                       <p className="text-xs text-amber-800 leading-relaxed">
                         ⚠️ <strong>Sandbox Mode:</strong> Email service is inactive/unconfigured.
-                        Please use the dummy OTP code below to verify:
+                        Use the OTP code below to verify:
                       </p>
                       <div className="mt-1.5 text-center font-mono font-bold text-base text-amber-700 bg-amber-100/50 py-1 rounded">
-                        123456
+                        {sandboxOtp}
                       </div>
                     </div>
                   )}

@@ -28,6 +28,7 @@ import ViolationWarning, {
 } from '../../components/ViolationWarning'
 import ProctoringRightPanel from '../../components/ProctoringRightPanel'
 import { AnimatePresence, motion } from 'framer-motion'
+import { toast } from 'sonner'
 import { WebSocketClient } from '../../lib/websocket'
 import { useAuthStore } from '../../store/globalStore'
 
@@ -55,6 +56,7 @@ export default function PracticeMockExam() {
   const { testId } = useParams()
   const navigate = useNavigate()
   const { isMobile, isTablet } = useMobileDetect()
+  const isActuallyFullscreen = typeof document !== 'undefined' ? !!document.fullscreenElement : false
   const videoRef = useRef<HTMLVideoElement>(null)
   const sidebarVideoRef = useRef<HTMLVideoElement>(null)
   const wsClientRef = useRef<WebSocketClient | null>(null)
@@ -75,6 +77,13 @@ export default function PracticeMockExam() {
 
   // Proctoring Engine V1 (same as live exams)
   const proctoringEngine = useMemo(() => new ProctoringEngine(), [])
+
+  const handleOverlayCanvas = useCallback(
+    (canvas: HTMLCanvasElement | null) => {
+      proctoringEngine.setOverlayCanvas(canvas)
+    },
+    [proctoringEngine]
+  )
 
   // Adaptive Exam Engine
   const adaptiveEngine = useMemo(() => new AdaptiveExamEngine('Medium'), [])
@@ -165,16 +174,23 @@ export default function PracticeMockExam() {
     }
   }, [proctoringEngine])
 
-  // Timer
+  // Timer — pauses when proctoring engine is paused (practice=self-resumable)
   useEffect(() => {
     if (!examState.examStarted || examState.examEnded || examState.isSubmitting) return
+    if (examState.proctoringStatus?.isPaused) return
 
     const timer = setInterval(() => {
       dispatch({ type: 'DECREMENT_TIME' })
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [examState.examStarted, examState.examEnded, examState.isSubmitting, dispatch])
+  }, [
+    examState.examStarted,
+    examState.examEnded,
+    examState.isSubmitting,
+    examState.proctoringStatus?.isPaused,
+    dispatch,
+  ])
 
   // Auto-start exam when camera + proctoring are ready
   useEffect(() => {
@@ -316,15 +332,11 @@ export default function PracticeMockExam() {
         !examState.proctoringStatus?.isPaused
       ) {
         proctoringEngine.recordTabSwitch()
-        proctoringEngine.pauseExam(
-          'Tab/Window switch detected. Return to the exam window to resume.'
-        )
       }
     }
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     examState.examStarted,
     examState.examEnded,
@@ -343,13 +355,11 @@ export default function PracticeMockExam() {
         !examState.proctoringStatus?.isPaused
       ) {
         proctoringEngine.recordWindowBlur()
-        proctoringEngine.pauseExam('Application switch detected. Return to the exam to resume.')
       }
     }
 
     window.addEventListener('blur', handleWindowBlur)
     return () => window.removeEventListener('blur', handleWindowBlur)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     examState.examStarted,
     examState.examEnded,
@@ -372,15 +382,11 @@ export default function PracticeMockExam() {
         !examState.proctoringStatus?.isPaused
       ) {
         proctoringEngine.recordFullscreenExit()
-        proctoringEngine.pauseExam(
-          'Fullscreen mode was exited. Return to fullscreen to resume the exam.'
-        )
       }
     }
 
     document.addEventListener('fullscreenchange', handleFullscreenChange)
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     examState.examStarted,
     examState.examEnded,
@@ -411,21 +417,19 @@ export default function PracticeMockExam() {
       }
       if (e.altKey && e.key === 'Tab') {
         e.preventDefault()
-        proctoringEngine.pauseExam('Alt+Tab detected. Stay focused on the exam to resume.')
+        proctoringEngine.recordTabSwitch()
       }
       if (e.key === 'Meta' || e.key === 'OS') {
         e.preventDefault()
-        proctoringEngine.pauseExam('Windows key pressed. Stay focused on the exam to resume.')
+        proctoringEngine.recordTabSwitch()
       }
       if (e.key === 'Escape' && document.fullscreenElement) {
         e.preventDefault()
         proctoringEngine.recordFullscreenExit()
-        proctoringEngine.pauseExam('Escape key pressed. Stay in fullscreen to continue the exam.')
       }
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     examState.examStarted,
     examState.examEnded,
@@ -483,14 +487,11 @@ export default function PracticeMockExam() {
         return
       const ratio = window.outerHeight / window.screen.height
       if (ratio < 0.95) {
-        proctoringEngine.pauseExam(
-          'Window was minimized or resized. Return to fullscreen to resume.'
-        )
+        proctoringEngine.recordWindowMinimize()
       }
     }
     const interval = setInterval(checkWindowSize, 2000)
     return () => clearInterval(interval)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     examState.examStarted,
     examState.examEnded,
@@ -608,10 +609,8 @@ export default function PracticeMockExam() {
           wsClient.on('intervention', (data: any) => {
             const action = data.action as string
             if (action === 'pause') {
-              setExamPaused(true)
-              proctoringEngine.pauseExam('Exam paused by teacher. Please wait.')
+              proctoringEngine.pauseExam(data.message || 'Exam paused by teacher. Please wait.')
             } else if (action === 'resume') {
-              setExamPaused(false)
               proctoringEngine.resumeExam()
               if (examState.proctoringStatus) {
                 dispatch({
@@ -654,17 +653,15 @@ export default function PracticeMockExam() {
             dispatch({ type: 'REMOVE_ACTIVE_VIOLATION', payload: violation })
           }, 5000)
           dispatch({ type: 'ADD_VIOLATION', payload: violation.message })
-          // Show toast for audio and other violations
-          if (violation.type === 'AUDIO_DETECTED') {
-            alert(
-              `ðŸ”Š Audio Warning: ${violation.message}\n\nPlease ensure a quiet environment for the exam.`
-            )
-          } else if (violation.type === 'HEADPHONE_DETECTED') {
-            alert(
-              `Headphone Warning: ${violation.message}\n\nPlease remove headphones during the exam.`
-            )
-          } else if (violation.severity === 'HIGH' || violation.severity === 'CRITICAL') {
-            alert(`${violation.message}`)
+          // Non-blocking notifications for all severity levels
+          if (violation.severity === 'CRITICAL') {
+            toast.error(violation.message, { duration: 5000 })
+          } else if (violation.severity === 'HIGH') {
+            toast.warning(violation.message, { duration: 4000 })
+          } else if (violation.severity === 'MEDIUM') {
+            toast.info(violation.message, { duration: 3000 })
+          } else {
+            toast.info(violation.message, { duration: 2000 })
           }
         })
 
@@ -674,7 +671,20 @@ export default function PracticeMockExam() {
         })
 
         proctoringEngine.setOnPause(reason => {
-          alert('Exam paused: ' + reason)
+          dispatch({
+            type: 'SET_PROCTORING_STATUS',
+            payload: {
+              ...(examState.proctoringStatus || {
+                isActive: true, faceDetected: false, faceCount: 0, lookingAtScreen: true,
+                audioLevel: 0, violations: [], tabSwitchCount: 0, windowBlurCount: 0,
+                fullscreenExitCount: 0, isPaused: false, sessionRecording: true,
+                identityVerified: false, suspiciousActivityScore: 0, attentionLevel: 100,
+                environmentScore: 100, integrityScore: 100, brightness: 100,
+              }),
+              isPaused: true,
+              pauseReason: reason,
+            } as ProctoringStatus,
+          })
         })
 
         setTimeout(async () => {
@@ -701,32 +711,32 @@ export default function PracticeMockExam() {
         return
       }
       alert(
-        'âš ï¸ CAMERA AND MICROPHONE REQUIRED\n\n' +
+        'CAMERA AND MICROPHONE REQUIRED\n\n' +
           'You must enable camera and microphone before starting the exam.\n\n' +
           'If camera failed to enable, it may be due to:\n' +
-          'âœ… Insufficient lighting - Turn on lights\n' +
-          'âœ… No camera permission - Allow camera access\n' +
-          'âœ… Camera already in use - Close other apps\n\n' +
+          '- Insufficient lighting - Turn on lights\n' +
+          '- No camera permission - Allow camera access\n' +
+          '- Camera already in use - Close other apps\n\n' +
           'Please fix the issue and click "Enable Camera" again.'
       )
       return
     }
 
-    // Brightness check: warn during auto-start, block during manual
+    // Brightness check: use same threshold as pre-verification (35/255)
     const currentBrightness = proctoringEngine.getBrightness()
-    if (currentBrightness < 50) {
+    if (currentBrightness < 35) {
       if (isAutoStart) {
         console.warn(
           `[AutoStart] Low brightness (${Math.round(currentBrightness)}/255), starting anyway`
         )
       } else {
         alert(
-          `ðŸš¨ CANNOT START EXAM\n\n` +
+          `CANNOT START EXAM\n\n` +
             `Room lighting is too low: ${Math.round(currentBrightness)}/255\n` +
-            `Minimum required: 50/255\n\n` +
-            `âœ… Turn on lights immediately\n` +
-            `âœ… Ensure your face is well-lit\n` +
-            `âœ… Sit near a window or lamp\n\n` +
+            `Minimum required: 35/255\n\n` +
+            `- Turn on lights immediately\n` +
+            `- Ensure your face is well-lit\n` +
+            `- Sit near a window or lamp\n\n` +
             `Exam cannot start until lighting improves.\n` +
             `This is mandatory to prevent cheating.`
         )
@@ -734,14 +744,10 @@ export default function PracticeMockExam() {
       }
     }
 
-    // For auto-start: fullscreen should already be set from pre-verification
-    // For manual start: user gesture is available, so fullscreen will work
-    if (!isAutoStart) {
+    // Always ensure fullscreen before starting — if pre-verification's
+    // fullscreen was lost during navigation, re-request it here
+    if (!document.fullscreenElement) {
       await enterFullscreen()
-    } else if (!document.fullscreenElement) {
-      // Auto-start but not in fullscreen â€” don't proceed
-      console.warn('[AutoStart] Not in fullscreen, deferring to manual start')
-      return
     }
 
     dispatch({ type: 'START_EXAM' })
@@ -1019,15 +1025,15 @@ export default function PracticeMockExam() {
           faceCount={examState.proctoringStatus.faceCount}
           lookingAtScreen={examState.proctoringStatus.lookingAtScreen}
           audioLevel={examState.proctoringStatus.audioLevel}
-          isFullscreen={examState.isFullscreen}
+          isFullscreen={isActuallyFullscreen}
           brightness={examState.proctoringStatus.brightness ?? examState.brightness}
           attentionLevel={examState.proctoringStatus.attentionLevel}
           integrityScore={examState.proctoringStatus.integrityScore}
         />
       )}
 
-      {/* Fullscreen Warning */}
-      {!examState.isFullscreen && (
+      {/* Fullscreen Warning — only during exam, not during initial setup */}
+      {!isActuallyFullscreen && examState.examStarted && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-red-600 text-white px-6 py-3 rounded-full shadow-2xl z-50 flex items-center gap-2 animate-pulse">
           <Maximize className="w-5 h-5" />
           <span className="font-bold">Please return to fullscreen mode!</span>
@@ -1086,30 +1092,24 @@ export default function PracticeMockExam() {
             className="bg-white rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl"
           >
             <div className="text-center">
-              <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <AlertTriangle className="w-10 h-10 text-red-600" />
+              <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle className="w-10 h-10 text-amber-600" />
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Exam Paused</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Practice Exam Paused</h2>
               <p className="text-gray-600 mb-6">{examState.proctoringStatus.pauseReason}</p>
 
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-                <p className="text-sm text-yellow-800">
-                  <strong>Suspicious Activity Score:</strong>{' '}
-                  {examState.proctoringStatus.suspiciousActivityScore}/100
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <p className="text-sm text-blue-800">
+                  This is a <strong>practice exam</strong> — you can resume anytime.
                 </p>
-                <p className="text-xs text-yellow-600 mt-2">
-                  Multiple critical examState.violations detected. Please contact the proctor to
-                  resume.
+                <p className="text-xs text-blue-600 mt-2">
+                  For fair practice, please stay in fullscreen and avoid switching tabs.
                 </p>
               </div>
 
-              <button
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      "Are you sure you want to resume? Make sure you're in fullscreen with only the exam tab open."
-                    )
-                  ) {
+              <div className="space-y-3">
+                <button
+                  onClick={() => {
                     proctoringEngine.resumeExam()
                     if (examState.proctoringStatus) {
                       dispatch({
@@ -1133,12 +1133,23 @@ export default function PracticeMockExam() {
                     } else if (target.msRequestFullscreen) {
                       target.msRequestFullscreen().catch(() => {})
                     }
-                  }
-                }}
-                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all"
-              >
-                Resume Exam
-              </button>
+                  }}
+                  className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all"
+                >
+                  Resume Exam
+                </button>
+                <button
+                  onClick={() => {
+                    if (window.confirm('End practice session and return to dashboard?')) {
+                      proctoringEngine.cleanup()
+                      navigate('/student/dashboard')
+                    }
+                  }}
+                  className="w-full bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-all"
+                >
+                  End Practice Session
+                </button>
+              </div>
             </div>
           </motion.div>
         </motion.div>
@@ -1476,6 +1487,7 @@ export default function PracticeMockExam() {
               typeof v === 'string' ? { evidence: v, severity: 'medium' } : v
             )}
             mode="practice"
+            onOverlayCanvas={handleOverlayCanvas}
           />
         </div>
       </div>
@@ -1776,23 +1788,23 @@ function getCategoryTemplates(category: string): Partial<Question>[] {
         type: 'mcq',
         options: ['30', '25', '20', '35'],
         correctAnswer: '30',
-        explanation: '200 Ã— 0.15 = 30',
+        explanation: '200 x 0.15 = 30',
       },
     ],
     science: [
       {
         text: 'What is the boiling point of water at sea level?',
         type: 'mcq',
-        options: ['90Â°C', '100Â°C', '110Â°C', '120Â°C'],
-        correctAnswer: '100Â°C',
-        explanation: 'Water boils at 100Â°C at standard atmospheric pressure.',
+        options: ['90°C', '100°C', '110°C', '120°C'],
+        correctAnswer: '100°C',
+        explanation: 'Water boils at 100°C at standard atmospheric pressure.',
       },
       {
         text: 'Which gas do plants absorb during photosynthesis?',
         type: 'mcq',
         options: ['Oxygen', 'Nitrogen', 'Carbon Dioxide', 'Hydrogen'],
         correctAnswer: 'Carbon Dioxide',
-        explanation: 'Plants use COâ‚‚ and sunlight to produce glucose.',
+        explanation: 'Plants use CO2 and sunlight to produce glucose.',
       },
     ],
     'general-knowledge': [
@@ -1801,7 +1813,7 @@ function getCategoryTemplates(category: string): Partial<Question>[] {
         type: 'mcq',
         options: ['Canada', 'China', 'Russia', 'USA'],
         correctAnswer: 'Russia',
-        explanation: 'Russia is the largest country covering 17.1 million kmÂ²',
+        explanation: 'Russia is the largest country covering 17.1 million km^2',
       },
       {
         text: 'How many colors are in a rainbow?',
@@ -1833,7 +1845,7 @@ function getCategoryTemplates(category: string): Partial<Question>[] {
         type: 'mcq',
         options: ['Gooder', 'Goodest', 'Better', 'Best'],
         correctAnswer: 'Best',
-        explanation: 'Good â†’ Better â†’ Best (irregular comparison)',
+        explanation: 'Good -> Better -> Best (irregular comparison)',
       },
       {
         text: 'Identify the adjective: "The blue sky is beautiful."',

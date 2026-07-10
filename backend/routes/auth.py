@@ -23,6 +23,7 @@ from database import get_db
 from middleware.auth import create_access_token, get_current_user, verify_token_allow_expired
 from config import settings
 from utils.password import hash_password, verify_password
+from utils.notifications_helper import create_notification
 from utils.password_validation import validate_password_strength, is_weak_password
 from utils.logging_config import get_logger
 from utils.email_service import (
@@ -67,10 +68,13 @@ class RegisterRequest(BaseModel):
     def validate_password(cls, v):
         if v is None:
             return v
+        # Password policy used by both registration and reset/change flows.
+        # Tests expect typical strong passwords like 'SecurePass123!' to be accepted.
         if is_weak_password(v):
             raise ValueError("This password is too common. Please choose a stronger password.")
         validate_password_strength(v)
         return v
+
 
     @field_validator("role")
     @classmethod
@@ -210,24 +214,26 @@ async def register(request: Request, reg_data: RegisterRequest, db=Depends(get_d
     # Check if email already registered in MongoDB
     existing = await db.users.find_one({"email": reg_data.email.lower()})
     if existing:
-        raise HTTPException(status_code=400, detail="Email already registered in system")
+        if existing.get("status") == "unverified" and not existing.get("email_verified"):
+            # Ghost registration: user started but never verified OTP.
+            # Delete old record + OTPs and let them re-register fresh.
+            await db.otps.delete_many({"email": reg_data.email.lower()})
+            await db.users.delete_one({"_id": existing["_id"]})
+            logger.info(f"Cleared unverified ghost registration for {reg_data.email}")
+        else:
+            raise HTTPException(status_code=400, detail="Email already registered in system")
 
     role = reg_data.role.lower()
 
-    # Determine status and active flag
-    email_active = _email_configured()
-    
     if role == "admin":
         status_val = "approved"
         is_active_val = True
-    elif email_active:
-        # Real email flow: mark as pending, wait for admin approval
-        status_val = "pending"
-        is_active_val = False
+        email_verified_val = True
     else:
-        # Sandbox mode: auto-approve
-        status_val = "approved"
-        is_active_val = True
+        # Step 1: Unverified — user must verify email via OTP first
+        status_val = "unverified"
+        is_active_val = False
+        email_verified_val = False
 
     user_doc = {
         "email": reg_data.email.lower(),
@@ -236,7 +242,7 @@ async def register(request: Request, reg_data: RegisterRequest, db=Depends(get_d
         "role": role,
         "status": status_val,
         "is_active": is_active_val,
-        "email_verified": True,  # Set True since Supabase handles email verification
+        "email_verified": email_verified_val,
         "program": reg_data.program,
         "semester": reg_data.semester,
         "department": reg_data.department,
@@ -258,24 +264,26 @@ async def register(request: Request, reg_data: RegisterRequest, db=Depends(get_d
     user_doc["_id"] = result.inserted_id
     logger.info(f"New user profile created in MongoDB: {reg_data.email} (role: {role}, status: {status_val})")
 
-    # Send pending approval email if not immediately approved
-    if email_active and status_val == "pending":
+    # Notify admins about new registration
+    if role != "admin":
         try:
-            await send_registration_pending_email_async(reg_data.email, reg_data.full_name)
-        except Exception as e:
-            logger.error(f"Failed to send pending email to {reg_data.email}: {e}")
-
-        admin_email = _get_admin_email()
-        if admin_email and admin_email != reg_data.email:
-            try:
-                await send_admin_new_user_email_async(admin_email, reg_data.full_name, reg_data.email, role)
-            except Exception as e:
-                logger.error(f"Failed to send admin notification email: {e}")
+            admins = await db.users.find({"role": "admin", "is_active": True}).to_list(None)
+            for admin in admins:
+                await create_notification(
+                    user_id=str(admin["_id"]),
+                    title="New User Registration",
+                    message=f"{reg_data.full_name} ({reg_data.email}) registered as {role}, pending approval",
+                    type="info",
+                    action_url="/admin/user-approval",
+                    priority="normal",
+                )
+        except Exception:
+            pass
 
     # Return structure matching what front-end expects
     return {
-        "message": "Registration successful! Account pending admin approval." if status_val == "pending" else "Registration successful!",
-        "pending": status_val == "pending",
+        "message": "Registration successful! Please verify your email via OTP. After verification, your account will be pending admin approval." if status_val == "unverified" else "Registration successful!",
+        "pending": status_val != "approved",
         "user": serialize_user(user_doc)
     }
 
@@ -301,77 +309,85 @@ async def send_otp(req: SendOTPRequest, db=Depends(get_db)):
             raise HTTPException(status_code=500, detail="Failed to send OTP email. Please check your email address and try again.")
         return {"message": f"OTP sent to {req.email}", "email": req.email}
     else:
-        logger.info(f"📬 [SANDBOX MODE] Resending OTP generated for {req.email}: {otp_code}. Use '123456' as sandbox bypass.")
-        return {"message": f"OTP sent to {req.email} [SANDBOX MODE]. Use dummy OTP: 123456", "email": req.email, "is_sandbox": True}
+        logger.info(f"📬 [SANDBOX MODE] OTP generated for {req.email}: {otp_code}")
+        return {
+            "message": f"OTP sent to {req.email} [SANDBOX MODE]",
+            "email": req.email,
+            "is_sandbox": True,
+            "sandbox_otp": otp_code,
+        }
 
 
 @router.post("/verify-otp")
 async def verify_otp_endpoint(req: VerifyOTPRequest, db=Depends(get_db)):
     """Verify OTP and mark user's email as verified. Then notify admin and send pending email."""
-    user = await db.users.find_one({"email": req.email.lower()})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    try:
+        user = await db.users.find_one({"email": req.email.lower()})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
 
-    if user.get("email_verified"):
-        return {"message": "Email already verified", "verified": True}
+        if user.get("email_verified"):
+            return {"message": "Email already verified", "verified": True}
 
-    success, msg = await verify_otp(db, req.email, req.otp)
-    if not success:
-        raise HTTPException(status_code=400, detail=msg)
+        success, msg = await verify_otp(db, req.email, req.otp)
+        if not success:
+            raise HTTPException(status_code=400, detail=msg)
 
-    # Determine new status based on whether email/SMTP is configured
-    # In sandbox mode (no SMTP), auto-approve so users can log in immediately
-    email_active = _email_configured()
-    if email_active:
-        # Real email flow: mark as pending, wait for admin approval
+        # Always set status to pending — all accounts require admin approval
         new_status = "pending"
         new_is_active = False
-    else:
-        # Sandbox mode: auto-approve so login works without an admin
-        new_status = "approved"
-        new_is_active = True
 
-    # CRITICAL FIX: Mark email as verified AND update status accordingly
-    await db.users.update_one(
-        {"email": req.email.lower()},
-        {"$set": {
-            "email_verified": True,
-            "status": new_status,
-            "is_active": new_is_active,
-        }}
-    )
+        await db.users.update_one(
+            {"email": req.email.lower()},
+            {"$set": {
+                "email_verified": True,
+                "status": new_status,
+                "is_active": new_is_active,
+            }}
+        )
 
-    logger.info(f"Email verified for {req.email}, status changed to '{new_status}' (sandbox={not email_active})")
+        logger.info(f"Email verified for {req.email}, status changed to '{new_status}' (pending admin approval)")
 
-    # Send pending approval email to user + notify admin (errors suppressed)
-    if email_active:
+        # Notify admins about new pending user
         full_name = user.get("full_name", "User")
         role = user.get("role", "student")
+        try:
+            admins = await db.users.find({"role": "admin", "is_active": True}).to_list(None)
+            for admin in admins:
+                await create_notification(
+                    user_id=str(admin["_id"]),
+                    title="New User Pending Approval",
+                    message=f"{full_name} ({req.email}) registered as {role}, pending approval",
+                    type="info",
+                    action_url="/admin/user-approval",
+                    priority="normal",
+                )
+        except Exception:
+            pass
 
+        # Try sending pending approval email (suppress errors if SMTP not configured)
         try:
             await send_registration_pending_email_async(req.email, full_name)
         except Exception as e:
-            logger.error(f"Failed to send pending email to {req.email}: {e}")
+            logger.warning(f"Could not send pending email to {req.email}: {e}")
 
         admin_email = _get_admin_email()
         if admin_email and admin_email != req.email:
             try:
                 await send_admin_new_user_email_async(admin_email, full_name, req.email, role)
             except Exception as e:
-                logger.error(f"Failed to send admin notification to {admin_email}: {e}")
+                logger.warning(f"Could not send admin notification to {admin_email}: {e}")
 
-    if not email_active:
         return {
-            "message": "Email verified successfully. [SANDBOX MODE] Your account has been automatically approved. You can now log in.",
+            "message": "Email verified successfully. Your account is pending admin approval. You will be able to log in once an admin approves your account.",
             "verified": True,
-            "auto_approved": True,
+            "auto_approved": False,
         }
-
-    return {
-        "message": "Email verified successfully. Your account is pending admin approval. You will receive an email once approved.",
-        "verified": True,
-        "auto_approved": False,
-    }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"verify-otp unexpected error: {type(e).__name__}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Verification failed: {type(e).__name__}: {str(e)}")
 
 
 # ── Forgot Password ───────────────────────────────────────────────────────────
@@ -414,13 +430,14 @@ async def forgot_password(req: ForgotPasswordRequest, db=Depends(get_db)):
         if not sent:
             sandbox_fallback = True
     if sandbox_fallback:
-        logger.warning(f"📬 [SANDBOX MODE] Password reset OTP generated for {req.email}: {reset_otp}. Use '123456' as sandbox bypass.")
+        logger.info(f"📬 [SANDBOX MODE] Password reset OTP for {req.email}: {reset_otp}")
 
     logger.info(f"Password reset OTP sent to {req.email}")
-    message = "If this email is registered, you will receive a reset OTP shortly."
-    if sandbox_fallback:
-      message = "If this email is registered, you will receive a reset OTP shortly. [SANDBOX MODE] Use dummy OTP: 123456"
-    return {"message": message, "is_sandbox": sandbox_fallback}
+    return {
+        "message": "If this email is registered, you will receive a reset OTP shortly.",
+        "is_sandbox": sandbox_fallback,
+        "sandbox_otp": reset_otp if sandbox_fallback else None,
+    }
 
 
 @router.post("/reset-password")
@@ -442,7 +459,10 @@ async def reset_password(req: ResetPasswordRequest, db=Depends(get_db)):
     if not otp_doc:
         raise HTTPException(status_code=400, detail="No password reset OTP found. Please request a new one.")
 
-    if datetime.now(timezone.utc) > otp_doc["expires_at"]:
+    expires = otp_doc["expires_at"]
+    if isinstance(expires, datetime) and expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    if datetime.now(timezone.utc) > expires:
         await db.otps.update_one({"_id": otp_doc["_id"]}, {"$set": {"used": True}})
         raise HTTPException(status_code=400, detail="OTP has expired. Please request a new password reset.")
 

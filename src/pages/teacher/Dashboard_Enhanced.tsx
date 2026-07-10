@@ -20,6 +20,7 @@ import {
   Bell,
   Brain,
   Sparkles,
+  Edit3,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 
@@ -334,6 +335,13 @@ export default function TeacherDashboard() {
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
+                        <Link
+                          to={`/teacher/edit-exam/${exam._id}`}
+                          className="px-3 py-2 bg-amber-500 text-white text-sm rounded-lg hover:bg-amber-600 transition flex items-center"
+                        >
+                          <Edit3 className="w-4 h-4 mr-1" />
+                          Edit
+                        </Link>
                         <Link
                           to={`/teacher/monitoring/${exam._id}`}
                           className="px-3 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition flex items-center"

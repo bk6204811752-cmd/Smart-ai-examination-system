@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/globalStore'
 import { motion, AnimatePresence } from 'framer-motion'
+import NotificationBell from '../NotificationBell'
 import {
   Home,
   BookOpen,
@@ -9,7 +10,7 @@ import {
   Bot,
   BookMarked,
   Trophy,
-  Bell,
+  Bell as BellIcon,
   Settings,
   LogOut,
   GraduationCap,
@@ -23,14 +24,13 @@ import {
 
 const navItems = [
   { icon: Home, label: 'Dashboard', to: '/student/dashboard' },
-  { icon: BookOpen, label: 'Upcoming Exams', to: '/student/dashboard#exams' },
   { icon: BarChart3, label: 'My Results', to: '/student/results' },
   { icon: Bot, label: 'AI Tutor', to: '/student/ai-tutor' },
   { icon: BookMarked, label: 'Study Materials', to: '/student/materials' },
   { icon: Play, label: 'Practice Tests', to: '/practice' },
   { icon: Trophy, label: 'Achievements', to: '/student/gamification' },
   { icon: Sparkles, label: 'Learning Path', to: '/student/learning-path' },
-  { icon: Bell, label: 'Notifications', to: '/notifications' },
+  { icon: BellIcon, label: 'Notifications', to: '/notifications' },
   { icon: Settings, label: 'Settings', to: '/settings' },
 ]
 
@@ -195,13 +195,7 @@ export default function StudentLayout({ children, title, subtitle }: StudentLayo
             </div>
 
             <div className="flex items-center gap-2">
-              <Link
-                to="/notifications"
-                className="relative p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
-              >
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-              </Link>
+              <NotificationBell />
               <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
                 {user?.full_name?.charAt(0)?.toUpperCase() || 'S'}
               </div>
